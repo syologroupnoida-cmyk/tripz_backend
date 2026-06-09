@@ -1,0 +1,264 @@
+// ============================================================================
+//   Tripz Backend — Database Schema (DBML format)
+//
+//   HOW TO VIEW:
+//     1. Copy the ENTIRE contents of this file
+//     2. Open https://dbdiagram.io/d (free, no signup needed)
+//     3. Paste in the left panel — diagram appears on the right
+//
+//   ALTERNATIVE FREE TOOLS:
+//     • https://drawdb.vercel.app  (open-source, supports DBML import)
+//     • https://dbdocs.io           (CLI: install dbdocs, run dbdocs build)
+//     • VS Code "DBML" extension    (preview locally)
+//
+//   This file mirrors the Prisma schema at prisma/schema/*.prisma.
+// ============================================================================
+
+Project tripz {
+  database_type: 'PostgreSQL'
+  Note: 'Tripz — multi-panel travel platform (SuperAdmin / Admin / Vendor / Customer)'
+}
+
+// ---------------------------------------------------------------------------
+//   ENUMS
+// ---------------------------------------------------------------------------
+
+Enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  VENDOR
+  CLIENT
+}
+
+Enum AuthProvider {
+  LOCAL    [note: 'Email + password only']
+  GOOGLE   [note: 'Google OAuth only — no password']
+  HYBRID   [note: 'Both methods linked to one account']
+}
+
+Enum EmailOtpPurpose {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+  LOGIN_2FA
+  AADHAAR_VERIFICATION
+}
+
+Enum KycStatus {
+  PENDING    [note: 'Vendor signed up; KYC not submitted yet']
+  SUBMITTED  [note: 'Awaiting admin review']
+  APPROVED   [note: 'Vendor can take work']
+  REJECTED   [note: 'Vendor must resubmit with fixes']
+}
+
+Enum CompanyType {
+  PROPRIETORSHIP
+  PARTNERSHIP
+  LLP
+  PVT_LTD
+  PUBLIC_LTD
+  OTHER
+}
+
+Enum ReferralSource {
+  REFERENCE
+  GOOGLE
+  SOCIAL_MEDIA
+  ADVERTISEMENT
+  OTHER
+}
+
+Enum KycDocumentType {
+  PAN
+  GSTIN
+  CIN
+  AADHAR
+  OTHER
+}
+
+// ---------------------------------------------------------------------------
+//   TABLES
+// ---------------------------------------------------------------------------
+
+Table users {
+  id              varchar      [pk]
+  firstName       varchar      [not null]
+  lastName        varchar      [not null]
+  email           varchar      [unique, not null]
+  phone           varchar      [unique, note: 'Nullable for Google signups']
+  password        varchar      [note: 'Nullable for Google-only users']
+  googleId        varchar      [unique, note: 'Google OAuth sub claim']
+  avatarUrl       varchar      [note: 'Profile picture URL']
+  authProvider    AuthProvider [not null, default: 'LOCAL']
+  role            UserRole     [not null, default: 'CLIENT']
+  isActive        boolean      [not null, default: `true`]
+  emailVerifiedAt timestamp    [note: 'Null until /auth/verify-email succeeds']
+  createdAt       timestamp    [not null]
+  updatedAt       timestamp    [not null]
+
+  indexes {
+    role
+  }
+
+  Note: 'Single human-identity table. Customer-specific and vendor-specific data live in *_profiles.'
+}
+
+Table refresh_tokens {
+  id        varchar   [pk]
+  token     varchar   [unique, not null, note: 'SHA-256 hash, never plaintext']
+  userId    varchar   [not null, ref: > users.id]
+  isRevoked boolean   [not null, default: `false`]
+  expiresAt timestamp [not null]
+  createdAt timestamp [not null]
+
+  indexes {
+    userId
+    expiresAt
+  }
+
+  Note: 'One row per active session. Rotation on each /auth/refresh.'
+}
+
+Table email_otps {
+  id         varchar         [pk]
+  userId     varchar         [not null, ref: > users.id]
+  codeHash   varchar         [not null, note: 'SHA-256 of OTP, or sentinel for provider-managed (Aadhaar live mode)']
+  purpose    EmailOtpPurpose [not null]
+  expiresAt  timestamp       [not null]
+  consumedAt timestamp       [note: 'Set when OTP is successfully used or burned']
+  attempts   int             [not null, default: 0]
+  createdAt  timestamp       [not null]
+
+  indexes {
+    (userId, purpose)
+    expiresAt
+  }
+
+  Note: 'Stores OTP sessions for email verification, password reset, and Aadhaar OTP rate limiting.'
+}
+
+Table vendor_profiles {
+  userId    varchar   [pk, ref: - users.id, note: 'PK doubles as FK to users.id']
+  kycStatus KycStatus [not null, default: 'PENDING']
+  createdAt timestamp [not null]
+  updatedAt timestamp [not null]
+
+  indexes {
+    kycStatus
+  }
+
+  Note: 'Exists only when User.role = VENDOR. Created at signup.'
+}
+
+Table customer_profiles {
+  userId    varchar   [pk, ref: - users.id, note: 'PK doubles as FK to users.id']
+  createdAt timestamp [not null]
+  updatedAt timestamp [not null]
+
+  Note: 'Exists only when User.role = CLIENT. Placeholder for future customer-only fields.'
+}
+
+Table vendor_kyc {
+  vendorUserId         varchar        [pk, ref: - vendor_profiles.userId]
+
+  // -- Company identity
+  companyName          varchar        [not null]
+  businessName         varchar        [note: 'Optional DBA / trading name']
+  companyType          CompanyType
+  companySinceYears    int            [note: 'Years in business']
+  teamSize             int
+  companyLogoUrl       varchar        [note: 'Cloudinary URL']
+
+  // -- Location
+  country              varchar        [not null]
+  officeAddress        varchar        [not null]
+  officeCity           varchar
+  officeState          varchar
+
+  // -- Business operations
+  services             "varchar[]"    [note: 'Postgres text array (e.g., TRAVEL LEADS)']
+  destinations         "varchar[]"    [note: 'Postgres text array (e.g., Andhra Pradesh, Assam)']
+  dailyLeadRequirement int
+
+  // -- Online presence
+  websiteUrl           varchar
+  facebookUrl          varchar
+  instagramUrl         varchar
+
+  // -- Referral
+  referralSource       ReferralSource
+  otherSource          varchar        [note: 'Filled when referralSource = OTHER']
+  marketplaceWorked    boolean        [not null, default: `false`]
+
+  // -- Legal declaration
+  agreedTerms          boolean        [not null, default: `false`]
+  declaredTrue         boolean        [not null, default: `false`]
+
+  // -- Admin workflow
+  submittedAt          timestamp      [not null]
+  reviewedAt           timestamp
+  reviewedByAdminId    varchar        [note: 'User.id of the admin who reviewed']
+  rejectionReason      text
+
+  Note: 'Company-level fields submitted in the wizard. Documents live in vendor_kyc_documents.'
+}
+
+Table vendor_kyc_documents {
+  id                   varchar         [pk]
+  vendorUserId         varchar         [not null, ref: > vendor_profiles.userId]
+  type                 KycDocumentType [not null]
+  documentNumber       varchar         [note: 'PAN string, GST number, etc.']
+  documentUrl          varchar         [note: 'Cloudinary URL — used for OTHER docs (address proof, bank proof, etc.)']
+
+  // -- Admin manual review
+  isVerified           boolean         [not null, default: `false`]
+  verifiedAt           timestamp
+  verifiedByAdminId    varchar
+  notes                text
+
+  // -- Third-party (automated, via provider — Surepass / stub)
+  thirdPartyVerified   boolean         [not null, default: `false`]
+  thirdPartyProvider   varchar         [note: 'STUB or SUREPASS']
+  thirdPartyVerifiedAt timestamp
+  thirdPartyResponse   json            [note: 'Raw provider response for audit']
+
+  createdAt            timestamp       [not null]
+  updatedAt            timestamp       [not null]
+
+  indexes {
+    (vendorUserId, type) [unique, note: 'One row per doc type per vendor']
+  }
+
+  Note: 'Verified by /vendor/kyc/verify/* endpoints. Persists independently of vendor_kyc submissions.'
+}
+
+// ---------------------------------------------------------------------------
+//   RELATIONSHIPS (explicit — same as the `ref:` annotations above,
+//   listed here for tools that prefer central declarations)
+// ---------------------------------------------------------------------------
+
+Ref: refresh_tokens.userId            > users.id            [delete: cascade]
+Ref: email_otps.userId                > users.id            [delete: cascade]
+Ref: vendor_profiles.userId           - users.id            [delete: cascade]
+Ref: customer_profiles.userId         - users.id            [delete: cascade]
+Ref: vendor_kyc.vendorUserId          - vendor_profiles.userId  [delete: cascade]
+Ref: vendor_kyc_documents.vendorUserId > vendor_profiles.userId [delete: cascade]
+
+// ---------------------------------------------------------------------------
+//   TABLE GROUPS (visual grouping in dbdiagram.io)
+// ---------------------------------------------------------------------------
+
+TableGroup auth {
+  users
+  refresh_tokens
+  email_otps
+}
+
+TableGroup profiles {
+  vendor_profiles
+  customer_profiles
+}
+
+TableGroup kyc {
+  vendor_kyc
+  vendor_kyc_documents
+}

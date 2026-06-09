@@ -1,0 +1,21 @@
+// ---------------------------------------------------------------------------
+// Tripz - Prisma Schema (modular / multi-file)
+//
+// This file holds the generator + datasource ONLY. Every model lives in its
+// own *.prisma file in this folder. Prisma 6+ natively merges all .prisma
+// files in the folder pointed to by package.json -> "prisma.schema".
+//
+// To add a new table:
+//   1. Create prisma/schema/<entityName>.prisma
+//   2. Define the `model` (cross-file relations work out of the box)
+//   3. Run: npm run prisma:migrate -- --name add_<entity>
+// ---------------------------------------------------------------------------
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}

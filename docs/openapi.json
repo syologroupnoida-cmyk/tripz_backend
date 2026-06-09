@@ -1,0 +1,2367 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Tripz Backend API",
+    "version": "1.0.0",
+    "description": "Multi-panel travel platform backend exposing Super Admin, Admin, Vendor, and Client surfaces. All authenticated endpoints expect a JWT access token in the `Authorization: Bearer <token>` header. Every response is wrapped in a uniform `{ success, message, data }` (success) or `{ success: false, message, errors }` (error) envelope."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:4000",
+      "description": "Local development"
+    },
+    {
+      "url": "{protocol}://{host}",
+      "description": "Custom",
+      "variables": {
+        "protocol": { "default": "https", "enum": ["http", "https"] },
+        "host": { "default": "api.tripz.example.com" }
+      }
+    }
+  ],
+  "tags": [
+    { "name": "Root", "description": "Service identification" },
+    { "name": "Health", "description": "Liveness probe" },
+    { "name": "Auth", "description": "Registration, login, token rotation, profile" },
+    { "name": "Super Admin", "description": "Endpoints restricted to SUPER_ADMIN role" },
+    { "name": "Admin", "description": "Endpoints available to SUPER_ADMIN and ADMIN roles" },
+    { "name": "Vendor", "description": "Endpoints restricted to VENDOR role" },
+    { "name": "Client", "description": "Endpoints restricted to CLIENT role" },
+    { "name": "Vendor KYC", "description": "Vendor business verification — vendor submission & admin review" },
+    { "name": "Uploads", "description": "Generic file uploads (images & PDF documents) → Cloudinary" }
+  ],
+  "security": [],
+  "paths": {
+    "/": {
+      "get": {
+        "tags": ["Root"],
+        "summary": "Service identifier",
+        "description": "Returns a static identifier payload confirming the API is mounted.",
+        "responses": {
+          "200": {
+            "description": "Service info",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "message": { "type": "string", "example": "Tripz API" },
+                    "version": { "type": "string", "example": "1.0.0" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/health": {
+      "get": {
+        "tags": ["Health"],
+        "summary": "Health check",
+        "description": "Returns API health, process uptime, and current server timestamp.",
+        "responses": {
+          "200": {
+            "description": "API is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/SuccessEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "uptime": { "type": "number", "example": 123.456 },
+                            "timestamp": { "type": "string", "format": "date-time" }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "example": {
+                  "success": true,
+                  "message": "Tripz API is healthy.",
+                  "data": {
+                    "uptime": 123.456,
+                    "timestamp": "2026-06-05T12:00:00.000Z"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/uploads/image": {
+      "post": {
+        "tags": ["Uploads"],
+        "summary": "Upload an image or PDF",
+        "description": "Generic file-upload endpoint. The backend forwards the file to Cloudinary and returns the public URL. **No database writes happen here** — caller stores the URL elsewhere (e.g., includes it in a later KYC submission).\n\nReusable for KYC documents (PAN/Aadhaar/GSTIN/CIN), company logos, avatars, etc. — pick the right `purpose` value.\n\nFiles are organized in Cloudinary as: `tripz/<purpose>/<userId>/<timestamp>-<filename>`.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["file", "purpose"],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "The file to upload (max 5 MB, allowed: image/jpeg, image/png, image/webp, application/pdf)."
+                  },
+                  "purpose": {
+                    "type": "string",
+                    "enum": ["kyc-pan", "kyc-gstin", "kyc-cin", "kyc-aadhaar", "company-logo", "avatar", "other"],
+                    "description": "Determines the Cloudinary folder. Frontend should set this based on which slot in the form is being filled."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "File uploaded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/SuccessEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": { "$ref": "#/components/schemas/UploadResult" }
+                      }
+                    }
+                  ]
+                },
+                "example": {
+                  "success": true,
+                  "message": "File uploaded successfully.",
+                  "data": {
+                    "url": "https://res.cloudinary.com/your-cloud/image/upload/v1700000000/tripz/kyc-pan/user-uuid/1700000000-pan_card.jpg",
+                    "publicId": "tripz/kyc-pan/user-uuid/1700000000-pan_card",
+                    "format": "jpg",
+                    "width": 1024,
+                    "height": 768,
+                    "bytes": 145238,
+                    "resourceType": "image"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing file, missing/invalid purpose, or empty file",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" },
+                "examples": {
+                  "MissingFile": {
+                    "value": {
+                      "success": false,
+                      "message": "File is required. Send multipart/form-data with a \"file\" field.",
+                      "errors": null
+                    }
+                  },
+                  "InvalidPurpose": {
+                    "value": {
+                      "success": false,
+                      "message": "Validation failed",
+                      "errors": [
+                        { "field": "purpose", "message": "purpose must be one of: kyc-pan, kyc-gstin, kyc-cin, kyc-aadhaar, company-logo, avatar, other", "code": "invalid_enum_value" }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "413": {
+            "description": "File larger than UPLOAD_MAX_BYTES (default 5 MB)",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" },
+                "example": {
+                  "success": false,
+                  "message": "File too large. Max 5.0 MB allowed.",
+                  "errors": null
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported file type",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" },
+                "example": {
+                  "success": false,
+                  "message": "Unsupported file type: image/heic. Allowed: image/jpeg, image/png, image/webp, application/pdf",
+                  "errors": null
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Cloudinary upload failed (transient — caller can retry)",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" },
+                "example": {
+                  "success": false,
+                  "message": "Upload failed. Please try again.",
+                  "errors": null
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/register": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Register a new account (customer or agent)",
+        "description": "Single endpoint with an **identical payload for customers and agents**. Business details (country, company name, etc.) are collected later via the **Vendor KYC** flow, not at signup.\n\n- `role: \"customer\"` → maps to internal `CLIENT`\n- `role: \"agent\"` → maps to internal `VENDOR` (kycStatus starts as `PENDING`)\n\n`ADMIN` and `SUPER_ADMIN` cannot be self-registered. User is created with `emailVerifiedAt = null`, an OTP is emailed, and **no tokens are issued** — call `/auth/verify-email` then `/auth/login`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RegisterRequest" },
+              "examples": {
+                "Customer": {
+                  "summary": "Customer sign-up",
+                  "value": {
+                    "firstName": "Mohit",
+                    "lastName": "Kumar",
+                    "email": "corpswingsdev@gmail.com",
+                    "phone": "9878987678",
+                    "password": "Lambha!2A",
+                    "role": "customer"
+                  }
+                },
+                "Agent": {
+                  "summary": "Agent (vendor) sign-up — same fields as customer",
+                  "value": {
+                    "firstName": "Rohit",
+                    "lastName": "Kumar",
+                    "email": "rohit@example.com",
+                    "phone": "9878987679",
+                    "password": "Lambha@12A",
+                    "role": "agent"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Account created; verification email sent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/SuccessEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "user": { "$ref": "#/components/schemas/User" },
+                            "emailVerificationRequired": { "type": "boolean", "example": true }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "example": {
+                  "success": true,
+                  "message": "Account registered. Please verify your email to continue.",
+                  "data": {
+                    "user": {
+                      "id": "ckxyz123abc",
+                      "firstName": "Mohit",
+                      "lastName": "Kumar",
+                      "email": "corpswingsdev@gmail.com",
+                      "phone": "9878987678",
+                      "role": "CLIENT",
+                      "isActive": true,
+                      "emailVerifiedAt": null,
+                      "createdAt": "2026-06-05T12:00:00.000Z"
+                    },
+                    "emailVerificationRequired": true
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "403": {
+            "description": "Attempted to register a protected role",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" },
+                "example": {
+                  "success": false,
+                  "message": "SUPER_ADMIN and ADMIN accounts cannot be created via public registration.",
+                  "errors": null
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Email or phone already in use",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" },
+                "examples": {
+                  "EmailTaken": {
+                    "value": {
+                      "success": false,
+                      "message": "An account with this email already exists.",
+                      "errors": null
+                    }
+                  },
+                  "PhoneTaken": {
+                    "value": {
+                      "success": false,
+                      "message": "An account with this phone number already exists.",
+                      "errors": null
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Log in",
+        "description": "Validates credentials, returns an access/refresh token pair plus sanitized user data, **and sets the refresh token as an `httpOnly Secure SameSite=Strict` cookie scoped to `/api/v1/auth`** (path-scoped so it's only sent on auth endpoints).\n\n**Storage advice for clients:**\n- **Web:** ignore `refreshToken` in JSON, rely on the cookie. Keep `accessToken` in memory only (Redux/Zustand/Context).\n- **Mobile/native:** there is no cookie — read `refreshToken` from JSON and store it in secure platform storage (Keychain/EncryptedSharedPreferences).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/LoginRequest" },
+              "example": {
+                "email": "aashna@example.com",
+                "password": "StrongPass123"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/SuccessEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": { "$ref": "#/components/schemas/AuthTokensWithUser" }
+                      }
+                    }
+                  ]
+                },
+                "example": {
+                  "success": true,
+                  "message": "Login successful.",
+                  "data": {
+                    "user": {
+                      "id": "ckxyz123abc",
+                      "firstName": "Mohit",
+                      "lastName": "Kumar",
+                      "email": "corpswingsdev@gmail.com",
+                      "phone": "9878987678",
+                      "role": "CLIENT",
+                      "isActive": true,
+                      "emailVerifiedAt": "2026-06-05T12:00:00.000Z",
+                      "createdAt": "2026-06-05T12:00:00.000Z"
+                    },
+                    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                    "refreshExpiresAt": "2026-06-12T12:00:00.000Z"
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": {
+            "description": "Invalid credentials",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" },
+                "example": {
+                  "success": false,
+                  "message": "Invalid email or password.",
+                  "errors": null
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Account deactivated, or email not verified (a fresh OTP is sent automatically). When email is unverified the `errors` field includes `code: \"EMAIL_NOT_VERIFIED\"` so the client can route the user to the OTP screen.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" },
+                "examples": {
+                  "EmailNotVerified": {
+                    "value": {
+                      "success": false,
+                      "message": "Email not verified. We have sent a new verification code to your inbox.",
+                      "errors": {
+                        "code": "EMAIL_NOT_VERIFIED",
+                        "email": "aashna@example.com"
+                      }
+                    }
+                  },
+                  "Deactivated": {
+                    "value": {
+                      "success": false,
+                      "message": "This account has been deactivated.",
+                      "errors": null
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/verify-email": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Verify email with OTP",
+        "description": "Validates the 6-digit OTP previously sent to the user's email and marks the account as verified. Increments an attempt counter on wrong codes; after `OTP_MAX_ATTEMPTS` (default 5) the code is invalidated and the user must request a new one.\n\n**No auto-login** — verification confirms identity only. After success, the client must call `POST /auth/login` explicitly to establish a session.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/VerifyEmailRequest" },
+              "example": { "email": "aashna@example.com", "otp": "482917" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Verified (or already verified — both return success)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/SuccessEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "user": { "$ref": "#/components/schemas/User" },
+                            "alreadyVerified": { "type": "boolean" }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "examples": {
+                  "Verified": {
+                    "value": {
+                      "success": true,
+                      "message": "Email verified successfully. Please log in to continue.",
+                      "data": {
+                        "user": {
+                          "id": "ckxyz123abc",
+                          "firstName": "Mohit",
+                          "lastName": "Kumar",
+                          "email": "corpswingsdev@gmail.com",
+                          "phone": "9878987678",
+                          "role": "CLIENT",
+                          "isActive": true,
+                          "emailVerifiedAt": "2026-06-05T12:05:00.000Z",
+                          "createdAt": "2026-06-05T12:00:00.000Z"
+                        },
+                        "alreadyVerified": false
+                      }
+                    }
+                  },
+                  "AlreadyVerified": {
+                    "value": {
+                      "success": true,
+                      "message": "Email is already verified.",
+                      "data": {
+                        "user": {
+                          "id": "ckxyz123abc",
+                          "firstName": "Mohit",
+                          "lastName": "Kumar",
+                          "email": "corpswingsdev@gmail.com",
+                          "phone": "9878987678",
+                          "role": "CLIENT",
+                          "isActive": true,
+                          "emailVerifiedAt": "2026-06-05T12:05:00.000Z",
+                          "createdAt": "2026-06-05T12:00:00.000Z"
+                        },
+                        "alreadyVerified": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": {
+            "description": "Invalid, expired, or attempts-exhausted OTP",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" },
+                "examples": {
+                  "Invalid": {
+                    "value": {
+                      "success": false,
+                      "message": "Invalid verification code.",
+                      "errors": null
+                    }
+                  },
+                  "Expired": {
+                    "value": {
+                      "success": false,
+                      "message": "Verification code has expired. Please request a new one.",
+                      "errors": null
+                    }
+                  },
+                  "TooManyAttempts": {
+                    "value": {
+                      "success": false,
+                      "message": "Too many incorrect attempts. Please request a new verification code.",
+                      "errors": null
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/resend-otp": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Resend email verification OTP",
+        "description": "Issues a fresh verification OTP for an unverified account. Returns a generic success message regardless of whether the email exists, to prevent account enumeration. Rate-limited by `OTP_RESEND_COOLDOWN_SECONDS` (default 60s) — too-soon requests return 429.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ResendOtpRequest" },
+              "example": { "email": "aashna@example.com" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Generic success (sent OR no such email — same response)",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SuccessEnvelope" },
+                "example": {
+                  "success": true,
+                  "message": "If an account exists for that email, a verification code has been sent.",
+                  "data": null
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "429": {
+            "description": "Cooldown not yet elapsed since previous send",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" },
+                "example": {
+                  "success": false,
+                  "message": "Please wait 45s before requesting another code.",
+                  "errors": {
+                    "code": "OTP_RESEND_COOLDOWN",
+                    "retryAfter": 45
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/google/login": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Sign in (or sign up) with Google",
+        "description": "Single endpoint for all Google OAuth flows. The client obtains a Google ID token via Google Sign-In, posts it here, and receives the same access/refresh token pair as a normal login.\n\n**Flow:**\n- **Returning Google user** (matched by `sub`/googleId) → log in.\n- **Existing email user, first time with Google** → auto-link the accounts (Google sets `authProvider: HYBRID` if the user has a password, else `GOOGLE`). Email is auto-verified since Google has already verified it.\n- **Brand-new email** → create a new user. Requires `role` (`\"customer\"` or `\"agent\"`). New agents start with `kycStatus = PENDING` (same as the form flow).\n\nSets the `refreshToken` httpOnly cookie exactly like `/auth/login`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/GoogleLoginRequest" },
+              "examples": {
+                "ExistingUser": {
+                  "summary": "Returning user (token only)",
+                  "value": {
+                    "token": "eyJhbGciOiJSUzI1NiIs..."
+                  }
+                },
+                "NewCustomer": {
+                  "summary": "New customer signup",
+                  "value": {
+                    "token": "eyJhbGciOiJSUzI1NiIs...",
+                    "role": "customer"
+                  }
+                },
+                "NewAgent": {
+                  "summary": "New agent signup (KYC still required afterward)",
+                  "value": {
+                    "token": "eyJhbGciOiJSUzI1NiIs...",
+                    "role": "agent"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Signed in (existing user)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/SuccessEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "user": { "$ref": "#/components/schemas/User" },
+                            "isNewAccount": { "type": "boolean", "example": false },
+                            "accessToken": { "type": "string" },
+                            "refreshToken": { "type": "string" },
+                            "refreshExpiresAt": { "type": "string", "format": "date-time" }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Account created via Google",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/SuccessEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "user": { "$ref": "#/components/schemas/User" },
+                            "isNewAccount": { "type": "boolean", "example": true },
+                            "accessToken": { "type": "string" },
+                            "refreshToken": { "type": "string" },
+                            "refreshExpiresAt": { "type": "string", "format": "date-time" }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing role for new signup, or invalid request body",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" },
+                "examples": {
+                  "RoleRequired": {
+                    "value": {
+                      "success": false,
+                      "message": "A `role` is required to create a new account. Pass role: \"customer\" or \"agent\".",
+                      "errors": { "code": "ROLE_REQUIRED" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid/expired Google token, or Google email not verified",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" },
+                "examples": {
+                  "InvalidToken": {
+                    "value": { "success": false, "message": "Invalid Google token.", "errors": null }
+                  },
+                  "UnverifiedEmail": {
+                    "value": { "success": false, "message": "Your Google account email is not verified.", "errors": null }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Account deactivated",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/password/forgot": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Request a password reset OTP",
+        "description": "Sends a 6-digit reset code to the user's email if (and only if) the email belongs to an active password-based account. **Always returns the same generic message** regardless of whether the email exists, the user signed up with Google (no password), or the account is deactivated — this prevents account enumeration.\n\nRate-limited by `OTP_RESEND_COOLDOWN_SECONDS` (default 60s).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ForgotPasswordRequest" },
+              "example": { "email": "corpswingsdev@gmail.com" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Generic success (sent OR no such account — same response)",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SuccessEnvelope" },
+                "example": {
+                  "success": true,
+                  "message": "If an account exists for that email, a password reset code has been sent.",
+                  "data": null
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "429": {
+            "description": "Cooldown not yet elapsed since previous send",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" },
+                "example": {
+                  "success": false,
+                  "message": "Please wait 45s before requesting another reset code.",
+                  "errors": {
+                    "code": "OTP_RESEND_COOLDOWN",
+                    "retryAfter": 45
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/password/reset": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Reset password using the OTP",
+        "description": "Verifies the OTP and sets a new password. On success: (1) the OTP is consumed, (2) **ALL existing refresh tokens for the user are revoked** (everywhere-logout — critical security), (3) a 'password changed' confirmation email is sent.\n\n**No auto-login.** The client must call `POST /auth/login` with the new password.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ResetPasswordRequest" },
+              "example": {
+                "email": "corpswingsdev@gmail.com",
+                "otp": "482917",
+                "newPassword": "NewStrongPass1"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Password reset; all sessions logged out",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SuccessEnvelope" },
+                "example": {
+                  "success": true,
+                  "message": "Password reset successfully. Please log in with your new password.",
+                  "data": null
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": {
+            "description": "Invalid, expired, or attempts-exhausted OTP",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" },
+                "examples": {
+                  "Invalid": {
+                    "value": {
+                      "success": false,
+                      "message": "Invalid reset code.",
+                      "errors": null
+                    }
+                  },
+                  "Expired": {
+                    "value": {
+                      "success": false,
+                      "message": "Reset code has expired. Please request a new one.",
+                      "errors": null
+                    }
+                  },
+                  "TooManyAttempts": {
+                    "value": {
+                      "success": false,
+                      "message": "Too many incorrect attempts. Please request a new reset code.",
+                      "errors": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Account deactivated",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/refresh": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Rotate refresh token",
+        "description": "Verifies the refresh token, rotates it (revoking the old one), and returns a fresh access/refresh pair. **Token may come from either the httpOnly `refreshToken` cookie (preferred for web) OR the JSON body (for mobile/API clients).** If both are missing, returns 400. Reuse of a rotated token revokes all sessions for that user.\n\nSets a fresh `refreshToken` cookie on success.",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "refreshToken",
+            "schema": { "type": "string" },
+            "description": "httpOnly cookie set by /auth/login. Web clients send this automatically with `credentials: 'include'`."
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RefreshTokenRequest" },
+              "example": { "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tokens rotated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/SuccessEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": { "$ref": "#/components/schemas/AuthTokensWithUser" }
+                      }
+                    }
+                  ]
+                },
+                "example": {
+                  "success": true,
+                  "message": "Tokens refreshed successfully.",
+                  "data": {
+                    "user": {
+                      "id": "ckxyz123abc",
+                      "firstName": "Mohit",
+                      "lastName": "Kumar",
+                      "email": "corpswingsdev@gmail.com",
+                      "phone": "9878987678",
+                      "role": "CLIENT",
+                      "isActive": true,
+                      "emailVerifiedAt": "2026-06-05T12:00:00.000Z",
+                      "createdAt": "2026-06-05T12:00:00.000Z"
+                    },
+                    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                    "refreshExpiresAt": "2026-06-12T12:00:00.000Z"
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": {
+            "description": "Invalid, expired, revoked, or reused refresh token",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" },
+                "example": {
+                  "success": false,
+                  "message": "Refresh token has expired. Please log in again.",
+                  "errors": null
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Account deactivated",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Log out (revoke refresh token + clear cookie)",
+        "description": "Revokes the supplied refresh token and clears the httpOnly cookie. Token may come from either the cookie OR the JSON body. Idempotent — missing or already-revoked tokens still return success and clear the cookie.",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "refreshToken",
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RefreshTokenRequest" },
+              "example": { "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Token revoked (or already inactive)",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SuccessEnvelope" },
+                "examples": {
+                  "Revoked": {
+                    "value": {
+                      "success": true,
+                      "message": "Logged out successfully.",
+                      "data": null
+                    }
+                  },
+                  "AlreadyRevoked": {
+                    "value": {
+                      "success": true,
+                      "message": "Already logged out.",
+                      "data": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" }
+        }
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "tags": ["Auth"],
+        "summary": "Get current user profile",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Profile retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/SuccessEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "user": { "$ref": "#/components/schemas/User" }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "example": {
+                  "success": true,
+                  "message": "Profile retrieved.",
+                  "data": {
+                    "user": {
+                      "id": "ckxyz123abc",
+                      "firstName": "Mohit",
+                      "lastName": "Kumar",
+                      "email": "corpswingsdev@gmail.com",
+                      "phone": "9878987678",
+                      "role": "CLIENT",
+                      "isActive": true,
+                      "emailVerifiedAt": "2026-06-05T12:00:00.000Z",
+                      "createdAt": "2026-06-05T12:00:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/v1/super-admin/ping": {
+      "get": {
+        "tags": ["Super Admin"],
+        "summary": "Super Admin reachability check",
+        "description": "Requires the caller to hold the `SUPER_ADMIN` role. Returns the authenticated user echo.",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Reachable",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PingResponse" },
+                "example": {
+                  "success": true,
+                  "message": "Super Admin panel reachable.",
+                  "data": {
+                    "user": {
+                      "id": "ckxyz123abc",
+                      "email": "root@example.com",
+                      "role": "SUPER_ADMIN"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/api/v1/super-admin/admins": {
+      "post": {
+        "tags": ["Super Admin"],
+        "summary": "Create an Admin account",
+        "description": "SuperAdmin creates an ADMIN account. The admin is created with `emailVerifiedAt` set (no OTP flow). The SuperAdmin sets the initial password and shares it with the admin out-of-band.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateAdminRequest" },
+              "example": {
+                "firstName": "Priya",
+                "lastName": "Sharma",
+                "email": "priya.admin@tripz.com",
+                "phone": "9876512345",
+                "password": "TempPass!23"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Admin created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/SuccessEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "admin": { "$ref": "#/components/schemas/User" }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "example": {
+                  "success": true,
+                  "message": "Admin account created successfully.",
+                  "data": {
+                    "admin": {
+                      "id": "ckxyz456def",
+                      "firstName": "Priya",
+                      "lastName": "Sharma",
+                      "email": "priya.admin@tripz.com",
+                      "phone": "9876512345",
+                      "role": "ADMIN",
+                      "isActive": true,
+                      "emailVerifiedAt": "2026-06-05T12:00:00.000Z",
+                      "createdAt": "2026-06-05T12:00:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": {
+            "description": "Email or phone already in use",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/ping": {
+      "get": {
+        "tags": ["Admin"],
+        "summary": "Admin reachability check",
+        "description": "Accessible to both `SUPER_ADMIN` and `ADMIN` roles.",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Reachable",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PingResponse" },
+                "example": {
+                  "success": true,
+                  "message": "Admin panel reachable.",
+                  "data": {
+                    "user": {
+                      "id": "ckxyz123abc",
+                      "email": "admin@example.com",
+                      "role": "ADMIN"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/api/v1/vendor/ping": {
+      "get": {
+        "tags": ["Vendor"],
+        "summary": "Vendor reachability check",
+        "description": "Requires the caller to hold the `VENDOR` role.",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Reachable",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PingResponse" },
+                "example": {
+                  "success": true,
+                  "message": "Vendor panel reachable.",
+                  "data": {
+                    "user": {
+                      "id": "ckxyz123abc",
+                      "email": "vendor@example.com",
+                      "role": "VENDOR"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/api/v1/vendor/kyc": {
+      "get": {
+        "tags": ["Vendor KYC"],
+        "summary": "Get my KYC status",
+        "description": "Returns the vendor's current `kycStatus` and the latest submitted KYC payload (if any). When `kycStatus = REJECTED`, the `rejectionReason` is available so the vendor can fix and resubmit.",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Status retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/SuccessEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": { "$ref": "#/components/schemas/VendorKycView" }
+                      }
+                    }
+                  ]
+                },
+                "examples": {
+                  "Pending": {
+                    "value": {
+                      "success": true,
+                      "message": "KYC status retrieved.",
+                      "data": { "kycStatus": "PENDING", "kyc": null }
+                    }
+                  },
+                  "Submitted": {
+                    "value": {
+                      "success": true,
+                      "message": "KYC status retrieved.",
+                      "data": {
+                        "kycStatus": "SUBMITTED",
+                        "kyc": {
+                          "vendorUserId": "ckxyz123",
+                          "companyName": "Transport",
+                          "country": "India",
+                          "businessAddress": "123 MG Road, Mumbai",
+                          "gstNumber": "27AAAPL1234C1Z5",
+                          "panNumber": "AAAPL1234C",
+                          "submittedAt": "2026-06-05T12:00:00.000Z",
+                          "reviewedAt": null,
+                          "reviewedByAdminId": null,
+                          "rejectionReason": null
+                        }
+                      }
+                    }
+                  },
+                  "Rejected": {
+                    "value": {
+                      "success": true,
+                      "message": "KYC status retrieved.",
+                      "data": {
+                        "kycStatus": "REJECTED",
+                        "kyc": {
+                          "vendorUserId": "ckxyz123",
+                          "companyName": "Transport",
+                          "country": "India",
+                          "businessAddress": "123 MG Road",
+                          "gstNumber": null,
+                          "panNumber": null,
+                          "submittedAt": "2026-06-05T12:00:00.000Z",
+                          "reviewedAt": "2026-06-05T15:00:00.000Z",
+                          "reviewedByAdminId": "admin-uuid",
+                          "rejectionReason": "Business address is incomplete — please provide full street, city, state, and postal code."
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      },
+      "post": {
+        "tags": ["Vendor KYC"],
+        "summary": "Submit (or resubmit) KYC for review",
+        "description": "Vendor submits business details for admin review. Sets `kycStatus = SUBMITTED`. Resubmission after `REJECTED` clears prior review fields and re-enters the queue. Cannot submit while status is `SUBMITTED` (already in review) or `APPROVED` (contact support).",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/SubmitKycRequest" },
+              "example": {
+                "companyName": "Transport",
+                "country": "India",
+                "businessAddress": "123 MG Road, Andheri West, Mumbai, MH 400058",
+                "gstNumber": "27AAAPL1234C1Z5",
+                "panNumber": "AAAPL1234C"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Submitted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/SuccessEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": { "$ref": "#/components/schemas/VendorKycView" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": {
+            "description": "Cannot submit in current state",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" },
+                "examples": {
+                  "AlreadyApproved": {
+                    "value": {
+                      "success": false,
+                      "message": "Your KYC is already approved. Contact support to update business details.",
+                      "errors": null
+                    }
+                  },
+                  "InReview": {
+                    "value": {
+                      "success": false,
+                      "message": "A KYC submission is already under review. Please wait for admin response.",
+                      "errors": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Third-party document verification failed — submission was NOT saved. Vendor must correct the document numbers and resubmit.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" },
+                "example": {
+                  "success": false,
+                  "message": "Document verification failed: PAN (Invalid number format)",
+                  "errors": {
+                    "code": "DOCUMENT_VERIFICATION_FAILED",
+                    "failures": [
+                      { "type": "PAN", "reason": "Invalid number format" }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/vendor/kyc/verify/pan": {
+      "post": {
+        "tags": ["Vendor KYC"],
+        "summary": "Verify PAN (instant)",
+        "description": "Real-time PAN verification. Calls the third-party provider (STUB until Surepass is wired in). On success, upserts the vendor's PAN `VendorKycDocument` with `thirdPartyVerified: true`. Returns the holder name from the provider.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/VerifyDocNumberRequest" },
+              "example": { "number": "ABCDE1234F" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Verified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/SuccessEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "document": { "$ref": "#/components/schemas/VendorKycDocument" },
+                            "holderName": { "type": "string", "nullable": true }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "422": {
+            "description": "Provider rejected the number (invalid format or not found)",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" },
+                "example": {
+                  "success": false,
+                  "message": "PAN must be 5 letters + 4 digits + 1 letter (e.g., ABCDE1234F).",
+                  "errors": { "code": "DOCUMENT_VERIFICATION_FAILED", "type": "PAN" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/vendor/kyc/verify/gstin": {
+      "post": {
+        "tags": ["Vendor KYC"],
+        "summary": "Verify GSTIN (instant)",
+        "description": "Real-time GSTIN verification. Same shape as `/verify/pan`. Returns the registered business name from the GST portal (via provider).",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/VerifyDocNumberRequest" },
+              "example": { "number": "27AAAPL1234C1Z5" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Verified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/SuccessEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "document": { "$ref": "#/components/schemas/VendorKycDocument" },
+                            "businessName": { "type": "string", "nullable": true }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "422": {
+            "description": "Provider rejected the number",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/vendor/kyc/verify/cin": {
+      "post": {
+        "tags": ["Vendor KYC"],
+        "summary": "Verify CIN (instant)",
+        "description": "Real-time CIN verification (MCA registry via provider).",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/VerifyDocNumberRequest" },
+              "example": { "number": "U12345MH2020PTC123456" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Verified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/SuccessEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "document": { "$ref": "#/components/schemas/VendorKycDocument" },
+                            "companyName": { "type": "string", "nullable": true }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "422": {
+            "description": "Provider rejected the number",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/vendor/kyc/verify/aadhaar/send-otp": {
+      "post": {
+        "tags": ["Vendor KYC"],
+        "summary": "Send Aadhaar OTP (step 1 of 2)",
+        "description": "Initiates Aadhaar verification. Provider sends a one-time code to the user's Aadhaar-linked phone. The Aadhaar number is parked on the vendor's `VendorKycDocument` row as **unverified** — the next step flips it to verified.\n\n**Mode depends on env config:**\n- **LIVE** (`SUREPASS_TOKEN` set): Surepass sends a real SMS to the user's Aadhaar-linked phone. The server never sees the OTP.\n- **STUB** (no `SUREPASS_TOKEN`): the OTP is printed to the server console — no SMS is sent. Use the logged value in `/confirm-otp`.\n\nReturns a `sessionId` you must pass to `/confirm-otp` along with the OTP.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AadhaarSendOtpRequest" },
+              "example": { "number": "123412341234" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OTP sent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/SuccessEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "sessionId": { "type": "string" },
+                            "expiresAt": { "type": "string", "format": "date-time" }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "422": {
+            "description": "Provider could not initiate OTP (e.g., Aadhaar not linked to phone)",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/vendor/kyc/verify/aadhaar/confirm-otp": {
+      "post": {
+        "tags": ["Vendor KYC"],
+        "summary": "Confirm Aadhaar OTP (step 2 of 2)",
+        "description": "Verifies the OTP from step 1. On success, the parked Aadhaar `VendorKycDocument` flips to `thirdPartyVerified: true`. Wrong OTPs increment an attempt counter; after `OTP_MAX_ATTEMPTS` (default 5) the session is burned and the vendor must request a new OTP.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AadhaarConfirmOtpRequest" },
+              "example": { "sessionId": "ckxyz-uuid-...", "otp": "482917" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Aadhaar verified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/SuccessEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "document": { "$ref": "#/components/schemas/VendorKycDocument" }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error OR no pending Aadhaar verification found (call send-otp first)",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid OTP, expired session, or too many attempts",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/api/v1/admin/vendor-kyc": {
+      "get": {
+        "tags": ["Vendor KYC"],
+        "summary": "[Admin] List vendor KYC submissions",
+        "description": "Returns paginated vendor profiles with their latest KYC. Filter by `status` to see only `SUBMITTED` queue, `APPROVED` archive, etc.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "schema": { "$ref": "#/components/schemas/KycStatus" },
+            "description": "Filter by KYC status. Omit to see all."
+          },
+          {
+            "in": "query",
+            "name": "take",
+            "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 }
+          },
+          {
+            "in": "query",
+            "name": "skip",
+            "schema": { "type": "integer", "minimum": 0, "default": 0 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/SuccessEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "userId": { "type": "string" },
+                                  "kycStatus": { "$ref": "#/components/schemas/KycStatus" },
+                                  "createdAt": { "type": "string", "format": "date-time" },
+                                  "updatedAt": { "type": "string", "format": "date-time" },
+                                  "user": { "$ref": "#/components/schemas/User" },
+                                  "kyc": {
+                                    "nullable": true,
+                                    "oneOf": [{ "$ref": "#/components/schemas/VendorKyc" }, { "type": "null" }]
+                                  }
+                                }
+                              }
+                            },
+                            "total": { "type": "integer" }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/api/v1/admin/vendor-kyc/{userId}/approve": {
+      "post": {
+        "tags": ["Vendor KYC"],
+        "summary": "[Admin] Approve a vendor's KYC",
+        "description": "Approves the SUBMITTED KYC for the given vendor `userId`. Vendor's `kycStatus` becomes `APPROVED` and they can now access KYC-gated routes.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Vendor's user ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Approved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/SuccessEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": { "$ref": "#/components/schemas/VendorKycView" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Vendor is not in SUBMITTED state",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorEnvelope" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/v1/admin/vendor-kyc/{userId}/reject": {
+      "post": {
+        "tags": ["Vendor KYC"],
+        "summary": "[Admin] Reject a vendor's KYC",
+        "description": "Rejects the SUBMITTED KYC with a reason. Vendor's `kycStatus` becomes `REJECTED` and they may resubmit a corrected form.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RejectKycRequest" },
+              "example": {
+                "reason": "Business address is incomplete — please provide full street, city, state, and postal code."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/SuccessEnvelope" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": { "$ref": "#/components/schemas/VendorKycView" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/v1/client/ping": {
+      "get": {
+        "tags": ["Client"],
+        "summary": "Client reachability check",
+        "description": "Requires the caller to hold the `CLIENT` role.",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Reachable",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PingResponse" },
+                "example": {
+                  "success": true,
+                  "message": "Client panel reachable.",
+                  "data": {
+                    "user": {
+                      "id": "ckxyz123abc",
+                      "email": "client@example.com",
+                      "role": "CLIENT"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "JWT access token issued by `/api/v1/auth/login` or `/api/v1/auth/refresh`."
+      }
+    },
+    "schemas": {
+      "Role": {
+        "type": "string",
+        "enum": ["SUPER_ADMIN", "ADMIN", "VENDOR", "CLIENT"]
+      },
+      "SuccessEnvelope": {
+        "type": "object",
+        "required": ["success", "message"],
+        "properties": {
+          "success": { "type": "boolean", "example": true },
+          "message": { "type": "string" },
+          "data": { "nullable": true }
+        }
+      },
+      "ErrorEnvelope": {
+        "type": "object",
+        "required": ["success", "message"],
+        "properties": {
+          "success": { "type": "boolean", "example": false },
+          "message": { "type": "string" },
+          "errors": {
+            "nullable": true,
+            "description": "Optional structured error details (e.g. per-field validation errors)."
+          }
+        }
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "firstName": { "type": "string" },
+          "lastName": { "type": "string" },
+          "email": { "type": "string", "format": "email" },
+          "phone": {
+            "type": "string",
+            "nullable": true,
+            "example": "9878987678",
+            "description": "Null for users who signed up via Google (Google does not return phone). Required for password-based signups."
+          },
+          "role": { "$ref": "#/components/schemas/Role" },
+          "isActive": { "type": "boolean" },
+          "emailVerifiedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Timestamp the user verified their email. `null` until they complete `/auth/verify-email`. Auto-set for Google signups (Google already verifies)."
+          },
+          "avatarUrl": {
+            "type": "string",
+            "format": "uri",
+            "nullable": true,
+            "description": "Profile picture URL — populated for Google users from the `picture` claim."
+          },
+          "authProvider": {
+            "$ref": "#/components/schemas/AuthProvider"
+          },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "AuthProvider": {
+        "type": "string",
+        "enum": ["LOCAL", "GOOGLE", "HYBRID"],
+        "description": "LOCAL = email+password only. GOOGLE = Google OAuth only (no password). HYBRID = both methods linked to the same account."
+      },
+      "VerifyEmailRequest": {
+        "type": "object",
+        "required": ["email", "otp"],
+        "additionalProperties": false,
+        "properties": {
+          "email": { "type": "string", "format": "email" },
+          "otp": {
+            "type": "string",
+            "pattern": "^\\d+$",
+            "minLength": 4,
+            "maxLength": 10,
+            "description": "Numeric OTP delivered via email (default 6 digits)."
+          }
+        }
+      },
+      "ResendOtpRequest": {
+        "type": "object",
+        "required": ["email"],
+        "additionalProperties": false,
+        "properties": {
+          "email": { "type": "string", "format": "email" }
+        }
+      },
+      "ForgotPasswordRequest": {
+        "type": "object",
+        "required": ["email"],
+        "additionalProperties": false,
+        "properties": {
+          "email": { "type": "string", "format": "email" }
+        }
+      },
+      "ResetPasswordRequest": {
+        "type": "object",
+        "required": ["email", "otp", "newPassword"],
+        "additionalProperties": false,
+        "properties": {
+          "email": { "type": "string", "format": "email" },
+          "otp": {
+            "type": "string",
+            "pattern": "^\\d+$",
+            "minLength": 4,
+            "maxLength": 10
+          },
+          "newPassword": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 72,
+            "description": "Must include at least one uppercase letter, one lowercase letter, and one digit."
+          }
+        }
+      },
+      "RegisterRequest": {
+        "type": "object",
+        "required": ["firstName", "lastName", "email", "phone", "password", "role"],
+        "additionalProperties": false,
+        "properties": {
+          "firstName": { "type": "string", "minLength": 2, "maxLength": 40 },
+          "lastName": { "type": "string", "minLength": 2, "maxLength": 40 },
+          "email": { "type": "string", "format": "email" },
+          "phone": {
+            "type": "string",
+            "pattern": "^\\d{10,15}$",
+            "description": "10–15 digits."
+          },
+          "password": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 72,
+            "description": "Must include at least one uppercase letter, one lowercase letter, and one digit."
+          },
+          "role": {
+            "type": "string",
+            "enum": ["customer", "agent"],
+            "description": "`customer` → CLIENT, `agent` → VENDOR (kycStatus starts PENDING)."
+          }
+        }
+      },
+      "KycStatus": {
+        "type": "string",
+        "enum": ["PENDING", "SUBMITTED", "APPROVED", "REJECTED"],
+        "description": "PENDING = signed up but not submitted. SUBMITTED = awaiting admin review. APPROVED = vendor can take work. REJECTED = vendor may resubmit."
+      },
+      "VendorKyc": {
+        "type": "object",
+        "properties": {
+          "vendorUserId": { "type": "string" },
+          "companyName": { "type": "string" },
+          "businessName": { "type": "string", "nullable": true },
+          "companyType": { "type": "string", "enum": ["PROPRIETORSHIP","PARTNERSHIP","LLP","PVT_LTD","PUBLIC_LTD","OTHER"], "nullable": true },
+          "companySinceYears": { "type": "integer", "nullable": true, "description": "Years in business" },
+          "teamSize": { "type": "integer", "nullable": true },
+          "companyLogoUrl": { "type": "string", "format": "uri", "nullable": true },
+          "country": { "type": "string" },
+          "officeAddress": { "type": "string" },
+          "officeCity": { "type": "string", "nullable": true },
+          "officeState": { "type": "string", "nullable": true },
+          "services": { "type": "array", "items": { "type": "string" } },
+          "destinations": { "type": "array", "items": { "type": "string" } },
+          "dailyLeadRequirement": { "type": "integer", "nullable": true },
+          "websiteUrl": { "type": "string", "format": "uri", "nullable": true },
+          "facebookUrl": { "type": "string", "format": "uri", "nullable": true },
+          "instagramUrl": { "type": "string", "format": "uri", "nullable": true },
+          "referralSource": { "type": "string", "enum": ["REFERENCE","GOOGLE","SOCIAL_MEDIA","ADVERTISEMENT","OTHER"], "nullable": true },
+          "otherSource": { "type": "string", "nullable": true },
+          "marketplaceWorked": { "type": "boolean" },
+          "agreedTerms": { "type": "boolean" },
+          "declaredTrue": { "type": "boolean" },
+          "submittedAt": { "type": "string", "format": "date-time" },
+          "reviewedAt": { "type": "string", "format": "date-time", "nullable": true },
+          "reviewedByAdminId": { "type": "string", "nullable": true },
+          "rejectionReason": { "type": "string", "nullable": true },
+          "documents": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/VendorKycDocument" }
+          }
+        }
+      },
+      "VendorKycDocument": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "type": { "type": "string", "enum": ["PAN","GSTIN","CIN","AADHAR","OTHER"] },
+          "documentNumber": { "type": "string", "nullable": true },
+          "documentUrl": { "type": "string", "format": "uri", "nullable": true, "description": "URL of the uploaded document file (frontend uploads to cloud, sends URL here)" },
+          "isVerified": { "type": "boolean", "description": "Admin's manual verification flag" },
+          "verifiedAt": { "type": "string", "format": "date-time", "nullable": true },
+          "verifiedByAdminId": { "type": "string", "nullable": true },
+          "notes": { "type": "string", "nullable": true },
+          "thirdPartyVerified": { "type": "boolean", "description": "Automated third-party verification result on submission" },
+          "thirdPartyProvider": { "type": "string", "nullable": true, "description": "STUB until real provider integrated (Surepass / IDfy / Zoop / etc)" },
+          "thirdPartyVerifiedAt": { "type": "string", "format": "date-time", "nullable": true },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "VendorKycView": {
+        "type": "object",
+        "properties": {
+          "kycStatus": { "$ref": "#/components/schemas/KycStatus" },
+          "kyc": {
+            "nullable": true,
+            "oneOf": [{ "$ref": "#/components/schemas/VendorKyc" }, { "type": "null" }]
+          }
+        }
+      },
+      "SubmitKycRequest": {
+        "type": "object",
+        "description": "Full wizard payload. Extra fields like `verifiedDocs` and `uploadedFiles` are tolerated but ignored — admin verification is server-managed and `uploadedFiles` is redundant with the explicit URL fields. `gstNumber` and `gstinNumber` are treated as the same field (gstinNumber preferred).",
+        "required": [
+          "companyName",
+          "country",
+          "officeAddress",
+          "agreeTerms",
+          "declareTrue"
+        ],
+        "additionalProperties": true,
+        "properties": {
+          "companyName": { "type": "string", "minLength": 2, "maxLength": 100 },
+          "businessName": { "type": "string", "maxLength": 100 },
+          "companyType": {
+            "type": "string",
+            "description": "Accepts canonical enum or verbose label (e.g. 'Proprietorship Firm' → PROPRIETORSHIP).",
+            "example": "Proprietorship Firm"
+          },
+          "companySince": { "type": ["string", "integer"], "description": "Years in business (coerced to int)" },
+          "teamSize": { "type": ["string", "integer"] },
+          "companyLogo": { "type": "string", "format": "uri", "description": "URL of logo, pre-uploaded by frontend" },
+
+          "country": { "type": "string", "minLength": 2, "maxLength": 60 },
+          "officeAddress": { "type": "string", "minLength": 5, "maxLength": 300 },
+          "officeCity": { "type": "string", "maxLength": 100 },
+          "officeState": { "type": "string", "maxLength": 100 },
+
+          "services": { "type": "array", "items": { "type": "string" }, "example": ["TRAVEL LEADS"] },
+          "destinations": { "type": "array", "items": { "type": "string" }, "example": ["Andhra Pradesh","Assam"] },
+          "dailyLeadRequirement": { "type": ["string", "integer"] },
+
+          "profileUrl": { "type": "string", "format": "uri", "description": "Maps to websiteUrl downstream" },
+          "facebookUrl": { "type": "string", "format": "uri" },
+          "instagramUrl": { "type": "string", "format": "uri" },
+
+          "referralSource": { "type": "string", "enum": ["REFERENCE","GOOGLE","SOCIAL_MEDIA","ADVERTISEMENT","OTHER"] },
+          "otherSource": { "type": "string", "maxLength": 200 },
+          "marketplaceWorked": { "type": ["string", "boolean"], "description": "Accepts 'YES'/'NO' or boolean" },
+
+          "agreeTerms": { "type": "boolean" },
+          "declareTrue": { "type": "boolean" },
+
+          "panNumber": { "type": "string", "maxLength": 20 },
+          "panDocument": { "type": "string", "format": "uri" },
+          "gstNumber": { "type": "string", "maxLength": 20, "description": "Deprecated alias for gstinNumber (kept for frontend compat)" },
+          "gstinNumber": { "type": "string", "maxLength": 20 },
+          "gstinDocument": { "type": "string", "format": "uri" },
+          "cinNumber": { "type": "string", "maxLength": 30 },
+          "cinDocument": { "type": "string", "format": "uri" },
+          "aadharNumber": { "type": "string", "maxLength": 20 },
+          "aadharDocument": { "type": "string", "format": "uri" }
+        }
+      },
+      "VerifyDocNumberRequest": {
+        "type": "object",
+        "required": ["number"],
+        "additionalProperties": false,
+        "properties": {
+          "number": {
+            "type": "string",
+            "description": "The PAN / GSTIN / CIN number. Server uppercases + format-checks before calling the verification provider.",
+            "example": "ABCDE1234F"
+          }
+        }
+      },
+      "AadhaarSendOtpRequest": {
+        "type": "object",
+        "required": ["number"],
+        "additionalProperties": false,
+        "properties": {
+          "number": {
+            "type": "string",
+            "pattern": "^[0-9]{12}$",
+            "example": "123412341234"
+          }
+        }
+      },
+      "AadhaarConfirmOtpRequest": {
+        "type": "object",
+        "required": ["sessionId", "otp"],
+        "additionalProperties": false,
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "description": "Returned by /send-otp — links the OTP to the Aadhaar number being verified."
+          },
+          "otp": {
+            "type": "string",
+            "pattern": "^\\d+$",
+            "minLength": 4,
+            "maxLength": 10
+          }
+        }
+      },
+      "RejectKycRequest": {
+        "type": "object",
+        "required": ["reason"],
+        "additionalProperties": false,
+        "properties": {
+          "reason": { "type": "string", "minLength": 5, "maxLength": 500 }
+        }
+      },
+      "CreateAdminRequest": {
+        "type": "object",
+        "required": ["firstName", "lastName", "email", "phone", "password"],
+        "additionalProperties": false,
+        "properties": {
+          "firstName": { "type": "string", "minLength": 2, "maxLength": 40 },
+          "lastName": { "type": "string", "minLength": 2, "maxLength": 40 },
+          "email": { "type": "string", "format": "email" },
+          "phone": { "type": "string", "pattern": "^\\d{10,15}$" },
+          "password": { "type": "string", "minLength": 8, "maxLength": 72 }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "required": ["email", "password"],
+        "additionalProperties": false,
+        "properties": {
+          "email": { "type": "string", "format": "email" },
+          "password": { "type": "string", "minLength": 1 }
+        }
+      },
+      "UploadResult": {
+        "type": "object",
+        "properties": {
+          "url": { "type": "string", "format": "uri", "description": "Public CDN URL — store this in the relevant DB column on the next submission." },
+          "publicId": { "type": "string", "description": "Cloudinary identifier — used for deletes/transforms later." },
+          "format": { "type": "string", "nullable": true, "example": "jpg" },
+          "width": { "type": "integer", "nullable": true },
+          "height": { "type": "integer", "nullable": true },
+          "bytes": { "type": "integer" },
+          "resourceType": { "type": "string", "enum": ["image", "raw", "video"] }
+        }
+      },
+      "GoogleLoginRequest": {
+        "type": "object",
+        "required": ["token"],
+        "additionalProperties": true,
+        "description": "Only `token` and `role` are read server-side. Any other fields (email, googleId, picture, etc.) are tolerated for client convenience but IGNORED — identity comes from the verified token payload only.",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Google ID token (JWT) returned by Google Sign-In on the client. Verified server-side via google-auth-library."
+          },
+          "role": {
+            "type": "string",
+            "enum": ["customer", "agent"],
+            "description": "Required only for first-time signup (no existing user by googleId or email). Existing users can omit this — the server uses their stored role."
+          }
+        }
+      },
+      "RefreshTokenRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Body is optional. If omitted, the server reads the `refreshToken` cookie set by /auth/login.",
+        "properties": {
+          "refreshToken": {
+            "type": "string",
+            "minLength": 20
+          }
+        }
+      },
+      "AuthTokensWithUser": {
+        "type": "object",
+        "properties": {
+          "user": { "$ref": "#/components/schemas/User" },
+          "accessToken": { "type": "string" },
+          "refreshToken": { "type": "string" },
+          "refreshExpiresAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "PingResponse": {
+        "allOf": [
+          { "$ref": "#/components/schemas/SuccessEnvelope" },
+          {
+            "type": "object",
+            "properties": {
+              "data": {
+                "type": "object",
+                "properties": {
+                  "user": {
+                    "type": "object",
+                    "properties": {
+                      "id": { "type": "string" },
+                      "email": { "type": "string", "format": "email" },
+                      "role": { "$ref": "#/components/schemas/Role" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "responses": {
+      "ValidationError": {
+        "description": "Request body failed schema validation",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" },
+            "example": {
+              "success": false,
+              "message": "Validation failed.",
+              "errors": {
+                "email": ["Invalid email address"],
+                "password": ["Password must be at least 8 characters long"]
+              }
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Missing, invalid, or expired access token",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" },
+            "examples": {
+              "Missing": {
+                "value": {
+                  "success": false,
+                  "message": "Authentication token missing or malformed.",
+                  "errors": null
+                }
+              },
+              "Expired": {
+                "value": {
+                  "success": false,
+                  "message": "Access token has expired.",
+                  "errors": null
+                }
+              },
+              "Invalid": {
+                "value": {
+                  "success": false,
+                  "message": "Invalid access token.",
+                  "errors": null
+                }
+              }
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "Authenticated user does not have the required role(s)",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" },
+            "example": {
+              "success": false,
+              "message": "Access denied. Required role(s): SUPER_ADMIN.",
+              "errors": null
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Resource not found",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorEnvelope" },
+            "example": {
+              "success": false,
+              "message": "User profile not found.",
+              "errors": null
+            }
+          }
+        }
+      }
+    }
+  }
+}

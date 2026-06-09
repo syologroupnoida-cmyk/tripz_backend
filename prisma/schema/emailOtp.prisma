@@ -1,0 +1,16 @@
+model EmailOtp {
+  id          String          @id @default(uuid())
+  userId      String
+  codeHash    String
+  purpose     EmailOtpPurpose
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  attempts    Int             @default(0)
+  createdAt   DateTime        @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+  @@index([expiresAt])
+  @@map("email_otps")
+}
