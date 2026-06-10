@@ -18,6 +18,7 @@ model User {
   emailOtps       EmailOtp[]
   vendorProfile   VendorProfile?
   customerProfile CustomerProfile?
+  leadsSubmitted  Lead[]
 
   @@index([role])
   @@map("users")

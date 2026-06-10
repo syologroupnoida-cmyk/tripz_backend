@@ -1,0 +1,20 @@
+// Mapping row created when a vendor successfully unlocks a lead. The presence
+// of an assignment row is the source of truth for "can this vendor see the
+// real phone/email?". Has a 1:1 link to the ledger entry that paid for it.
+model LeadAssignment {
+  id                  String   @id @default(uuid())
+  leadId              String
+  vendorUserId        String
+  priceInCreditsPaid  Int // snapshot of price at unlock time
+  walletTransactionId String   @unique // 1:1 with the DEBIT ledger row
+  unlockedAt          DateTime @default(now())
+
+  lead              Lead              @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  vendor            VendorProfile     @relation(fields: [vendorUserId], references: [userId], onDelete: Cascade)
+  walletTransaction WalletTransaction @relation(fields: [walletTransactionId], references: [id])
+
+  @@unique([leadId, vendorUserId]) // a vendor can unlock each lead only once
+  @@index([vendorUserId])
+  @@index([leadId])
+  @@map("lead_assignments")
+}

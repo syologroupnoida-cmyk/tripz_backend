@@ -1,19 +1,19 @@
 model VendorKyc {
-  vendorUserId         String   @id
+  vendorUserId String @id
 
   // ---- Company identity ----
-  companyName          String
-  businessName         String?
-  companyType          CompanyType?
-  companySinceYears    Int?
-  teamSize             Int?
-  companyLogoUrl       String?
+  companyName       String
+  businessName      String?
+  companyType       CompanyType?
+  companySinceYears Int?
+  teamSize          Int?
+  companyLogoUrl    String?
 
   // ---- Location ----
-  country              String
-  officeAddress        String
-  officeCity           String?
-  officeState          String?
+  country       String
+  officeAddress String
+  officeCity    String?
+  officeState   String?
 
   // ---- Business operations ----
   services             String[]
@@ -21,24 +21,24 @@ model VendorKyc {
   dailyLeadRequirement Int?
 
   // ---- Online presence ----
-  websiteUrl           String?
-  facebookUrl          String?
-  instagramUrl         String?
+  websiteUrl   String?
+  facebookUrl  String?
+  instagramUrl String?
 
   // ---- Referral ----
-  referralSource       ReferralSource?
-  otherSource          String?
-  marketplaceWorked    Boolean         @default(false)
+  referralSource    ReferralSource?
+  otherSource       String?
+  marketplaceWorked Boolean         @default(false)
 
   // ---- Legal declaration ----
-  agreedTerms          Boolean         @default(false)
-  declaredTrue         Boolean         @default(false)
+  agreedTerms  Boolean @default(false)
+  declaredTrue Boolean @default(false)
 
   // ---- Admin workflow ----
-  submittedAt          DateTime  @default(now())
-  reviewedAt           DateTime?
-  reviewedByAdminId    String?
-  rejectionReason      String?
+  submittedAt       DateTime  @default(now())
+  reviewedAt        DateTime?
+  reviewedByAdminId String?
+  rejectionReason   String?
 
   vendor VendorProfile @relation(fields: [vendorUserId], references: [userId], onDelete: Cascade)
 

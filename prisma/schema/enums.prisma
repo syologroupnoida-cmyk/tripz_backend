@@ -16,16 +16,16 @@ enum EmailOtpPurpose {
 }
 
 enum KycStatus {
-  PENDING    // Vendor signed up but has not submitted KYC yet.
-  SUBMITTED  // Vendor filled the KYC form; awaiting admin review.
-  APPROVED   // Admin approved; vendor can take work.
-  REJECTED   // Admin rejected; vendor must resubmit with fixes.
+  PENDING // Vendor signed up but has not submitted KYC yet.
+  SUBMITTED // Vendor filled the KYC form; awaiting admin review.
+  APPROVED // Admin approved; vendor can take work.
+  REJECTED // Admin rejected; vendor must resubmit with fixes.
 }
 
 enum AuthProvider {
-  LOCAL   // Email + password account
-  GOOGLE  // Google OAuth only (no password set)
-  HYBRID  // Started one way, linked the other — can log in via either
+  LOCAL // Email + password account
+  GOOGLE // Google OAuth only (no password set)
+  HYBRID // Started one way, linked the other — can log in via either
 }
 
 enum CompanyType {
@@ -51,4 +51,21 @@ enum KycDocumentType {
   CIN
   AADHAR
   OTHER
+}
+
+enum LeadStatus {
+  PENDING_REVIEW // Customer just submitted; awaiting admin approval.
+  ACTIVE // Admin approved; live on the marketplace feed.
+  EXHAUSTED // Hit maxUnlocks - no more vendors can buy.
+  EXPIRED // Past travelDate / TTL window - auto-closed by a cron.
+  REJECTED // Admin rejected (spam, duplicate, bad data).
+  CLOSED // Customer or admin manually closed.
+}
+
+enum WalletTransactionType {
+  DEBIT_LEAD_UNLOCK // Vendor spent credits to unlock a lead.
+  CREDIT_TOP_UP // Future: from payment gateway (Razorpay turn).
+  CREDIT_REFUND // Refund for a disputed unlock.
+  CREDIT_ADMIN_ADJUSTMENT // Admin granted credits manually.
+  DEBIT_ADMIN_ADJUSTMENT // Admin clawed credits back.
 }

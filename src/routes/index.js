@@ -5,6 +5,7 @@ import superAdminRoutes from './super-admin/index.js';
 import adminRoutes from './admin/index.js';
 import vendorRoutes from './vendor/index.js';
 import clientRoutes from './client/index.js';
+import marketplaceRoutes from './marketplace/index.js';
 
 const router = Router();
 
@@ -16,5 +17,6 @@ router.use('/super-admin', superAdminRoutes);
 router.use('/admin', adminRoutes);
 router.use('/vendor', vendorRoutes);
 router.use('/client', clientRoutes);
+router.use('/marketplace', marketplaceRoutes);
 
 export default router;

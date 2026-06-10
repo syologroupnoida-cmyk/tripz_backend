@@ -1,0 +1,14 @@
+// One wallet per vendor. Created lazily on first credit operation (see
+// wallet.repository.js -> ensureWallet). Balance is in abstract "credits"
+// - the conversion rate to INR lives in the payments turn, not here.
+model Wallet {
+  vendorUserId   String   @id
+  balanceCredits Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  vendor       VendorProfile       @relation(fields: [vendorUserId], references: [userId], onDelete: Cascade)
+  transactions WalletTransaction[]
+
+  @@map("wallets")
+}
