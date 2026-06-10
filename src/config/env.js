@@ -35,6 +35,11 @@ const envSchema = z
 
     CORS_ORIGIN: z.string().default('*'),
 
+    // Public base URL the server is reachable at. Used for log messages and
+    // any link generation (e.g., email verification links). Locally this is
+    // http://localhost:<PORT>; in production set it to https://api.trip-z.in.
+    APP_URL: z.string().url().optional(),
+
     // ---- Email / SMTP ----
     SMTP_HOST: z.string({ required_error: 'SMTP_HOST is required' }).min(1),
     SMTP_PORT: z.coerce.number().int().positive().default(587),

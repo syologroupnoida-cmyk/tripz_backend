@@ -12,8 +12,13 @@ const start = async () => {
   await connectDatabase();
   await verifyMailTransport();
   logKycVerificationMode();
-  server.listen(env.PORT, () => {
-    console.log(`[server] Tripz API listening on http://localhost:${env.PORT} (${env.NODE_ENV})`);
+  // Bind to 0.0.0.0 so requests from Nginx (or any external source) reach us.
+  // Binding to the default (localhost/127.0.0.1) would block all non-local
+  // connections — fine for dev, broken behind a reverse proxy.
+  server.listen(env.PORT, '0.0.0.0', () => {
+    const publicUrl = env.APP_URL ?? `http://localhost:${env.PORT}`;
+    console.log(`[server] Tripz API listening on port ${env.PORT} (${env.NODE_ENV})`);
+    console.log(`[server] Public URL: ${publicUrl}`);
     if (!isProduction) {
       printRequestLogHeader();
     }
