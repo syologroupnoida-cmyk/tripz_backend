@@ -1,12 +1,14 @@
 import { ApiError } from '../../utils/ApiError.js';
 import * as kycRepo from '../../repositories/vendorKyc.repository.js';
+import {
+  sendVendorApprovedNotice,
+  sendVendorRejectedNotice,
+} from '../mail/index.js';
 
 export {
   verifyPan,
-  verifyGstin,
-  verifyCin,
-  sendAadhaarOtp,
-  confirmAadhaarOtp,
+  initiateAadhaarVerification,
+  completeAadhaarVerification,
 } from './documentVerification.service.js';
 
 const buildVendorKycView = (profile) => ({
@@ -114,7 +116,20 @@ export const approveVendorKyc = async ({ vendorUserId, adminId }) => {
       `Cannot approve KYC from status ${profile.kycStatus}. Vendor must have a SUBMITTED submission.`,
     );
   }
-  const { kyc, profile: updatedProfile } = await kycRepo.approveKyc({ vendorUserId, adminId });
+  const { kyc, profile: updatedProfile, user } = await kycRepo.approveKyc({
+    vendorUserId,
+    adminId,
+  });
+
+  // Fire-and-forget approval email. Approval still succeeds if SMTP fails —
+  // admin can resend manually if needed.
+  sendVendorApprovedNotice({
+    to: user.email,
+    firstName: user.firstName,
+  }).catch((err) =>
+    console.error('[kyc] Failed to send vendor-approved notice:', err?.message),
+  );
+
   return { kycStatus: updatedProfile.kycStatus, kyc };
 };
 
@@ -128,10 +143,20 @@ export const rejectVendorKyc = async ({ vendorUserId, adminId, reason }) => {
       `Cannot reject KYC from status ${profile.kycStatus}. Vendor must have a SUBMITTED submission.`,
     );
   }
-  const { kyc, profile: updatedProfile } = await kycRepo.rejectKyc({
+  const { kyc, profile: updatedProfile, user } = await kycRepo.rejectKyc({
     vendorUserId,
     adminId,
     reason,
   });
+
+  // Fire-and-forget rejection email so vendor knows to log back in and fix.
+  sendVendorRejectedNotice({
+    to: user.email,
+    firstName: user.firstName,
+    reason,
+  }).catch((err) =>
+    console.error('[kyc] Failed to send vendor-rejected notice:', err?.message),
+  );
+
   return { kycStatus: updatedProfile.kycStatus, kyc };
 };

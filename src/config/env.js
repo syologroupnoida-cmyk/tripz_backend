@@ -74,6 +74,16 @@ const envSchema = z
     SUREPASS_TOKEN: z.string().min(10).optional(),
     SUREPASS_BASE_URL: z.string().url().default('https://kyc-api.surepass.io/api/v1'),
     SUREPASS_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
+
+    // Public Tripz frontend URL where DigiLocker will redirect the user
+    // after they finish Aadhaar verification. Must be HTTPS (Surepass
+    // rejects http://). Example: https://trip-z.in/kyc/aadhaar-callback
+    // Falls back to the Surepass console URL when unset (only useful for
+    // dashboard testing — set this for real users).
+    SUREPASS_REDIRECT_URL: z
+      .string()
+      .url()
+      .default('https://console.surepass.app/product/console/api/digilocker'),
   })
   .refine((data) => data.JWT_ACCESS_SECRET !== data.JWT_REFRESH_SECRET, {
     message: 'JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must be different values',

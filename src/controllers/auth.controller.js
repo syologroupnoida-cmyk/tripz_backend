@@ -15,7 +15,7 @@ export const register = asyncHandler(async (req, res) => {
   const args = { firstName, lastName, email, phone, password };
 
   const result =
-    role === 'agent'
+    role === 'VENDOR'
       ? await authService.registerAgent(args)
       : await authService.registerCustomer(args);
 
@@ -120,7 +120,7 @@ export const resendOtp = asyncHandler(async (req, res) => {
   return sendSuccess(res, {
     statusCode: 200,
     message: result.message,
-    data: null,
+    data: { otp: result.otp },
   });
 });
 
@@ -131,7 +131,7 @@ export const forgotPassword = asyncHandler(async (req, res) => {
   return sendSuccess(res, {
     statusCode: 200,
     message: result.message,
-    data: null,
+    data: { otp: result.otp },
   });
 });
 

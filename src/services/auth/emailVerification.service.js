@@ -3,7 +3,11 @@ import { ApiError } from '../../utils/ApiError.js';
 import { env } from '../../config/env.js';
 import * as userRepo from '../../repositories/user.repository.js';
 import * as otpRepo from '../../repositories/emailOtp.repository.js';
-import { sanitizeUser, issueAndSendVerificationOtp } from './_helpers.js';
+import {
+  sanitizeUser,
+  issueAndSendVerificationOtp,
+  buildOtpMetadata,
+} from './_helpers.js';
 
 export const verifyEmailWithOtp = async ({ email, otp }) => {
   const user = await userRepo.findUserByEmail(email);
@@ -46,12 +50,13 @@ export const resendVerificationOtp = async ({ email }) => {
   const user = await userRepo.findUserByEmail(email);
 
   // Same-shape response regardless of existence to avoid email enumeration.
-  const genericResponse = {
-    message: 'If an account exists for that email, a verification code has been sent.',
-  };
+  // OTP metadata is included in both branches so the response structure is
+  // identical for valid and invalid emails.
+  const messageText =
+    'If an account exists for that email, a verification code has been sent.';
 
   if (!user || user.emailVerifiedAt || !user.isActive) {
-    return genericResponse;
+    return { message: messageText, otp: buildOtpMetadata() };
   }
 
   const cooldownMs = env.OTP_RESEND_COOLDOWN_SECONDS * 1000;
@@ -72,6 +77,6 @@ export const resendVerificationOtp = async ({ email }) => {
     }
   }
 
-  await issueAndSendVerificationOtp(user);
-  return genericResponse;
+  const otp = await issueAndSendVerificationOtp(user);
+  return { message: messageText, otp };
 };

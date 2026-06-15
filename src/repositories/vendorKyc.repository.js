@@ -114,8 +114,13 @@ export const markAadhaarVerified = async ({ vendorUserId }) => {
  * Vendor submits or resubmits the company-level fields. Documents are NOT
  * touched here — they're managed independently via the verify endpoints.
  *
- * Transactionally: upserts the VendorKyc main row (resets review fields on
- * resubmit) and flips VendorProfile.kycStatus → SUBMITTED.
+ * Transactionally:
+ *   1. Upserts the VendorKyc main row (resets review fields on resubmit).
+ *   2. Flips VendorProfile.kycStatus → SUBMITTED.
+ *   3. Deactivates the User (isActive=false) — vendor can't log in again
+ *      until admin approves. Existing access tokens still work until expiry
+ *      (~15 min) so the vendor can see the "thank you" screen.
+ *   4. Revokes all refresh tokens so the session can't be extended.
  */
 export const upsertKycAndMarkSubmitted = async ({ vendorUserId, kyc }) => {
   return prisma.$transaction(async (tx) => {
@@ -138,6 +143,20 @@ export const upsertKycAndMarkSubmitted = async ({ vendorUserId, kyc }) => {
       select: { userId: true, kycStatus: true, updatedAt: true },
     });
 
+    // Deactivate the account so the vendor can't log in again until admin
+    // makes a decision. They'll see a clear "under review" message on login.
+    await tx.user.update({
+      where: { id: vendorUserId },
+      data: { isActive: false },
+    });
+
+    // Revoke all refresh tokens so they can't extend the current session
+    // beyond the access token's natural expiry.
+    await tx.refreshToken.updateMany({
+      where: { userId: vendorUserId, isRevoked: false },
+      data: { isRevoked: true },
+    });
+
     const documents = await tx.vendorKycDocument.findMany({
       where: { vendorUserId },
       select: DOC_SELECT,
@@ -147,6 +166,8 @@ export const upsertKycAndMarkSubmitted = async ({ vendorUserId, kyc }) => {
   });
 };
 
+// Admin approves the KYC — also re-activates the User so the vendor can
+// log back in. From here on they have full marketplace access.
 export const approveKyc = async ({ vendorUserId, adminId }) => {
   return prisma.$transaction(async (tx) => {
     const kyc = await tx.vendorKyc.update({
@@ -163,14 +184,22 @@ export const approveKyc = async ({ vendorUserId, adminId }) => {
       data: { kycStatus: 'APPROVED' },
       select: { userId: true, kycStatus: true, updatedAt: true },
     });
+    const user = await tx.user.update({
+      where: { id: vendorUserId },
+      data: { isActive: true },
+      select: { id: true, email: true, firstName: true, isActive: true },
+    });
     const documents = await tx.vendorKycDocument.findMany({
       where: { vendorUserId },
       select: DOC_SELECT,
     });
-    return { kyc: { ...kyc, documents }, profile };
+    return { kyc: { ...kyc, documents }, profile, user };
   });
 };
 
+// Admin rejects the KYC — re-activates the User so the vendor can log
+// back in, see the rejection reason, and resubmit a corrected KYC.
+// (A second submission will flip isActive back to false.)
 export const rejectKyc = async ({ vendorUserId, adminId, reason }) => {
   return prisma.$transaction(async (tx) => {
     const kyc = await tx.vendorKyc.update({
@@ -187,11 +216,16 @@ export const rejectKyc = async ({ vendorUserId, adminId, reason }) => {
       data: { kycStatus: 'REJECTED' },
       select: { userId: true, kycStatus: true, updatedAt: true },
     });
+    const user = await tx.user.update({
+      where: { id: vendorUserId },
+      data: { isActive: true },
+      select: { id: true, email: true, firstName: true, isActive: true },
+    });
     const documents = await tx.vendorKycDocument.findMany({
       where: { vendorUserId },
       select: DOC_SELECT,
     });
-    return { kyc: { ...kyc, documents }, profile };
+    return { kyc: { ...kyc, documents }, profile, user };
   });
 };
 

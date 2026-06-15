@@ -6,30 +6,24 @@
 // service has zero idea which one it's talking to.
 //
 // What it does:
-//   • PAN / GSTIN / CIN: format-only regex check, always "verified" if the
-//     number is well-formed.
-//   • Aadhaar OTP: generates its OWN 6-digit OTP, stores the hash in an
-//     in-memory Map keyed by a fake providerClientId, and logs the OTP to the
-//     server console so devs can complete the flow without any SMS provider.
+//   • PAN: format-only regex check, always "verified" if the number is
+//     well-formed.
+//   • Aadhaar: simulates the DigiLocker handoff — initiate returns a fake
+//     redirect URL + client_id; complete auto-returns mock verified data
+//     against any client_id that initiate handed out.
 //
 // Lifetime of stub state:
-//   The Map lives for the lifetime of the Node process. Restarting the server
-//   discards all pending OTPs — that's fine for dev. Don't ship to prod with
-//   the stub provider active (boot-time log warns about this).
+//   The session Set lives for the lifetime of the Node process. Restarting
+//   the server discards all pending sessions — fine for dev. Don't ship to
+//   prod with the stub provider active (boot-time log warns about this).
 // =============================================================================
 
-import { generateOtp, hashOtp } from '../../../utils/otp.js';
-import {
-  PAN_REGEX,
-  GSTIN_REGEX,
-  CIN_REGEX,
-  AADHAAR_REGEX,
-} from './_formats.js';
+import { PAN_REGEX, AADHAAR_REGEX } from './_formats.js';
 
 export const PROVIDER_NAME = 'STUB';
 
-// In-memory store: providerClientId → hashedOtp. Cleared on process restart.
-const stubOtpStore = new Map();
+// Tracks which fake client_ids are "in progress". Cleared on process restart.
+const stubOtpStore = new Set();
 
 // -----------------------------------------------------------------------------
 //   Public verification API (mirror of surepass.provider.js)
@@ -52,72 +46,56 @@ export const verifyPan = async (number) => {
   };
 };
 
-export const verifyGstin = async (number) => {
-  if (!GSTIN_REGEX.test(number)) {
-    return { verified: false, reason: 'GSTIN format is invalid.', rawResponse: null, businessName: null };
-  }
-  return {
-    verified: true,
-    reason: null,
-    rawResponse: { stub: true },
-    businessName: 'Mock Business (stub)',
-  };
-};
-
-export const verifyCin = async (number) => {
-  if (!CIN_REGEX.test(number)) {
-    return { verified: false, reason: 'CIN format is invalid.', rawResponse: null, companyName: null };
-  }
-  return {
-    verified: true,
-    reason: null,
-    rawResponse: { stub: true },
-    companyName: 'Mock Company (stub)',
-  };
-};
-
 /**
- * Stubbed equivalent of Surepass's generate-otp.
- * Instead of sending an SMS, we generate an OTP, hash + cache it under a fake
- * providerClientId, and print it to the console so the dev can read it.
+ * Stubbed equivalent of Surepass's /digilocker/initialize. Returns a fake
+ * redirect URL + client_id so the rest of the flow has something to chew on.
+ * The stub's "complete" step auto-verifies any client_id that this function
+ * issued — no real OTP exchange needed.
  */
-export const sendAadhaarOtp = async (number) => {
+export const initiateAadhaarVerification = async (number) => {
   if (!AADHAAR_REGEX.test(number)) {
-    return { sent: false, reason: 'Aadhaar must be 12 digits.', providerClientId: null, rawResponse: null };
+    return {
+      sent: false,
+      reason: 'Aadhaar must be 12 digits.',
+      providerClientId: null,
+      redirectUrl: null,
+      expiresAt: null,
+      rawResponse: null,
+    };
   }
 
-  const otp = generateOtp();
   const providerClientId = `stub-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  stubOtpStore.set(providerClientId, hashOtp(otp));
+  stubOtpStore.add(providerClientId);
 
-  // ⚠️ STUB-ONLY: print the OTP so devs can complete the flow.
-  console.log(`[STUB] Aadhaar OTP for clientId ${providerClientId}: ${otp}`);
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+  const redirectUrl = `https://stub-digilocker.local/auth?client_id=${providerClientId}`;
+
+  console.log(`[STUB] DigiLocker simulated session: clientId=${providerClientId}`);
+  console.log(`[STUB] (simulated redirect URL: ${redirectUrl})`);
 
   return {
     sent: true,
     reason: null,
     providerClientId,
+    redirectUrl,
+    expiresAt,
     rawResponse: { stub: true },
   };
 };
 
 /**
- * Stubbed equivalent of Surepass's submit-otp. Looks up the cached hash by
- * providerClientId, compares to the user's input. One-time use — successful
- * verifications remove the entry from the cache.
+ * Stubbed equivalent of Surepass's /digilocker/get-aadhaar. The DigiLocker
+ * flow handles the OTP outside the app, so the stub just verifies that the
+ * initiate session existed and auto-returns mock data.
  */
-export const confirmAadhaarOtp = async ({ providerClientId, otp }) => {
-  const expected = stubOtpStore.get(providerClientId);
-
-  if (!expected) {
+export const completeAadhaarVerification = async ({ providerClientId }) => {
+  if (!stubOtpStore.has(providerClientId)) {
     return {
       verified: false,
       reason: 'Session not found or expired.',
+      holderName: null,
       rawResponse: { stub: true },
     };
-  }
-  if (hashOtp(otp) !== expected) {
-    return { verified: false, reason: 'Invalid OTP.', rawResponse: { stub: true } };
   }
 
   // One-time use.
@@ -125,6 +103,7 @@ export const confirmAadhaarOtp = async ({ providerClientId, otp }) => {
   return {
     verified: true,
     reason: null,
+    holderName: 'Mock User (stub)',
     rawResponse: { stub: true, mock: { fullName: 'Mock User (stub)' } },
   };
 };

@@ -28,7 +28,7 @@ import { provider, PROVIDER_NAME } from './providers/index.js';
 export { logKycVerificationMode } from './providers/index.js';
 
 // -----------------------------------------------------------------------------
-//   Instant verifications (PAN / GSTIN / CIN)
+//   Instant verifications (PAN)
 // -----------------------------------------------------------------------------
 
 export const verifyPan = async ({ vendorUserId, number }) => {
@@ -51,60 +51,23 @@ export const verifyPan = async ({ vendorUserId, number }) => {
   return { document, holderName: result.holderName };
 };
 
-export const verifyGstin = async ({ vendorUserId, number }) => {
-  const result = await provider.verifyGstin(number);
-  if (!result.verified) {
-    throw new ApiError(422, result.reason || 'GSTIN verification failed.', {
-      code: 'DOCUMENT_VERIFICATION_FAILED',
-      type: 'GSTIN',
-    });
-  }
-  const document = await kycRepo.upsertKycDocument({
-    vendorUserId,
-    type: 'GSTIN',
-    documentNumber: number,
-    thirdPartyVerified: true,
-    thirdPartyProvider: PROVIDER_NAME,
-    thirdPartyVerifiedAt: new Date(),
-    thirdPartyResponse: result.rawResponse,
-  });
-  return { document, businessName: result.businessName };
-};
-
-export const verifyCin = async ({ vendorUserId, number }) => {
-  const result = await provider.verifyCin(number);
-  if (!result.verified) {
-    throw new ApiError(422, result.reason || 'CIN verification failed.', {
-      code: 'DOCUMENT_VERIFICATION_FAILED',
-      type: 'CIN',
-    });
-  }
-  const document = await kycRepo.upsertKycDocument({
-    vendorUserId,
-    type: 'CIN',
-    documentNumber: number,
-    thirdPartyVerified: true,
-    thirdPartyProvider: PROVIDER_NAME,
-    thirdPartyVerifiedAt: new Date(),
-    thirdPartyResponse: result.rawResponse,
-  });
-  return { document, companyName: result.companyName };
-};
-
 // -----------------------------------------------------------------------------
-//   Aadhaar — two-step OTP flow
+//   Aadhaar — DigiLocker-backed two-step flow
 //
-// We delegate OTP delivery + verification to the provider. The provider owns
-// the OTP value itself (Surepass sends real SMS; stub generates locally).
+// Surepass's DigiLocker product hands off OTP delivery + UIDAI validation to
+// DigiLocker's own UI. Our backend's job is:
+//   • initiate the session (this returns a DigiLocker SDK URL),
+//   • park the client_id so we can fetch the result later,
+//   • after the user finishes on DigiLocker, pull the verified Aadhaar data.
 //
 // We keep an EmailOtp row purely for OUR concerns:
 //   • per-user rate limiting (attempts counter)
 //   • TTL (expiresAt) so stale sessions don't linger forever
-//   The codeHash field is not meaningful here — we don't compare against it.
+//   The codeHash field is not meaningful here — DigiLocker owns the OTP.
 // -----------------------------------------------------------------------------
 
-export const sendAadhaarOtp = async ({ vendorUserId, number }) => {
-  const result = await provider.sendAadhaarOtp(number);
+export const initiateAadhaarVerification = async ({ vendorUserId, number }) => {
+  const result = await provider.initiateAadhaarVerification(number);
   if (!result.sent) {
     throw new ApiError(422, result.reason || 'Could not initiate Aadhaar verification.', {
       code: 'AADHAAR_OTP_SEND_FAILED',
@@ -112,7 +75,8 @@ export const sendAadhaarOtp = async ({ vendorUserId, number }) => {
   }
 
   // Park the (still unverified) Aadhaar on the document row, plus the
-  // provider's client_id so confirm-otp can find it later.
+  // provider's client_id + token so confirm-otp can find them later. Also save
+  // the DigiLocker URL (new Surepass flow) for audit / debugging.
   await kycRepo.upsertKycDocument({
     vendorUserId,
     type: 'AADHAR',
@@ -122,7 +86,10 @@ export const sendAadhaarOtp = async ({ vendorUserId, number }) => {
     thirdPartyVerifiedAt: null,
     thirdPartyResponse: {
       providerClientId: result.providerClientId,
+      providerToken: result.providerToken ?? null,
       providerSentAt: new Date().toISOString(),
+      redirectUrl: result.redirectUrl ?? null,
+      providerExpiresAt: result.expiresAt ?? null,
       raw: result.rawResponse,
     },
   });
@@ -137,10 +104,18 @@ export const sendAadhaarOtp = async ({ vendorUserId, number }) => {
     expiresAt: otpExpiry(),
   });
 
-  return { sessionId: session.id, expiresAt: session.expiresAt };
+  return {
+    sessionId: session.id,
+    expiresAt: session.expiresAt,
+    // New DigiLocker flow: frontend should open this URL so the user can
+    // authenticate on DigiLocker (where the OTP is sent + verified). Null
+    // for legacy accounts still using Surepass's own OTP flow — in that
+    // case the user just types the OTP into your form as before.
+    redirectUrl: result.redirectUrl ?? null,
+  };
 };
 
-export const confirmAadhaarOtp = async ({ vendorUserId, sessionId, otp }) => {
+export const completeAadhaarVerification = async ({ vendorUserId, sessionId }) => {
   // 1. Validate the local session.
   const active = await otpRepo.findOtpById(sessionId);
   if (!active || active.userId !== vendorUserId || active.purpose !== 'AADHAAR_VERIFICATION') {
@@ -167,11 +142,15 @@ export const confirmAadhaarOtp = async ({ vendorUserId, sessionId, otp }) => {
     );
   }
 
-  // 3. Let the provider verify (Surepass calls UIDAI; stub compares its in-memory hash).
-  const result = await provider.confirmAadhaarOtp({ providerClientId, otp });
+  // 3. Let the provider fetch the verified Aadhaar from Surepass. DigiLocker
+  //    has already collected and validated the OTP outside our app, so the
+  //    provider only needs the client_id we parked at initiate-time.
+  const result = await provider.completeAadhaarVerification({
+    providerClientId,
+  });
   if (!result.verified) {
     await otpRepo.incrementOtpAttempts(active.id);
-    throw ApiError.unauthorized(result.reason || 'Invalid OTP.');
+    throw ApiError.unauthorized(result.reason || 'Aadhaar verification failed or still pending.');
   }
 
   // 4. Burn the session, flip the document to verified, stamp the raw response
@@ -187,9 +166,10 @@ export const confirmAadhaarOtp = async ({ vendorUserId, sessionId, otp }) => {
     thirdPartyResponse: {
       ...(aadhaarDoc.thirdPartyResponse ?? {}),
       confirmation: result.rawResponse,
+      holderName: result.holderName ?? null,
     },
   });
   const document = await kycRepo.markAadhaarVerified({ vendorUserId });
 
-  return { document };
+  return { document, holderName: result.holderName ?? null };
 };

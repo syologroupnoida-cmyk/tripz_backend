@@ -39,47 +39,23 @@ export const verifyPan = asyncHandler(async (req, res) => {
   });
 });
 
-export const verifyGstin = asyncHandler(async (req, res) => {
-  const data = await kycService.verifyGstin({
+export const initiateAadhaarVerification = asyncHandler(async (req, res) => {
+  const data = await kycService.initiateAadhaarVerification({
     vendorUserId: req.user.id,
     number: req.body.number,
   });
   return sendSuccess(res, {
     statusCode: 200,
-    message: 'GSTIN verified successfully.',
+    message:
+      'DigiLocker verification initiated. Open the redirect URL to complete it.',
     data,
   });
 });
 
-export const verifyCin = asyncHandler(async (req, res) => {
-  const data = await kycService.verifyCin({
-    vendorUserId: req.user.id,
-    number: req.body.number,
-  });
-  return sendSuccess(res, {
-    statusCode: 200,
-    message: 'CIN verified successfully.',
-    data,
-  });
-});
-
-export const sendAadhaarOtp = asyncHandler(async (req, res) => {
-  const data = await kycService.sendAadhaarOtp({
-    vendorUserId: req.user.id,
-    number: req.body.number,
-  });
-  return sendSuccess(res, {
-    statusCode: 200,
-    message: 'Aadhaar OTP sent. Enter it to complete verification.',
-    data,
-  });
-});
-
-export const confirmAadhaarOtp = asyncHandler(async (req, res) => {
-  const data = await kycService.confirmAadhaarOtp({
+export const completeAadhaarVerification = asyncHandler(async (req, res) => {
+  const data = await kycService.completeAadhaarVerification({
     vendorUserId: req.user.id,
     sessionId: req.body.sessionId,
-    otp: req.body.otp,
   });
   return sendSuccess(res, {
     statusCode: 200,

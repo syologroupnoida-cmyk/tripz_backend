@@ -18,11 +18,12 @@ export const registerCustomer = async ({ firstName, lastName, email, phone, pass
     password: passwordHash,
   });
 
-  await issueAndSendVerificationOtp(user);
+  const otp = await issueAndSendVerificationOtp(user);
 
   return {
     user: sanitizeUser(user),
     emailVerificationRequired: true,
+    otp,
   };
 };
 
@@ -38,10 +39,11 @@ export const registerAgent = async ({ firstName, lastName, email, phone, passwor
     password: passwordHash,
   });
 
-  await issueAndSendVerificationOtp(user);
+  const otp = await issueAndSendVerificationOtp(user);
 
   return {
     user: sanitizeUser(user),
     emailVerificationRequired: true,
+    otp,
   };
 };

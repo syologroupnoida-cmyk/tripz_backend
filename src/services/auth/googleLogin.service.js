@@ -1,9 +1,8 @@
 import { ApiError } from '../../utils/ApiError.js';
 import { verifyGoogleIdToken } from '../../utils/googleAuth.js';
 import * as userRepo from '../../repositories/user.repository.js';
+import { SELF_SIGNUP_ROLES } from '../../validators/auth.validator.js';
 import { sanitizeUser, issueTokenPair } from './_helpers.js';
-
-const ROLE_MAP = { customer: 'CLIENT', agent: 'VENDOR' };
 
 const buildLoginResult = (user, isNewAccount) => ({
   user: sanitizeUser(user),
@@ -11,7 +10,7 @@ const buildLoginResult = (user, isNewAccount) => ({
 });
 
 const createUserForRole = async ({ role, identity }) => {
-  if (role === 'agent') {
+  if (role === 'VENDOR') {
     return userRepo.createAgentViaGoogle(identity);
   }
   return userRepo.createCustomerViaGoogle(identity);
@@ -54,12 +53,12 @@ export const loginWithGoogle = async ({ token, role }) => {
   if (!user) {
     if (!role) {
       throw ApiError.badRequest(
-        'A `role` is required to create a new account. Pass role: "customer" or "agent".',
+        'A `role` is required to create a new account. Pass role: "CLIENT" or "VENDOR".',
         { code: 'ROLE_REQUIRED' },
       );
     }
-    if (!ROLE_MAP[role]) {
-      throw ApiError.badRequest('Role must be either "customer" or "agent".');
+    if (!SELF_SIGNUP_ROLES.includes(role)) {
+      throw ApiError.badRequest('Role must be either "CLIENT" or "VENDOR".');
     }
 
     user = await createUserForRole({

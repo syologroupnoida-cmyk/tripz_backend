@@ -2,11 +2,9 @@ import { z } from 'zod';
 
 export const USER_ROLES = ['SUPER_ADMIN', 'ADMIN', 'VENDOR', 'CLIENT'];
 
-// Public-facing role names (in the payload) → internal Prisma UserRole.
-export const PUBLIC_ROLE_TO_INTERNAL = {
-  customer: 'CLIENT',
-  agent: 'VENDOR',
-};
+// Self-signup is only allowed for CLIENT or VENDOR — ADMIN/SUPER_ADMIN are
+// created via the SuperAdmin endpoint, never via the public auth API.
+export const SELF_SIGNUP_ROLES = ['CLIENT', 'VENDOR'];
 
 const passwordSchema = z
   .string({ required_error: 'Password is required' })
@@ -40,8 +38,8 @@ export const registerSchema = z
     email: emailField,
     phone: phoneField,
     password: passwordSchema,
-    role: z.enum(['customer', 'agent'], {
-      errorMap: () => ({ message: 'Role must be either "customer" or "agent"' }),
+    role: z.enum(['CLIENT', 'VENDOR'], {
+      errorMap: () => ({ message: 'Role must be either "CLIENT" or "VENDOR"' }),
     }),
   })
   .strict();
@@ -111,7 +109,7 @@ export const googleLoginSchema = z
     token: z
       .string({ required_error: 'Google ID token is required' })
       .min(20, 'Google token is invalid'),
-    role: z.enum(['customer', 'agent']).optional(),
+    role: z.enum(['CLIENT', 'VENDOR']).optional(),
   })
   // .strict() rejects extra fields — we tolerate extras because frontend may
   // ship email/picture/etc for debugging. We always ignore them server-side.

@@ -1,11 +1,35 @@
 import { comparePassword } from '../../utils/password.js';
 import { ApiError } from '../../utils/ApiError.js';
 import * as userRepo from '../../repositories/user.repository.js';
+import * as kycRepo from '../../repositories/vendorKyc.repository.js';
 import {
   sanitizeUser,
   issueTokenPair,
   issueAndSendVerificationOtp,
 } from './_helpers.js';
+
+/**
+ * For a deactivated vendor, decide which error to return. Vendors who just
+ * submitted KYC get a clear "under review" message; everyone else gets the
+ * generic deactivation message.
+ */
+const buildDeactivationError = async (user) => {
+  if (user.role === 'VENDOR') {
+    const profile = await kycRepo.findVendorProfile(user.id);
+    if (profile?.kycStatus === 'SUBMITTED') {
+      return new ApiError(
+        403,
+        'Your application is under review. We will email you once your account is approved.',
+        { code: 'ACCOUNT_UNDER_REVIEW', kycStatus: 'SUBMITTED' },
+      );
+    }
+  }
+  return new ApiError(
+    403,
+    'This account has been deactivated. Please contact support.',
+    { code: 'ACCOUNT_DEACTIVATED' },
+  );
+};
 
 export const loginUser = async ({ email, password }) => {
   const user = await userRepo.findUserByEmail(email);
@@ -13,7 +37,7 @@ export const loginUser = async ({ email, password }) => {
     throw ApiError.unauthorized('Invalid email or password.');
   }
   if (!user.isActive) {
-    throw ApiError.forbidden('This account has been deactivated.');
+    throw await buildDeactivationError(user);
   }
 
   const passwordMatches = await comparePassword(password, user.password);

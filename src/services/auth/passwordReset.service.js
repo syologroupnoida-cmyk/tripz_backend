@@ -6,19 +6,19 @@ import * as userRepo from '../../repositories/user.repository.js';
 import * as refreshRepo from '../../repositories/refreshToken.repository.js';
 import * as otpRepo from '../../repositories/emailOtp.repository.js';
 import { sendPasswordChangedNotice } from '../mail/index.js';
-import { issueAndSendPasswordResetOtp } from './_helpers.js';
+import { issueAndSendPasswordResetOtp, buildOtpMetadata } from './_helpers.js';
 
 export const requestPasswordReset = async ({ email }) => {
   const user = await userRepo.findUserByEmail(email);
 
   // Generic response — never reveal whether the email exists, the user has a
-  // password (vs. Google-only), or the account is active.
-  const genericResponse = {
-    message: 'If an account exists for that email, a password reset code has been sent.',
-  };
+  // password (vs. Google-only), or the account is active. OTP metadata is
+  // included even on the generic branch so the response shape is identical.
+  const messageText =
+    'If an account exists for that email, a password reset code has been sent.';
 
   if (!user || !user.isActive || !user.password) {
-    return genericResponse;
+    return { message: messageText, otp: buildOtpMetadata() };
   }
 
   const cooldownMs = env.OTP_RESEND_COOLDOWN_SECONDS * 1000;
@@ -39,8 +39,8 @@ export const requestPasswordReset = async ({ email }) => {
     }
   }
 
-  await issueAndSendPasswordResetOtp(user);
-  return genericResponse;
+  const otp = await issueAndSendPasswordResetOtp(user);
+  return { message: messageText, otp };
 };
 
 export const resetPassword = async ({ email, otp, newPassword }) => {

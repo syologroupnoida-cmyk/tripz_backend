@@ -5,10 +5,33 @@ import jwt from 'jsonwebtoken';
 import { signAccessToken, signRefreshToken, hashToken } from '../../utils/jwt.js';
 import { generateOtp, hashOtp, otpExpiry } from '../../utils/otp.js';
 import { ApiError } from '../../utils/ApiError.js';
+import { env } from '../../config/env.js';
 import * as userRepo from '../../repositories/user.repository.js';
 import * as refreshRepo from '../../repositories/refreshToken.repository.js';
 import * as otpRepo from '../../repositories/emailOtp.repository.js';
 import { sendVerificationOtp, sendPasswordResetOtp } from '../mail/index.js';
+
+/**
+ * OTP metadata block sent to the frontend whenever an OTP is dispatched.
+ * Lets the UI render an accurate countdown timer and disable the resend
+ * button for the right cooldown window without hardcoding env values.
+ *
+ * Includes metadata even on anti-enumeration "generic" responses so the
+ * shape is identical whether or not the email actually corresponds to a
+ * real account — an attacker can't probe existence by inspecting the
+ * response structure.
+ */
+export const buildOtpMetadata = ({ createdAt = new Date() } = {}) => {
+  const sentAt = createdAt instanceof Date ? createdAt : new Date(createdAt);
+  const expiresAt = new Date(sentAt.getTime() + env.OTP_TTL_MINUTES * 60 * 1000);
+  return {
+    ttlSeconds: env.OTP_TTL_MINUTES * 60,
+    resendCooldownSeconds: env.OTP_RESEND_COOLDOWN_SECONDS,
+    maxAttempts: env.OTP_MAX_ATTEMPTS,
+    sentAt: sentAt.toISOString(),
+    expiresAt: expiresAt.toISOString(),
+  };
+};
 
 export const sanitizeUser = (user) => ({
   id: user.id,
@@ -58,6 +81,7 @@ export const issueAndSendVerificationOtp = async (user) => {
   });
 
   const code = generateOtp();
+  const sentAt = new Date();
   await otpRepo.createEmailOtp({
     userId: user.id,
     codeHash: hashOtp(code),
@@ -77,6 +101,8 @@ export const issueAndSendVerificationOtp = async (user) => {
       'We could not send the verification email. Please try again in a moment.',
     );
   }
+
+  return buildOtpMetadata({ createdAt: sentAt });
 };
 
 export const issueAndSendPasswordResetOtp = async (user) => {
@@ -86,6 +112,7 @@ export const issueAndSendPasswordResetOtp = async (user) => {
   });
 
   const code = generateOtp();
+  const sentAt = new Date();
   await otpRepo.createEmailOtp({
     userId: user.id,
     codeHash: hashOtp(code),
@@ -105,6 +132,8 @@ export const issueAndSendPasswordResetOtp = async (user) => {
       'We could not send the reset email. Please try again in a moment.',
     );
   }
+
+  return buildOtpMetadata({ createdAt: sentAt });
 };
 
 export const assertEmailAndPhoneAvailable = async ({ email, phone }) => {
