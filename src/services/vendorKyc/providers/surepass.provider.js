@@ -69,7 +69,7 @@ const surepassFetch = async (path, body) => {
       throw new ApiError(504, 'Verification provider timed out.');
     }
     if (err instanceof ApiError) throw err;
-    console.error('[surepass] Network error:', err?.message);
+    console.error('[surepass] Network error:', err);
     console.error('[surepass] Network error:', err?.message);
     throw new ApiError(503, 'Could not reach verification provider.');
   } finally {
