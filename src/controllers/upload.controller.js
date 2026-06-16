@@ -15,6 +15,7 @@ export const uploadImage = asyncHandler(async (req, res) => {
     mimetype: req.file.mimetype,
     originalname: req.file.originalname,
     purpose: req.body.purpose,
+    name: req.body.name, // optional — stored as Cloudinary publicId for easy lookup
     userId: req.user.id,
   });
 
