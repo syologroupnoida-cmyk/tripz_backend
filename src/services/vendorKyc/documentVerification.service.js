@@ -167,9 +167,14 @@ export const completeAadhaarVerification = async ({ vendorUserId, sessionId }) =
       ...(aadhaarDoc.thirdPartyResponse ?? {}),
       confirmation: result.rawResponse,
       holderName: result.holderName ?? null,
+      metadata: result.metadata ?? null,
     },
   });
   const document = await kycRepo.markAadhaarVerified({ vendorUserId });
 
-  return { document, holderName: result.holderName ?? null };
+  return {
+    document,
+    holderName: result.holderName ?? null,
+    metadata: result.metadata ?? null, // { name, dob, gender, mobile_number }
+  };
 };

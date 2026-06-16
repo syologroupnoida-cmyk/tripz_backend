@@ -84,6 +84,13 @@ const envSchema = z
       .string()
       .url()
       .default('https://console.surepass.app/product/console/api/digilocker'),
+
+    // (Kept for backwards compat; new code calls /digilocker/download-aadhaar
+    // directly in the provider. Override only if your account uses a non-
+    // standard path.)
+    SUREPASS_DIGILOCKER_FETCH_PATH: z
+      .string()
+      .default('/digilocker/download-aadhaar'),
   })
   .refine((data) => data.JWT_ACCESS_SECRET !== data.JWT_REFRESH_SECRET, {
     message: 'JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must be different values',

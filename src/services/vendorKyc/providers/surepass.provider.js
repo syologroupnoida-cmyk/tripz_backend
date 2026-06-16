@@ -33,22 +33,26 @@ export const PROVIDER_NAME = 'SUREPASS';
 //   Low-level HTTP helper — Bearer auth + timeout + error mapping
 // -----------------------------------------------------------------------------
 
-const surepassFetch = async (path, body) => {
+const surepassFetch = async (path, body, method = 'POST') => {
   const url = `${env.SUREPASS_BASE_URL}${path}`;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), env.SUREPASS_TIMEOUT_MS);
 
   try {
-    const res = await fetch(url, {
-      method: 'POST',
+    const fetchOptions = {
+      method,
       headers: {
         Authorization: `Bearer ${env.SUREPASS_TOKEN}`,
-        'Content-Type': 'application/json',
         Accept: 'application/json',
       },
-      body: JSON.stringify(body),
       signal: controller.signal,
-    });
+    };
+    if (method !== 'GET' && body != null) {
+      fetchOptions.headers['Content-Type'] = 'application/json';
+      fetchOptions.body = JSON.stringify(body);
+    }
+
+    const res = await fetch(url, fetchOptions);
 
     const data = await res.json().catch(() => ({}));
     console.log('this is the data', data)
@@ -203,44 +207,49 @@ export const initiateAadhaarVerification = async (number) => {
 };
 
 /**
- * POST /api/v1/digilocker/get-aadhaar
+ * GET /api/v1/digilocker/download-aadhaar/<client_id>
  *
  * Called AFTER the user finishes DigiLocker auth. Surepass returns the verified
  * Aadhaar details against the client_id we got from /digilocker/initialize.
  *
- * Surepass returns client_id with a "digilocker_" prefix in the initialize
- * response (e.g., "digilocker_mdCFNcJgHgcXflyYJtRh"), but the redirect URL
- * back to your app strips the prefix (just "mdCFNcJgHgcXflyYJtRh"). Their
- * fetch endpoint typically expects the UNPREFIXED version, so we strip it
- * before sending. If your account expects the prefixed version, change the
- * `stripPrefix` arg below.
+ * Note: this is a GET request, NOT POST, and the client_id goes in the URL
+ * path (not the body). The prefixed form (`digilocker_xxxxx`) is what Surepass
+ * expects — DON'T strip the prefix.
  *
- * Success response (typical):
+ * Confirmed Surepass response shape:
  *   {
- *     success: true,
  *     data: {
- *       client_id, full_name, dob, gender, address, photo_link, aadhaar_number, ...
+ *       client_id: "digilocker_12345ABCDE",
+ *       digilocker_metadata: {
+ *         name:          "RAHUL KUMAR",
+ *         gender:        "M",
+ *         dob:           "1995-05-15",
+ *         mobile_number: "9876543210"
+ *       }
+ *       // ...also typically: aadhaar_number, address, photo_link, xml_url
  *     }
  *   }
  *
  * Failure case (user hasn't completed DigiLocker yet, or session expired):
  *   { success: false, message: "..." }
  */
-const stripDigilockerPrefix = (id) =>
-  typeof id === 'string' ? id.replace(/^digilocker_/, '') : id;
-
 export const completeAadhaarVerification = async ({ providerClientId }) => {
-  const cleanClientId = stripDigilockerPrefix(providerClientId);
+  const { data } = await surepassFetch(
+    `/digilocker/download-aadhaar/${encodeURIComponent(providerClientId)}`,
+    null,
+    'GET',
+  );
 
-  const { data } = await surepassFetch('/digilocker/get-aadhaar', {
-    client_id: cleanClientId,
-  });
+  const metadata = data?.data?.digilocker_metadata ?? null;
+  const verified = Boolean(data?.data && metadata);
 
-  const verified = Boolean(data?.success && data?.data);
   return {
     verified,
-    reason: verified ? null : data?.message || 'Aadhaar verification not yet complete or session expired.',
-    holderName: data?.data?.full_name ?? null,
+    reason: verified
+      ? null
+      : data?.message || 'Aadhaar verification not yet complete or session expired.',
+    holderName: metadata?.name ?? null,
+    metadata, // pass through dob, gender, mobile_number to the caller
     rawResponse: data,
   };
 };
