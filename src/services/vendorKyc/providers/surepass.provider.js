@@ -208,6 +208,13 @@ export const initiateAadhaarVerification = async (number) => {
  * Called AFTER the user finishes DigiLocker auth. Surepass returns the verified
  * Aadhaar details against the client_id we got from /digilocker/initialize.
  *
+ * Surepass returns client_id with a "digilocker_" prefix in the initialize
+ * response (e.g., "digilocker_mdCFNcJgHgcXflyYJtRh"), but the redirect URL
+ * back to your app strips the prefix (just "mdCFNcJgHgcXflyYJtRh"). Their
+ * fetch endpoint typically expects the UNPREFIXED version, so we strip it
+ * before sending. If your account expects the prefixed version, change the
+ * `stripPrefix` arg below.
+ *
  * Success response (typical):
  *   {
  *     success: true,
@@ -219,9 +226,14 @@ export const initiateAadhaarVerification = async (number) => {
  * Failure case (user hasn't completed DigiLocker yet, or session expired):
  *   { success: false, message: "..." }
  */
+const stripDigilockerPrefix = (id) =>
+  typeof id === 'string' ? id.replace(/^digilocker_/, '') : id;
+
 export const completeAadhaarVerification = async ({ providerClientId }) => {
+  const cleanClientId = stripDigilockerPrefix(providerClientId);
+
   const { data } = await surepassFetch('/digilocker/get-aadhaar', {
-    client_id: providerClientId,
+    client_id: cleanClientId,
   });
 
   const verified = Boolean(data?.success && data?.data);

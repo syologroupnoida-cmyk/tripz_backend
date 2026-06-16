@@ -724,7 +724,7 @@
                   "file": { "type": "string", "format": "binary", "description": "Max 5 MB. Allowed: image/jpeg, image/png, image/webp, application/pdf." },
                   "purpose": {
                     "type": "string",
-                    "enum": ["kyc-pan", "kyc-aadhaar", "company-logo", "avatar", "favicon_icon", "header_logo", "other"]
+                    "enum": ["kyc-pan", "kyc-aadhaar", "kyc-gst", "kyc-cin", "company-logo", "avatar", "favicon_icon", "header_logo", "other"]
                   }
                 }
               }

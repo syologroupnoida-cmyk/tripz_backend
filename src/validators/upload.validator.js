@@ -3,6 +3,8 @@ import { z } from 'zod';
 export const UPLOAD_PURPOSES = [
   'kyc-pan',
   'kyc-aadhaar',
+  'kyc-gst',
+  'kyc-cin',
   'company-logo',
   'avatar',
   'favicon_icon',
