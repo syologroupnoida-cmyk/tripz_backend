@@ -41,6 +41,7 @@ const DOC_SELECT = {
   thirdPartyVerified: true,
   thirdPartyProvider: true,
   thirdPartyVerifiedAt: true,
+  thirdPartyResponse: true,  // needed so /aadhaar/complete can read providerClientId
   createdAt: true,
   updatedAt: true,
 };
