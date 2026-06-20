@@ -1,7 +1,9 @@
+import jwt from 'jsonwebtoken';
 import { hashPassword } from '../../utils/password.js';
 import { hashOtp } from '../../utils/otp.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { env } from '../../config/env.js';
+import { signPasswordResetToken, verifyPasswordResetToken } from '../../utils/jwt.js';
 import * as userRepo from '../../repositories/user.repository.js';
 import * as refreshRepo from '../../repositories/refreshToken.repository.js';
 import * as otpRepo from '../../repositories/emailOtp.repository.js';
@@ -114,50 +116,54 @@ export const verifyPasswordResetOtp = async ({ email, otp }) => {
     throw ApiError.unauthorized('Invalid reset code.');
   }
 
-  // OTP correct — but NOT consumed. The frontend can now route the user to
-  // the password-set screen. resetPassword() will re-validate + consume.
+  // OTP correct — burn it now and issue a short-lived reset token. The
+  // frontend stores the token (NOT the OTP) and uses it on /password/reset.
+  // Token has its own 10-minute clock — a slow user on the password screen
+  // can't be tripped up by the OTP's own expiry.
+  await otpRepo.consumeOtp(active.id);
+  const resetToken = signPasswordResetToken(user.id);
   return {
     otpVerified: true,
-    expiresAt: active.expiresAt,
+    resetToken,
+    tokenExpiresAt: new Date(Date.now() + 10 * 60 * 1000),
   };
 };
 
-export const resetPassword = async ({ email, otp, newPassword }) => {
-  const user = await userRepo.findUserByEmail(email);
+/**
+ * Step 3 of the 3-step reset flow — set the new password.
+ *
+ * Takes the resetToken issued at step 2 (NOT the OTP). The token carries the
+ * user identity (sub) and a purpose claim. We verify the signature + expiry,
+ * extract the user, and update the password.
+ */
+export const resetPassword = async ({ resetToken, newPassword }) => {
+  let payload;
+  try {
+    payload = verifyPasswordResetToken(resetToken);
+  } catch (error) {
+    if (error instanceof jwt.TokenExpiredError) {
+      throw new ApiError(401, 'Reset session expired. Please request a new code.', {
+        code: 'RESET_TOKEN_EXPIRED',
+      });
+    }
+    throw new ApiError(401, 'Invalid reset session. Please request a new code.', {
+      code: 'RESET_TOKEN_INVALID',
+    });
+  }
+
+  const user = await userRepo.findUserById(payload.sub);
   if (!user) {
-    throw ApiError.unauthorized('Invalid email or reset code.');
+    throw ApiError.unauthorized('Invalid reset session.');
   }
   // Vendors awaiting admin review may also set a new password — they still
-  // can't log in until admin approves, but they can prepare for re-login.
+  // can't log in until admin approves.
   if (!user.isActive && !(await isVendorAwaitingReview(user))) {
     throw ApiError.forbidden('This account has been deactivated.');
   }
 
-  const active = await otpRepo.findLatestActiveOtp({
-    userId: user.id,
-    purpose: 'PASSWORD_RESET',
-  });
-
-  if (!active) {
-    throw ApiError.unauthorized('Reset code has expired. Please request a new one.');
-  }
-
-  if (active.attempts >= env.OTP_MAX_ATTEMPTS) {
-    await otpRepo.consumeOtp(active.id);
-    throw ApiError.unauthorized(
-      'Too many incorrect attempts. Please request a new reset code.',
-    );
-  }
-
-  if (hashOtp(otp) !== active.codeHash) {
-    await otpRepo.incrementOtpAttempts(active.id);
-    throw ApiError.unauthorized('Invalid reset code.');
-  }
-
-  // OTP verified — finalize the reset.
+  // Update password.
   const newPasswordHash = await hashPassword(newPassword);
   await userRepo.updateUserPassword(user.id, newPasswordHash);
-  await otpRepo.consumeOtp(active.id);
 
   // Kick out every existing session — if the attacker still holds a refresh
   // token, they're now locked out.
@@ -165,8 +171,7 @@ export const resetPassword = async ({ email, otp, newPassword }) => {
     console.error('[auth] Failed to revoke refresh tokens after password reset:', err?.message);
   });
 
-  // Fire-and-forget confirmation email. If SMTP fails the reset still succeeds —
-  // the user already proved control of the inbox via the OTP.
+  // Fire-and-forget confirmation email.
   sendPasswordChangedNotice({
     to: user.email,
     firstName: user.firstName,

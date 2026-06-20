@@ -101,16 +101,14 @@ export const verifyResetOtpSchema = z
   })
   .strict();
 
-// Step 3 of password reset — re-validate OTP AND set new password.
+// Step 3 of password reset — exchange the reset token (from step 2) for a
+// new password. The token carries the user identity, so we no longer need
+// `email` or `otp` in this request.
 export const resetPasswordSchema = z
   .object({
-    email: emailField,
-    otp: z
-      .string({ required_error: 'OTP is required' })
-      .trim()
-      .regex(/^\d+$/, 'OTP must contain only digits')
-      .min(4, 'OTP is too short')
-      .max(10, 'OTP is too long'),
+    resetToken: z
+      .string({ required_error: 'resetToken is required' })
+      .min(20, 'resetToken is invalid'),
     newPassword: passwordSchema,
   })
   .strict();

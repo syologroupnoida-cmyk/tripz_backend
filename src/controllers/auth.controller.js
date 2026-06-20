@@ -147,8 +147,8 @@ export const verifyResetOtp = asyncHandler(async (req, res) => {
 });
 
 export const resetPassword = asyncHandler(async (req, res) => {
-  const { email, otp, newPassword } = req.body;
-  await authService.resetPassword({ email, otp, newPassword });
+  const { resetToken, newPassword } = req.body;
+  await authService.resetPassword({ resetToken, newPassword });
 
   return sendSuccess(res, {
     statusCode: 200,

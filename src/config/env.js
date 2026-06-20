@@ -23,6 +23,13 @@ const envSchema = z
       .string({ required_error: 'JWT_REFRESH_SECRET is required' })
       .min(32, 'JWT_REFRESH_SECRET must be at least 32 characters'),
 
+    // Used to sign short-lived (~10 min) password-reset tokens issued by
+    // /auth/password/verify-otp. Separate from access/refresh secrets so a
+    // leaked reset token can never be used as an access token.
+    JWT_RESET_SECRET: z
+      .string({ required_error: 'JWT_RESET_SECRET is required' })
+      .min(32, 'JWT_RESET_SECRET must be at least 32 characters'),
+
     JWT_ACCESS_EXPIRES_IN: z.string().default('15m'),
     JWT_REFRESH_EXPIRES_IN: z.string().default('7d'),
 
@@ -95,6 +102,14 @@ const envSchema = z
   .refine((data) => data.JWT_ACCESS_SECRET !== data.JWT_REFRESH_SECRET, {
     message: 'JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must be different values',
     path: ['JWT_REFRESH_SECRET'],
+  })
+  .refine((data) => data.JWT_RESET_SECRET !== data.JWT_ACCESS_SECRET, {
+    message: 'JWT_RESET_SECRET must differ from JWT_ACCESS_SECRET',
+    path: ['JWT_RESET_SECRET'],
+  })
+  .refine((data) => data.JWT_RESET_SECRET !== data.JWT_REFRESH_SECRET, {
+    message: 'JWT_RESET_SECRET must differ from JWT_REFRESH_SECRET',
+    path: ['JWT_RESET_SECRET'],
   });
 
 const parsed = envSchema.safeParse(process.env);
