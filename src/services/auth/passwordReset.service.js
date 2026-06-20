@@ -5,20 +5,48 @@ import { env } from '../../config/env.js';
 import * as userRepo from '../../repositories/user.repository.js';
 import * as refreshRepo from '../../repositories/refreshToken.repository.js';
 import * as otpRepo from '../../repositories/emailOtp.repository.js';
+import * as kycRepo from '../../repositories/vendorKyc.repository.js';
 import { sendPasswordChangedNotice } from '../mail/index.js';
 import { issueAndSendPasswordResetOtp, buildOtpMetadata } from './_helpers.js';
+
+/**
+ * isActive=false has two distinct meanings:
+ *   1. Vendor just submitted KYC and is waiting for admin review.
+ *      → harmless to let them reset their password; admin still gates login.
+ *   2. Account permanently disabled / banned by admin.
+ *      → block everything.
+ *
+ * This helper returns `true` only for case (1). Used to selectively allow
+ * password reset for vendors-under-review while keeping deactivated accounts
+ * fully locked.
+ */
+const isVendorAwaitingReview = async (user) => {
+  if (!user || user.role !== 'VENDOR') return false;
+  const profile = await kycRepo.findVendorProfile(user.id);
+  return profile?.kycStatus === 'SUBMITTED';
+};
 
 export const requestPasswordReset = async ({ email }) => {
   const user = await userRepo.findUserByEmail(email);
 
   // Generic response — never reveal whether the email exists, the user has a
-  // password (vs. Google-only), or the account is active. OTP metadata is
-  // included even on the generic branch so the response shape is identical.
+  // password (vs. Google-only), or the account is permanently deactivated.
+  // OTP metadata is included even on the generic branch so the response
+  // shape is identical (anti-enumeration).
   const messageText =
     'If an account exists for that email, a password reset code has been sent.';
 
-  if (!user || !user.isActive || !user.password) {
+  if (!user || !user.password) {
     return { message: messageText, otp: buildOtpMetadata() };
+  }
+
+  // isActive=false: allow ONLY if the vendor is in admin-review limbo.
+  // Permanently deactivated accounts still get the silent generic response.
+  if (!user.isActive) {
+    const underReview = await isVendorAwaitingReview(user);
+    if (!underReview) {
+      return { message: messageText, otp: buildOtpMetadata() };
+    }
   }
 
   const cooldownMs = env.OTP_RESEND_COOLDOWN_SECONDS * 1000;
@@ -59,7 +87,9 @@ export const verifyPasswordResetOtp = async ({ email, otp }) => {
   if (!user) {
     throw ApiError.unauthorized('Invalid email or reset code.');
   }
-  if (!user.isActive) {
+  // Allow vendors awaiting admin review to verify the OTP. Truly deactivated
+  // accounts still get blocked.
+  if (!user.isActive && !(await isVendorAwaitingReview(user))) {
     throw ApiError.forbidden('This account has been deactivated.');
   }
 
@@ -97,7 +127,9 @@ export const resetPassword = async ({ email, otp, newPassword }) => {
   if (!user) {
     throw ApiError.unauthorized('Invalid email or reset code.');
   }
-  if (!user.isActive) {
+  // Vendors awaiting admin review may also set a new password — they still
+  // can't log in until admin approves, but they can prepare for re-login.
+  if (!user.isActive && !(await isVendorAwaitingReview(user))) {
     throw ApiError.forbidden('This account has been deactivated.');
   }
 
