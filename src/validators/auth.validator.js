@@ -88,6 +88,20 @@ export const forgotPasswordSchema = z
   })
   .strict();
 
+// Step 2 of password reset — verify OTP only (no new password yet).
+export const verifyResetOtpSchema = z
+  .object({
+    email: emailField,
+    otp: z
+      .string({ required_error: 'OTP is required' })
+      .trim()
+      .regex(/^\d+$/, 'OTP must contain only digits')
+      .min(4, 'OTP is too short')
+      .max(10, 'OTP is too long'),
+  })
+  .strict();
+
+// Step 3 of password reset — re-validate OTP AND set new password.
 export const resetPasswordSchema = z
   .object({
     email: emailField,

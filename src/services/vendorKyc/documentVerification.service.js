@@ -23,6 +23,7 @@ import * as kycRepo from '../../repositories/vendorKyc.repository.js';
 import * as otpRepo from '../../repositories/emailOtp.repository.js';
 import { otpExpiry } from '../../utils/otp.js';
 import { provider, PROVIDER_NAME } from './providers/index.js';
+import { GSTIN_REGEX, CIN_REGEX } from './providers/_formats.js';
 
 // Re-export the mode logger so server.js can find it where it always has.
 export { logKycVerificationMode } from './providers/index.js';
@@ -32,6 +33,25 @@ export { logKycVerificationMode } from './providers/index.js';
 // -----------------------------------------------------------------------------
 
 export const verifyPan = async ({ vendorUserId, number }) => {
+  // Idempotency: if this PAN was already verified for this vendor, return
+  // the cached result. Each Surepass call costs credits — re-verifying the
+  // same successful number is a waste. A DIFFERENT number (vendor edited
+  // their PAN) always triggers a fresh call.
+  const existing = await kycRepo.findKycDocument({ vendorUserId, type: 'PAN' });
+  if (
+    existing?.thirdPartyVerified &&
+    existing.documentNumber === number
+  ) {
+    return {
+      document: existing,
+      holderName:
+        existing.thirdPartyResponse?.data?.full_name ??
+        existing.thirdPartyResponse?.holderName ??
+        null,
+      alreadyVerified: true,
+    };
+  }
+
   const result = await provider.verifyPan(number);
   if (!result.verified) {
     throw new ApiError(422, result.reason || 'PAN verification failed.', {
@@ -48,7 +68,71 @@ export const verifyPan = async ({ vendorUserId, number }) => {
     thirdPartyVerifiedAt: new Date(),
     thirdPartyResponse: result.rawResponse,
   });
-  return { document, holderName: result.holderName };
+  return { document, holderName: result.holderName, alreadyVerified: false };
+};
+
+// -----------------------------------------------------------------------------
+//   GSTIN / CIN — format-only verification (no third-party call, no credits)
+//
+// We do not hit Surepass for these. The vendor types the number, we validate
+// the format, mark `thirdPartyVerified=true` so the doc passes the submission
+// gate, but use the provider name "FORMAT_ONLY" so admins know to manually
+// verify the uploaded certificate during KYC review.
+// -----------------------------------------------------------------------------
+
+const FORMAT_ONLY_PROVIDER = 'FORMAT_ONLY';
+
+export const verifyGstin = async ({ vendorUserId, number }) => {
+  if (!GSTIN_REGEX.test(number)) {
+    throw new ApiError(422, 'GSTIN format is invalid.', {
+      code: 'DOCUMENT_VERIFICATION_FAILED',
+      type: 'GSTIN',
+    });
+  }
+  // Idempotency: skip the DB write if already verified with the same number.
+  const existing = await kycRepo.findKycDocument({ vendorUserId, type: 'GSTIN' });
+  if (existing?.thirdPartyVerified && existing.documentNumber === number) {
+    return { document: existing, alreadyVerified: true };
+  }
+  const document = await kycRepo.upsertKycDocument({
+    vendorUserId,
+    type: 'GSTIN',
+    documentNumber: number,
+    thirdPartyVerified: true,
+    thirdPartyProvider: FORMAT_ONLY_PROVIDER,
+    thirdPartyVerifiedAt: new Date(),
+    thirdPartyResponse: {
+      method: 'format-check',
+      note: 'Format validated only; admin must manually verify the uploaded certificate.',
+    },
+  });
+  return { document, alreadyVerified: false };
+};
+
+export const verifyCin = async ({ vendorUserId, number }) => {
+  if (!CIN_REGEX.test(number)) {
+    throw new ApiError(422, 'CIN format is invalid.', {
+      code: 'DOCUMENT_VERIFICATION_FAILED',
+      type: 'CIN',
+    });
+  }
+  const existing = await kycRepo.findKycDocument({ vendorUserId, type: 'CIN' });
+  if (existing?.thirdPartyVerified && existing.documentNumber === number) {
+    return { document: existing, alreadyVerified: true };
+  }
+  const document = await kycRepo.upsertKycDocument({
+    vendorUserId,
+    type: 'CIN',
+    documentNumber: number,
+    thirdPartyVerified: true,
+    thirdPartyProvider: FORMAT_ONLY_PROVIDER,
+    thirdPartyVerifiedAt: new Date(),
+    thirdPartyResponse: {
+      method: 'format-check',
+      note: 'Format validated only; admin must manually verify the uploaded certificate.',
+    },
+  });
+  return { document, alreadyVerified: false };
 };
 
 // -----------------------------------------------------------------------------
@@ -67,6 +151,27 @@ export const verifyPan = async ({ vendorUserId, number }) => {
 // -----------------------------------------------------------------------------
 
 export const initiateAadhaarVerification = async ({ vendorUserId, number }) => {
+  // Idempotency: if this Aadhaar was already verified for this vendor, skip
+  // the DigiLocker session entirely. No Surepass credits used. The frontend
+  // sees `alreadyVerified: true` and can skip showing the DigiLocker UI.
+  // A DIFFERENT number (vendor changed Aadhaar) starts a fresh session.
+  const existing = await kycRepo.findKycDocument({ vendorUserId, type: 'AADHAR' });
+  if (
+    existing?.thirdPartyVerified &&
+    existing.documentNumber === number
+  ) {
+    return {
+      sessionId: null,
+      expiresAt: null,
+      redirectUrl: null,
+      alreadyVerified: true,
+      holderName:
+        existing.thirdPartyResponse?.metadata?.name ??
+        existing.thirdPartyResponse?.holderName ??
+        null,
+    };
+  }
+
   const result = await provider.initiateAadhaarVerification(number);
   if (!result.sent) {
     throw new ApiError(422, result.reason || 'Could not initiate Aadhaar verification.', {
@@ -112,6 +217,7 @@ export const initiateAadhaarVerification = async ({ vendorUserId, number }) => {
     // for legacy accounts still using Surepass's own OTP flow — in that
     // case the user just types the OTP into your form as before.
     redirectUrl: result.redirectUrl ?? null,
+    alreadyVerified: false,
   };
 };
 

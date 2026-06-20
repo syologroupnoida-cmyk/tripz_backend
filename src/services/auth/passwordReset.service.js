@@ -43,6 +43,55 @@ export const requestPasswordReset = async ({ email }) => {
   return { message: messageText, otp };
 };
 
+/**
+ * Step 2 of the 3-step reset flow — verify-only.
+ *
+ * Validates the OTP WITHOUT consuming it. Returns success if the OTP matches
+ * so the frontend can transition the user to the "set new password" screen
+ * with confidence. The OTP is still alive — actual consumption happens in
+ * resetPassword() when the user submits the new password.
+ *
+ * Failed attempts still increment the attempts counter (rate limiting), and
+ * an exhausted OTP is burned to force a re-request.
+ */
+export const verifyPasswordResetOtp = async ({ email, otp }) => {
+  const user = await userRepo.findUserByEmail(email);
+  if (!user) {
+    throw ApiError.unauthorized('Invalid email or reset code.');
+  }
+  if (!user.isActive) {
+    throw ApiError.forbidden('This account has been deactivated.');
+  }
+
+  const active = await otpRepo.findLatestActiveOtp({
+    userId: user.id,
+    purpose: 'PASSWORD_RESET',
+  });
+
+  if (!active) {
+    throw ApiError.unauthorized('Reset code has expired. Please request a new one.');
+  }
+
+  if (active.attempts >= env.OTP_MAX_ATTEMPTS) {
+    await otpRepo.consumeOtp(active.id);
+    throw ApiError.unauthorized(
+      'Too many incorrect attempts. Please request a new reset code.',
+    );
+  }
+
+  if (hashOtp(otp) !== active.codeHash) {
+    await otpRepo.incrementOtpAttempts(active.id);
+    throw ApiError.unauthorized('Invalid reset code.');
+  }
+
+  // OTP correct — but NOT consumed. The frontend can now route the user to
+  // the password-set screen. resetPassword() will re-validate + consume.
+  return {
+    otpVerified: true,
+    expiresAt: active.expiresAt,
+  };
+};
+
 export const resetPassword = async ({ email, otp, newPassword }) => {
   const user = await userRepo.findUserByEmail(email);
   if (!user) {

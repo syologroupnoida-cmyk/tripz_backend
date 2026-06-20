@@ -10,5 +10,9 @@ export { registerCustomer, registerAgent } from './registration.service.js';
 export { loginUser } from './login.service.js';
 export { loginWithGoogle } from './googleLogin.service.js';
 export { verifyEmailWithOtp, resendVerificationOtp } from './emailVerification.service.js';
-export { requestPasswordReset, resetPassword } from './passwordReset.service.js';
+export {
+  requestPasswordReset,
+  verifyPasswordResetOtp,
+  resetPassword,
+} from './passwordReset.service.js';
 export { refreshTokens, logoutUser } from './tokens.service.js';

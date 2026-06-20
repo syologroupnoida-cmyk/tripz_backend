@@ -56,6 +56,18 @@ export const findVendorProfile = async (userId) => {
   });
 };
 
+/**
+ * Fetch a single KYC document row by (vendorUserId, type). Used by the verify
+ * services to check whether a document has already been verified before making
+ * an expensive third-party call.
+ */
+export const findKycDocument = async ({ vendorUserId, type }) => {
+  return prisma.vendorKycDocument.findUnique({
+    where: { vendorUserId_type: { vendorUserId, type } },
+    select: DOC_SELECT,
+  });
+};
+
 // ---- Per-document verification writes (used by /vendor/kyc/verify/*) ----
 
 /**

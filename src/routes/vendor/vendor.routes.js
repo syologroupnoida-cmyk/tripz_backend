@@ -5,6 +5,8 @@ import * as kycController from '../../controllers/vendorKyc.controller.js';
 import {
   submitKycSchema,
   verifyPanSchema,
+  verifyGstinSchema,
+  verifyCinSchema,
   aadhaarInitiateSchema,
   aadhaarCompleteSchema,
 } from '../../validators/vendorKyc.validator.js';
@@ -27,6 +29,18 @@ router.post(
   '/kyc/verify/pan',
   validateRequest(verifyPanSchema),
   kycController.verifyPan,
+);
+// GSTIN + CIN: format-only validation (no third-party API call, no credits used).
+// Admin manually verifies the uploaded certificate during KYC review.
+router.post(
+  '/kyc/verify/gstin',
+  validateRequest(verifyGstinSchema),
+  kycController.verifyGstin,
+);
+router.post(
+  '/kyc/verify/cin',
+  validateRequest(verifyCinSchema),
+  kycController.verifyCin,
 );
 
 // ---- Aadhaar — DigiLocker-backed verification ----

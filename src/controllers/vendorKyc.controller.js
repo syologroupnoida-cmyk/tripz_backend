@@ -34,7 +34,37 @@ export const verifyPan = asyncHandler(async (req, res) => {
   });
   return sendSuccess(res, {
     statusCode: 200,
-    message: 'PAN verified successfully.',
+    message: data.alreadyVerified
+      ? 'PAN is already verified.'
+      : 'PAN verified successfully.',
+    data,
+  });
+});
+
+export const verifyGstin = asyncHandler(async (req, res) => {
+  const data = await kycService.verifyGstin({
+    vendorUserId: req.user.id,
+    number: req.body.number,
+  });
+  return sendSuccess(res, {
+    statusCode: 200,
+    message: data.alreadyVerified
+      ? 'GSTIN is already saved.'
+      : 'GSTIN saved. Admin will verify the uploaded certificate.',
+    data,
+  });
+});
+
+export const verifyCin = asyncHandler(async (req, res) => {
+  const data = await kycService.verifyCin({
+    vendorUserId: req.user.id,
+    number: req.body.number,
+  });
+  return sendSuccess(res, {
+    statusCode: 200,
+    message: data.alreadyVerified
+      ? 'CIN is already saved.'
+      : 'CIN saved. Admin will verify the uploaded certificate.',
     data,
   });
 });
@@ -46,8 +76,9 @@ export const initiateAadhaarVerification = asyncHandler(async (req, res) => {
   });
   return sendSuccess(res, {
     statusCode: 200,
-    message:
-      'DigiLocker verification initiated. Open the redirect URL to complete it.',
+    message: data.alreadyVerified
+      ? 'Aadhaar is already verified.'
+      : 'DigiLocker verification initiated. Open the redirect URL to complete it.',
     data,
   });
 });

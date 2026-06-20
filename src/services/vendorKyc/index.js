@@ -7,6 +7,8 @@ import {
 
 export {
   verifyPan,
+  verifyGstin,
+  verifyCin,
   initiateAadhaarVerification,
   completeAadhaarVerification,
 } from './documentVerification.service.js';
@@ -15,7 +17,54 @@ const buildVendorKycView = (profile) => ({
   kycStatus: profile.kycStatus,
   kyc: profile.kyc ?? null,
   documents: profile.documents ?? [],
+  approval: buildApprovalSummary(profile.kycStatus),
 });
+
+/**
+ * Frontend-friendly summary of where the vendor stands in the approval
+ * pipeline. Derived from `kycStatus` — single source of truth in the DB.
+ */
+const buildApprovalSummary = (kycStatus) => {
+  switch (kycStatus) {
+    case 'PENDING':
+      return {
+        status: 'KYC_NOT_SUBMITTED',
+        adminApproved: false,
+        canLogin: true,
+        message: 'Please complete and submit your KYC to continue.',
+      };
+    case 'SUBMITTED':
+      return {
+        status: 'PENDING_ADMIN_REVIEW',
+        adminApproved: false,
+        canLogin: false,
+        message:
+          'Your application is under review. We will email you once an admin approves your account.',
+      };
+    case 'APPROVED':
+      return {
+        status: 'APPROVED',
+        adminApproved: true,
+        canLogin: true,
+        message: 'Your KYC is approved. You now have full marketplace access.',
+      };
+    case 'REJECTED':
+      return {
+        status: 'REJECTED',
+        adminApproved: false,
+        canLogin: true,
+        message:
+          'Your KYC was rejected. Please review the reason, fix the issues, and resubmit.',
+      };
+    default:
+      return {
+        status: 'UNKNOWN',
+        adminApproved: false,
+        canLogin: false,
+        message: null,
+      };
+  }
+};
 
 /**
  * Reshape the wizard payload to ONLY the company-level fields persisted on
@@ -99,7 +148,11 @@ export const submitMyKyc = async ({ vendorUserId, payload }) => {
     kyc: kycFields,
   });
 
-  return { kycStatus: updatedProfile.kycStatus, kyc };
+  return {
+    kycStatus: updatedProfile.kycStatus,
+    kyc,
+    approval: buildApprovalSummary(updatedProfile.kycStatus),
+  };
 };
 
 export const listKycForAdmin = async (query) => {
@@ -130,7 +183,11 @@ export const approveVendorKyc = async ({ vendorUserId, adminId }) => {
     console.error('[kyc] Failed to send vendor-approved notice:', err?.message),
   );
 
-  return { kycStatus: updatedProfile.kycStatus, kyc };
+  return {
+    kycStatus: updatedProfile.kycStatus,
+    kyc,
+    approval: buildApprovalSummary(updatedProfile.kycStatus),
+  };
 };
 
 export const rejectVendorKyc = async ({ vendorUserId, adminId, reason }) => {
@@ -158,5 +215,9 @@ export const rejectVendorKyc = async ({ vendorUserId, adminId, reason }) => {
     console.error('[kyc] Failed to send vendor-rejected notice:', err?.message),
   );
 
-  return { kycStatus: updatedProfile.kycStatus, kyc };
+  return {
+    kycStatus: updatedProfile.kycStatus,
+    kyc,
+    approval: buildApprovalSummary(updatedProfile.kycStatus),
+  };
 };

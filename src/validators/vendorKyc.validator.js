@@ -149,6 +149,14 @@ export const verifyPanSchema = z
   .object({ number: docNumberField('PAN', 10) })
   .strict();
 
+export const verifyGstinSchema = z
+  .object({ number: docNumberField('GSTIN', 15) })
+  .strict();
+
+export const verifyCinSchema = z
+  .object({ number: docNumberField('CIN', 21) })
+  .strict();
+
 export const aadhaarInitiateSchema = z
   .object({
     number: z
