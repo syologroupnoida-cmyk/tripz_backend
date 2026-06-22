@@ -18,18 +18,45 @@ const stringBool = z
 
 // ----------------------------------------------------------------------------
 //   GET /admin/vendors  query params
+//
+// Accepts BOTH pagination styles so frontend devs can use whichever they
+// prefer. Both produce the same DB query:
+//   - Offset-based:  ?take=10&skip=0     (Prisma-native, matches other endpoints)
+//   - Page-based:    ?page=0&size=10     (Spring Boot / Spring Data style, 0-indexed)
+//
+// Internally we normalize to { take, skip } via a transform — repository and
+// service code only ever see take/skip.
 // ----------------------------------------------------------------------------
 export const listVendorsQuerySchema = z
   .object({
     kycStatus: z.enum(['PENDING', 'SUBMITTED', 'APPROVED', 'REJECTED']).optional(),
     isActive: stringBool,
     search: z.string().trim().max(100).optional(),
-    take: z.coerce.number().int().min(1).max(100).optional().default(20),
-    skip: z.coerce.number().int().min(0).optional().default(0),
+    // Offset-based (Prisma-native)
+    take: z.coerce.number().int().min(1).max(100).optional(),
+    skip: z.coerce.number().int().min(0).optional(),
+    // Page-based (frontend-friendly alternative). 0-indexed: page=0 is first page.
+    page: z.coerce.number().int().min(0).optional(),
+    size: z.coerce.number().int().min(1).max(100).optional(),
     sortBy: z.enum(['createdAt', 'updatedAt', 'name']).optional().default('createdAt'),
     order: z.enum(['asc', 'desc']).optional().default('desc'),
   })
-  .strict();
+  .strict()
+  .transform((q) => {
+    // Normalize: page+size wins if both are provided; otherwise fall back to
+    // take/skip, otherwise defaults (20 per page, first page).
+    const take = q.size ?? q.take ?? 20;
+    const skip = q.page !== undefined ? q.page * take : (q.skip ?? 0);
+    return {
+      kycStatus: q.kycStatus,
+      isActive: q.isActive,
+      search: q.search,
+      sortBy: q.sortBy,
+      order: q.order,
+      take,
+      skip,
+    };
+  });
 
 // ----------------------------------------------------------------------------
 //   POST /super-admin/vendors/:userId/activate

@@ -1,5 +1,6 @@
 import { hashPassword } from '../../utils/password.js';
 import * as userRepo from '../../repositories/user.repository.js';
+import * as leadRepo from '../../repositories/lead.repository.js';
 import {
   sanitizeUser,
   assertEmailAndPhoneAvailable,
@@ -18,11 +19,19 @@ export const registerCustomer = async ({ firstName, lastName, email, phone, pass
     password: passwordHash,
   });
 
+  // Auto-link any anonymous leads this customer submitted with the same email
+  // BEFORE they had an account. Fast indexed lookup; counts even if zero.
+  const claimedLeadsCount = await leadRepo.claimLeadsForEmail({
+    userId: user.id,
+    email,
+  });
+
   const otp = await issueAndSendVerificationOtp(user);
 
   return {
     user: sanitizeUser(user),
     emailVerificationRequired: true,
+    claimedLeadsCount,
     otp,
   };
 };

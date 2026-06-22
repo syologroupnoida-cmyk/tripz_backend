@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Tripz Backend API",
-    "version": "1.2.0",
-    "description": "Multi-panel travel-marketplace backend exposing Super Admin, Admin, Vendor, Client, and Marketplace surfaces.\n\n**Response envelope** — every endpoint returns:\n- Success: `{ success: true, message: string, data: object | null }`\n- Error: `{ success: false, message: string, errors: object | array | null }`\n\n**Auth** — all authenticated endpoints expect a JWT access token via `Authorization: Bearer <token>`. Refresh tokens are delivered as an httpOnly cookie (web) and also in the JSON body (mobile / API clients).\n\n**Account states** — vendors who submit KYC are immediately deactivated (`isActive=false`) and only re-activated when an admin approves or rejects their KYC. Login & refresh return `code: ACCOUNT_UNDER_REVIEW` while pending.\n\n**Role values (public API contract)** — `CLIENT` (customer) and `VENDOR` (agent). These match the internal Prisma enum directly."
+    "version": "1.3.0",
+    "description": "Multi-panel travel-marketplace backend exposing Super Admin, Admin, Vendor, Client, and Marketplace surfaces.\n\n**Response envelope** — every endpoint returns:\n- Success: `{ success: true, message: string, data: object | null }`\n- Error: `{ success: false, message: string, errors: object | array | null }`\n\n**Auth** — all authenticated endpoints expect a JWT access token via `Authorization: Bearer <token>`. Refresh tokens are delivered as an httpOnly cookie (web) and also in the JSON body (mobile / API clients).\n\n**Account states** — vendors who submit KYC are immediately deactivated (`isActive=false`) and only re-activated when an admin approves/rejects the KYC. Login & refresh return `code: ACCOUNT_UNDER_REVIEW` while pending.\n\n**Role values** — `CLIENT` (customer), `VENDOR` (agent), `ADMIN`, `SUPER_ADMIN`. The public signup endpoints accept only `CLIENT` and `VENDOR`.\n\n**Password reset** uses a 3-step token-based wizard: forgot → verify-otp (returns short-lived JWT) → reset (uses JWT, no OTP retype)."
   },
   "servers": [
     { "url": "http://localhost:4000", "description": "Local development" },
@@ -12,15 +12,18 @@
   "tags": [
     { "name": "Root", "description": "Service identification" },
     { "name": "Health", "description": "Liveness probe" },
-    { "name": "Auth", "description": "Registration, login, token rotation, profile, OTP-based email verification & password reset" },
+    { "name": "Auth", "description": "Registration, login, token rotation, profile, OTP verification, token-based password reset" },
     { "name": "Uploads", "description": "Generic file uploads to Cloudinary (images + PDFs)" },
     { "name": "Leads (Public)", "description": "Customer-facing lead submission (anonymous form)" },
     { "name": "Super Admin", "description": "Endpoints restricted to SUPER_ADMIN role" },
+    { "name": "Super Admin - Vendors", "description": "SUPER_ADMIN-only vendor write operations (activate / deactivate / credit grant / revoke)" },
     { "name": "Admin", "description": "Endpoints available to SUPER_ADMIN and ADMIN roles" },
-    { "name": "Admin - Vendor KYC", "description": "KYC review queue + approval / rejection" },
+    { "name": "Admin - Vendors", "description": "Vendor list + detail browsing (ADMIN+SUPER_ADMIN)" },
+    { "name": "Admin - Vendor KYC", "description": "KYC review queue + approval / rejection (ADMIN+SUPER_ADMIN)" },
     { "name": "Vendor", "description": "Endpoints restricted to VENDOR role" },
     { "name": "Vendor KYC", "description": "Vendor-side KYC submission and per-document verification" },
     { "name": "Client", "description": "Endpoints restricted to CLIENT role" },
+    { "name": "Client - Leads", "description": "Customer's own inquiries — auto-linked from anonymous submissions when they sign up with the same email" },
     { "name": "Marketplace", "description": "Vendor-facing leads marketplace (browse + unlock via credit wallet)" }
   ],
   "security": [],
@@ -32,11 +35,7 @@
         "responses": {
           "200": {
             "description": "Service info",
-            "content": {
-              "application/json": {
-                "example": { "success": true, "message": "Tripz API", "version": "1.0.0" }
-              }
-            }
+            "content": { "application/json": { "example": { "success": true, "message": "Tripz API", "version": "1.0.0" } } }
           }
         }
       }
@@ -65,7 +64,7 @@
       "post": {
         "tags": ["Auth"],
         "summary": "Register a new account (CLIENT or VENDOR)",
-        "description": "Single endpoint for self-signup. `role: \"CLIENT\"` for customers, `role: \"VENDOR\"` for travel agents. `ADMIN` and `SUPER_ADMIN` cannot self-register.\n\nAccount is created with `emailVerifiedAt = null`. An OTP is emailed. **No tokens are issued** — call `/auth/verify-email` then `/auth/login`. Response includes an `otp` metadata block so the frontend can render countdown + resend cooldown.",
+        "description": "Self-signup. `role: \"CLIENT\"` for customers, `role: \"VENDOR\"` for travel agents. ADMIN and SUPER_ADMIN cannot self-register. OTP is emailed for verification — no tokens issued here.",
         "requestBody": {
           "required": true,
           "content": {
@@ -73,26 +72,10 @@
               "schema": { "$ref": "#/components/schemas/RegisterRequest" },
               "examples": {
                 "Client": {
-                  "summary": "Customer signup",
-                  "value": {
-                    "firstName": "Mohit",
-                    "lastName": "Kumar",
-                    "email": "mohit@example.com",
-                    "phone": "9878987678",
-                    "password": "Lambha!2A",
-                    "role": "CLIENT"
-                  }
+                  "value": { "firstName": "Mohit", "lastName": "Kumar", "email": "mohit@example.com", "phone": "9878987678", "password": "Lambha!2A", "role": "CLIENT" }
                 },
                 "Vendor": {
-                  "summary": "Vendor (agent) signup",
-                  "value": {
-                    "firstName": "Rohit",
-                    "lastName": "Kumar",
-                    "email": "rohit@example.com",
-                    "phone": "9878987679",
-                    "password": "Lambha@12A",
-                    "role": "VENDOR"
-                  }
+                  "value": { "firstName": "Rohit", "lastName": "Kumar", "email": "rohit@example.com", "phone": "9878987679", "password": "Lambha@12A", "role": "VENDOR" }
                 }
               }
             }
@@ -107,41 +90,17 @@
                   "success": true,
                   "message": "Account registered. Please verify your email to continue.",
                   "data": {
-                    "user": {
-                      "id": "ckxyz123abc",
-                      "firstName": "Mohit",
-                      "lastName": "Kumar",
-                      "email": "mohit@example.com",
-                      "phone": "9878987678",
-                      "role": "CLIENT",
-                      "isActive": true,
-                      "emailVerifiedAt": null,
-                      "avatarUrl": null,
-                      "authProvider": "LOCAL",
-                      "createdAt": "2026-06-12T10:30:00Z"
-                    },
+                    "user": { "id": "ckxyz123abc", "email": "mohit@example.com", "role": "CLIENT", "isActive": true, "emailVerifiedAt": null, "authProvider": "LOCAL" },
                     "emailVerificationRequired": true,
-                    "otp": {
-                      "ttlSeconds": 600,
-                      "resendCooldownSeconds": 60,
-                      "maxAttempts": 5,
-                      "sentAt": "2026-06-12T10:30:00Z",
-                      "expiresAt": "2026-06-12T10:40:00Z"
-                    }
+                    "claimedLeadsCount": 1,
+                    "otp": { "ttlSeconds": 600, "resendCooldownSeconds": 60, "maxAttempts": 5, "sentAt": "...", "expiresAt": "..." }
                   }
                 }
               }
             }
           },
           "400": { "$ref": "#/components/responses/ValidationError" },
-          "409": {
-            "description": "Email or phone already registered",
-            "content": {
-              "application/json": {
-                "example": { "success": false, "message": "An account with this email already exists.", "errors": null }
-              }
-            }
-          },
+          "409": { "description": "Email or phone already registered" },
           "500": { "description": "SMTP send failure" }
         }
       }
@@ -150,7 +109,7 @@
       "post": {
         "tags": ["Auth"],
         "summary": "Email + password login",
-        "description": "Returns access (15 min) and refresh (7 days) tokens. Refresh token is set as an httpOnly cookie AND included in the JSON body.\n\nFailure codes: `EMAIL_NOT_VERIFIED` (also re-sends OTP), `ACCOUNT_UNDER_REVIEW` (vendor KYC pending admin), `ACCOUNT_DEACTIVATED` (admin disabled).",
+        "description": "Returns access (15 min) + refresh (7 days) tokens. Failure codes: `EMAIL_NOT_VERIFIED` (also re-sends OTP), `ACCOUNT_UNDER_REVIEW` (vendor KYC pending), `ACCOUNT_DEACTIVATED`.",
         "requestBody": {
           "required": true,
           "content": {
@@ -161,23 +120,7 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "Login successful",
-            "content": {
-              "application/json": {
-                "example": {
-                  "success": true,
-                  "message": "Login successful.",
-                  "data": {
-                    "user": { "id": "...", "email": "mohit@example.com", "role": "CLIENT", "isActive": true },
-                    "accessToken": "eyJ...",
-                    "refreshToken": "eyJ...",
-                    "refreshExpiresAt": "2026-06-19T10:35:00Z"
-                  }
-                }
-              }
-            }
-          },
+          "200": { "description": "Login successful" },
           "400": { "$ref": "#/components/responses/ValidationError" },
           "401": { "description": "Invalid credentials" },
           "403": {
@@ -185,27 +128,9 @@
             "content": {
               "application/json": {
                 "examples": {
-                  "EmailNotVerified": {
-                    "value": {
-                      "success": false,
-                      "message": "Email not verified. We have sent a new verification code to your inbox.",
-                      "errors": { "code": "EMAIL_NOT_VERIFIED", "email": "mohit@example.com" }
-                    }
-                  },
-                  "UnderReview": {
-                    "value": {
-                      "success": false,
-                      "message": "Your application is under review. We will email you once your account is approved.",
-                      "errors": { "code": "ACCOUNT_UNDER_REVIEW", "kycStatus": "SUBMITTED" }
-                    }
-                  },
-                  "Deactivated": {
-                    "value": {
-                      "success": false,
-                      "message": "This account has been deactivated. Please contact support.",
-                      "errors": { "code": "ACCOUNT_DEACTIVATED" }
-                    }
-                  }
+                  "EmailNotVerified": { "value": { "success": false, "message": "Email not verified. We have sent a new verification code to your inbox.", "errors": { "code": "EMAIL_NOT_VERIFIED", "email": "mohit@example.com" } } },
+                  "UnderReview":      { "value": { "success": false, "message": "Your application is under review. We will email you once your account is approved.", "errors": { "code": "ACCOUNT_UNDER_REVIEW", "kycStatus": "SUBMITTED" } } },
+                  "Deactivated":      { "value": { "success": false, "message": "This account has been deactivated. Please contact support.", "errors": { "code": "ACCOUNT_DEACTIVATED" } } }
                 }
               }
             }
@@ -217,7 +142,7 @@
       "post": {
         "tags": ["Auth"],
         "summary": "Sign in (or sign up) with Google ID token",
-        "description": "- Existing Google account → log in (`isNewAccount: false`, 200)\n- Existing email but no Google link → auto-link (provider → HYBRID), log in\n- Brand new → `role` required (`CLIENT` or `VENDOR`), creates + logs in (201)",
+        "description": "- Existing Google account → log in (200)\n- Existing email but no Google link → auto-link (provider → HYBRID), log in (200)\n- Brand new → `role` required (`CLIENT` or `VENDOR`), creates + logs in (201)",
         "requestBody": {
           "required": true,
           "content": {
@@ -225,7 +150,7 @@
               "schema": { "$ref": "#/components/schemas/GoogleLoginRequest" },
               "examples": {
                 "ExistingUser": { "value": { "token": "eyJhbGciOiJSUzI1NiIs..." } },
-                "NewSignup": { "value": { "token": "eyJhbGciOiJSUzI1NiIs...", "role": "VENDOR" } }
+                "NewSignup":    { "value": { "token": "eyJhbGciOiJSUzI1NiIs...", "role": "VENDOR" } }
               }
             }
           }
@@ -248,49 +173,31 @@
           "required": false,
           "content": {
             "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": { "refreshToken": { "type": "string" } }
-              }
+              "schema": { "type": "object", "properties": { "refreshToken": { "type": "string" } } }
             }
           }
         },
         "responses": {
           "200": { "description": "Tokens rotated" },
           "400": { "description": "Refresh token missing" },
-          "401": { "description": "Refresh token invalid / expired / revoked / replayed" },
-          "403": {
-            "description": "Account state blocks refresh — same codes as `/login`: `ACCOUNT_UNDER_REVIEW`, `ACCOUNT_DEACTIVATED`"
-          }
+          "401": { "description": "Invalid / expired / revoked / replayed" },
+          "403": { "description": "ACCOUNT_UNDER_REVIEW or ACCOUNT_DEACTIVATED" }
         }
       }
     },
     "/api/v1/auth/logout": {
       "post": {
         "tags": ["Auth"],
-        "summary": "Revoke refresh token + clear cookie",
-        "description": "Idempotent — succeeds even with no token presented.",
+        "summary": "Revoke refresh token + clear cookie (idempotent)",
         "requestBody": {
           "required": false,
           "content": {
             "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": { "refreshToken": { "type": "string" } }
-              }
+              "schema": { "type": "object", "properties": { "refreshToken": { "type": "string" } } }
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "Logged out",
-            "content": {
-              "application/json": {
-                "example": { "success": true, "message": "Logged out successfully.", "data": null }
-              }
-            }
-          }
-        }
+        "responses": { "200": { "description": "Logged out" } }
       }
     },
     "/api/v1/auth/verify-email": {
@@ -318,7 +225,7 @@
       "post": {
         "tags": ["Auth"],
         "summary": "Resend email verification OTP",
-        "description": "Generic-shape response (does not reveal account existence). Subject to `OTP_RESEND_COOLDOWN_SECONDS` rate limit. Always returns `otp` metadata for countdown rendering.",
+        "description": "Generic-shape response (anti-enumeration). Rate-limited by `OTP_RESEND_COOLDOWN_SECONDS`.",
         "requestBody": {
           "required": true,
           "content": {
@@ -329,35 +236,12 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "Generic response (whether email exists or not)",
-            "content": {
-              "application/json": {
-                "example": {
-                  "success": true,
-                  "message": "If an account exists for that email, a verification code has been sent.",
-                  "data": {
-                    "otp": {
-                      "ttlSeconds": 600,
-                      "resendCooldownSeconds": 60,
-                      "maxAttempts": 5,
-                      "sentAt": "2026-06-12T10:30:00Z",
-                      "expiresAt": "2026-06-12T10:40:00Z"
-                    }
-                  }
-                }
-              }
-            }
-          },
+          "200": { "description": "Generic response (whether email exists or not)" },
           "429": {
             "description": "Resend cooldown active",
             "content": {
               "application/json": {
-                "example": {
-                  "success": false,
-                  "message": "Please wait 45s before requesting another code.",
-                  "errors": { "code": "OTP_RESEND_COOLDOWN", "retryAfter": 45 }
-                }
+                "example": { "success": false, "message": "Please wait 45s before requesting another code.", "errors": { "code": "OTP_RESEND_COOLDOWN", "retryAfter": 45 } }
               }
             }
           }
@@ -368,7 +252,7 @@
       "post": {
         "tags": ["Auth"],
         "summary": "Step 1 of password reset — request OTP",
-        "description": "Sends an OTP email if the account exists. Generic response prevents account enumeration. Anti-spam cooldown applies. Includes `otp` metadata for countdown.",
+        "description": "Sends an OTP email if the account exists. Generic-shape response prevents enumeration. Vendors awaiting admin review CAN reset their password (so they can prepare for re-login post-approval).",
         "requestBody": {
           "required": true,
           "content": {
@@ -387,8 +271,8 @@
     "/api/v1/auth/password/verify-otp": {
       "post": {
         "tags": ["Auth"],
-        "summary": "Step 2 of password reset — verify OTP without consuming it",
-        "description": "Validates the OTP from step 1 but does NOT consume it. Use to let the user move from the OTP screen to the password screen with confidence. The OTP must still be re-validated AND will be consumed by step 3 (`/password/reset`).\n\nFailed attempts increment the rate-limit counter; exhausted OTPs are burned.",
+        "summary": "Step 2 of password reset — verify OTP, issue reset token",
+        "description": "Validates the OTP from step 1. On success the OTP is CONSUMED and a short-lived JWT reset token (10 min TTL) is returned. The frontend stores this token and uses it in step 3 instead of re-sending the OTP.\n\nWrong OTP attempts increment the rate-limit counter; exhausted OTPs are auto-burned.",
         "requestBody": {
           "required": true,
           "content": {
@@ -400,45 +284,65 @@
         },
         "responses": {
           "200": {
-            "description": "OTP verified",
+            "description": "OTP verified, reset token issued",
             "content": {
               "application/json": {
                 "example": {
                   "success": true,
                   "message": "OTP verified. You can now set a new password.",
-                  "data": { "otpVerified": true, "expiresAt": "2026-06-12T10:40:00Z" }
+                  "data": {
+                    "otpVerified": true,
+                    "resetToken": "eyJhbGciOiJIUzI1NiIs...",
+                    "tokenExpiresAt": "2026-06-12T13:18:00Z"
+                  }
                 }
               }
             }
           },
           "400": { "$ref": "#/components/responses/ValidationError" },
           "401": { "description": "Wrong OTP, expired, exhausted attempts, or unknown email" },
-          "403": { "description": "Account deactivated" }
+          "403": { "description": "Account permanently deactivated (vendors under review are allowed)" }
         }
       }
     },
     "/api/v1/auth/password/reset": {
       "post": {
         "tags": ["Auth"],
-        "summary": "Step 3 of password reset — set new password",
-        "description": "Re-validates the OTP, hashes the new password, updates the user, revokes ALL refresh tokens (kicks out any attacker), consumes the OTP, sends a 'password changed' notice email.\n\nCan be called as step 2 (skipping verify-otp) — useful if you want the combined single-screen UX.",
+        "summary": "Step 3 of password reset — set new password using the reset token",
+        "description": "Takes the JWT reset token from step 2 (NOT the OTP). The token carries the user identity, so no email needed in the body. On success: updates password, revokes ALL refresh tokens (kicks out attackers), sends 'password changed' notice email.\n\nError codes:\n- `RESET_TOKEN_EXPIRED` — token's 10-min TTL elapsed; restart from step 1\n- `RESET_TOKEN_INVALID` — token tampered/wrong purpose/wrong signature",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": { "$ref": "#/components/schemas/ResetPasswordRequest" },
               "example": {
-                "email": "mohit@example.com",
-                "otp": "123456",
+                "resetToken": "eyJhbGciOiJIUzI1NiIs...",
                 "newPassword": "NewPassword123"
               }
             }
           }
         },
         "responses": {
-          "200": { "description": "Password reset" },
+          "200": {
+            "description": "Password reset",
+            "content": {
+              "application/json": {
+                "example": { "success": true, "message": "Password reset successfully. Please log in with your new password.", "data": null }
+              }
+            }
+          },
           "400": { "$ref": "#/components/responses/ValidationError" },
-          "401": { "description": "Invalid OTP, expired, or exhausted attempts" },
+          "401": {
+            "description": "Reset token invalid or expired",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "TokenExpired": { "value": { "success": false, "message": "Reset session expired. Please request a new code.", "errors": { "code": "RESET_TOKEN_EXPIRED" } } },
+                  "TokenInvalid": { "value": { "success": false, "message": "Invalid reset session. Please request a new code.", "errors": { "code": "RESET_TOKEN_INVALID" } } }
+                }
+              }
+            }
+          },
           "403": { "description": "Account deactivated" }
         }
       }
@@ -459,7 +363,7 @@
       "post": {
         "tags": ["Uploads"],
         "summary": "Upload an image or PDF to Cloudinary",
-        "description": "Authenticated upload. Files stored under `tripz/<purpose>/<userId>/<name-or-timestamp>`. Backend returns the public CDN URL — does NOT touch the database.\n\nIf `name` is provided, the file is saved at that stable slot name (re-uploads with the same name overwrite the previous file). If `name` is omitted, a timestamped filename is used (each upload preserved).",
+        "description": "Authenticated upload. Files stored at `tripz/<purpose>/<userId>/<name-or-timestamp>`. Backend returns the public CDN URL.\n\nIf `name` is provided, the file is saved at that stable slot — re-uploads with the same name overwrite the previous file.",
         "security": [{ "bearerAuth": [] }],
         "requestBody": {
           "required": true,
@@ -478,7 +382,7 @@
                     "type": "string",
                     "pattern": "^[a-zA-Z0-9_-]+$",
                     "maxLength": 80,
-                    "description": "Optional. Stable slot name (a-z, 0-9, -, _ only). Re-uploads with the same name replace the previous file."
+                    "description": "Optional. Stable slot name. Re-uploads with the same name overwrite the previous file."
                   }
                 }
               }
@@ -518,57 +422,17 @@
       "post": {
         "tags": ["Leads (Public)"],
         "summary": "Submit a travel-inquiry lead (public, no auth required)",
-        "description": "Public endpoint accepting anonymous form submissions. If a valid Bearer token is sent, the lead is linked to the authenticated customer; otherwise `customerUserId = null`.\n\n**Hybrid storage**: `destination`, `email`, `phone`, `budget` go to top-level indexed columns; everything else lands in `requirements` JSONB. Leads land as `PENDING_REVIEW` until admin approves.",
+        "description": "Public anonymous form submission. If a valid Bearer token is sent, the lead is linked to that customer; otherwise `customerUserId = null`.\n\n**Hybrid storage**: `destination`, `email`, `phone`, `budget` go to indexed columns; everything else lands in `requirements` JSONB. Leads land as `PENDING_REVIEW` until admin approves.",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/LeadSubmitRequest" },
-              "example": {
-                "lead": {
-                  "destination": "Vietnam",
-                  "departureCity": "Amritsar",
-                  "travelDate": "2026-06-12",
-                  "duration": "6 Days",
-                  "ticketsBooked": true,
-                  "email": "traveler@example.com",
-                  "phone": "9027441332",
-                  "whatsappUpdates": true,
-                  "hotelCategory": "3 Star",
-                  "flightRequired": "Yes",
-                  "budget": "",
-                  "adults": "2",
-                  "infants": "1",
-                  "children": "2",
-                  "bookingTimeline": "In This Month",
-                  "cabRequired": "Yes",
-                  "packageType": "Customizable Package",
-                  "preferredCallTime": "10 AM - 12 PM",
-                  "otherDestinations": "Yes",
-                  "tourType": "Family"
-                }
-              }
+              "schema": { "$ref": "#/components/schemas/LeadSubmitRequest" }
             }
           }
         },
         "responses": {
-          "201": {
-            "description": "Lead submitted",
-            "content": {
-              "application/json": {
-                "example": {
-                  "success": true,
-                  "message": "Lead submitted successfully.",
-                  "data": {
-                    "leadId": "9f8e7d6c-...",
-                    "status": "PENDING_REVIEW",
-                    "createdAt": "2026-06-12T10:30:00Z",
-                    "message": "Thanks! Your inquiry has been received and is being reviewed."
-                  }
-                }
-              }
-            }
-          },
+          "201": { "description": "Lead submitted" },
           "400": { "$ref": "#/components/responses/ValidationError" }
         }
       }
@@ -595,14 +459,7 @@
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/CreateAdminRequest" },
-              "example": {
-                "firstName": "Asha",
-                "lastName": "Kapoor",
-                "email": "asha.admin@tripz.local",
-                "phone": "9123456780",
-                "password": "AdminPass!2A"
-              }
+              "schema": { "$ref": "#/components/schemas/CreateAdminRequest" }
             }
           }
         },
@@ -612,6 +469,163 @@
           "401": { "$ref": "#/components/responses/Unauthorized" },
           "403": { "$ref": "#/components/responses/Forbidden" },
           "409": { "description": "Email or phone already in use" }
+        }
+      }
+    },
+    "/api/v1/super-admin/vendors/{userId}/activate": {
+      "post": {
+        "tags": ["Super Admin - Vendors"],
+        "summary": "Activate a deactivated vendor account (SUPER_ADMIN only)",
+        "description": "Force-flips `User.isActive` to `true`. Use this to reverse a previous deactivation. Action is logged with the SUPER_ADMIN's user ID. `reason` is optional but recommended for audit.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "userId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ActivateVendorRequest" },
+              "example": { "reason": "Re-enabled after offline verification of company documents" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Vendor activated",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "Vendor account activated.",
+                  "data": {
+                    "user": { "id": "...", "email": "rohit@acme.com", "isActive": true },
+                    "kycStatus": "APPROVED"
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "User is not a VENDOR" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "description": "Vendor not found" }
+        }
+      }
+    },
+    "/api/v1/super-admin/vendors/{userId}/deactivate": {
+      "post": {
+        "tags": ["Super Admin - Vendors"],
+        "summary": "Deactivate a vendor account (SUPER_ADMIN only)",
+        "description": "Force-flips `User.isActive` to `false`. ALSO revokes all of the vendor's refresh tokens — they can't extend their current session. `reason` is REQUIRED (min 5 chars) for audit.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "userId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/DeactivateVendorRequest" },
+              "example": { "reason": "Repeated fraud attempts on lead unlocks" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Vendor deactivated, refresh tokens revoked" },
+          "400": { "description": "User is not a VENDOR, or validation failed" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "description": "Vendor not found" }
+        }
+      }
+    },
+    "/api/v1/super-admin/vendors/{userId}/credits/grant": {
+      "post": {
+        "tags": ["Super Admin - Vendors"],
+        "summary": "Grant credits to a vendor's wallet (SUPER_ADMIN only)",
+        "description": "Adds credits to the vendor's wallet (creates the wallet row if missing). Writes a `CREDIT_ADMIN_ADJUSTMENT` row to the wallet ledger with the SUPER_ADMIN's ID as the reference. Use for onboarding bonuses, promotional credits, refund-style top-ups, etc.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "userId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/GrantCreditsRequest" },
+              "example": { "amount": 100, "notes": "Onboarding bonus" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Credits granted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "Granted 100 credits to vendor.",
+                  "data": {
+                    "walletBalanceAfter": 100,
+                    "transaction": {
+                      "id": "...",
+                      "type": "CREDIT_ADMIN_ADJUSTMENT",
+                      "amount": 100,
+                      "balanceAfter": 100,
+                      "referenceType": "ADMIN",
+                      "referenceId": "<adminId>",
+                      "notes": "Onboarding bonus",
+                      "createdAt": "..."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "User is not a VENDOR" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "description": "Vendor not found" }
+        }
+      }
+    },
+    "/api/v1/super-admin/vendors/{userId}/credits/revoke": {
+      "post": {
+        "tags": ["Super Admin - Vendors"],
+        "summary": "Revoke credits from a vendor's wallet (SUPER_ADMIN only)",
+        "description": "Atomically subtracts credits using CAS — fails with 402 if wallet balance is insufficient. Writes a `DEBIT_ADMIN_ADJUSTMENT` ledger row. `notes` is REQUIRED (min 5 chars) for audit. Use for disputed unlocks, fraud clawback, etc.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "userId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RevokeCreditsRequest" },
+              "example": { "amount": 50, "notes": "Refund for disputed lead unlock #1234" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Credits revoked, ledger row written" },
+          "400": { "description": "User is not a VENDOR, or validation failed (notes missing)" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "402": {
+            "description": "Insufficient wallet balance",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": false,
+                  "message": "Insufficient credits in vendor wallet.",
+                  "errors": { "code": "INSUFFICIENT_CREDITS", "required": 50 }
+                }
+              }
+            }
+          },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "description": "Vendor not found" }
         }
       }
     },
@@ -627,10 +641,114 @@
         }
       }
     },
+    "/api/v1/admin/vendors": {
+      "get": {
+        "tags": ["Admin - Vendors"],
+        "summary": "List vendors with filters + pagination",
+        "description": "Paginated table view of all vendors. Used by the Admin Dashboard's Vendors tab. Supports filters by KYC status, active state, and free-text search across email / first name / last name / phone.\n\n**Pagination** accepts EITHER style — pick whichever your frontend prefers:\n- **Offset-based**: `?take=10&skip=0` (Prisma-native, matches other admin endpoints)\n- **Page-based**: `?page=0&size=10` (Spring Boot style, 0-indexed: `page=0` is the first page)\n\nIf both styles are sent, `page`/`size` wins. Response always includes `take`/`skip`/`total` so the frontend can compute total pages.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "kycStatus", "in": "query", "schema": { "$ref": "#/components/schemas/KycStatus" } },
+          { "name": "isActive",  "in": "query", "schema": { "type": "string", "enum": ["true", "false"] } },
+          { "name": "search",    "in": "query", "schema": { "type": "string", "maxLength": 100 }, "description": "Matches email, firstName, lastName, phone (case-insensitive)" },
+          { "name": "sortBy",    "in": "query", "schema": { "type": "string", "enum": ["createdAt", "updatedAt", "name"], "default": "createdAt" } },
+          { "name": "order",     "in": "query", "schema": { "type": "string", "enum": ["asc", "desc"], "default": "desc" } },
+          { "name": "take",      "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 }, "description": "Offset-based pagination — page size (overridden by `size` if both sent)" },
+          { "name": "skip",      "in": "query", "schema": { "type": "integer", "minimum": 0, "default": 0 }, "description": "Offset-based pagination — number of rows to skip (overridden by `page` if both sent)" },
+          { "name": "page",      "in": "query", "schema": { "type": "integer", "minimum": 0 }, "description": "Page-based pagination — 0-indexed page number. Equivalent to `skip = page * size`" },
+          { "name": "size",      "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100 }, "description": "Page-based pagination — items per page. Equivalent to `take = size`" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Vendor list retrieved",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "Vendors retrieved.",
+                  "data": {
+                    "items": [
+                      {
+                        "userId": "ckxyz1...",
+                        "firstName": "Rohit",
+                        "lastName": "Sharma",
+                        "email": "rohit@acme.com",
+                        "phone": "9999999999",
+                        "isActive": false,
+                        "emailVerifiedAt": "2026-06-10T10:00:00Z",
+                        "createdAt": "2026-06-10T09:30:00Z",
+                        "kycStatus": "SUBMITTED",
+                        "companyName": "Acme Tours",
+                        "businessName": "Acme",
+                        "country": "India",
+                        "city": "Bangalore",
+                        "kycSubmittedAt": "2026-06-10T11:00:00Z",
+                        "kycReviewedAt": null,
+                        "rejectionReason": null
+                      }
+                    ],
+                    "total": 47,
+                    "take": 20,
+                    "skip": 0
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/api/v1/admin/vendors/{userId}": {
+      "get": {
+        "tags": ["Admin - Vendors"],
+        "summary": "Get a single vendor's full detail",
+        "description": "Returns everything for one vendor — user info, KYC profile + reviewer, all KYC documents (PAN/AADHAR/GSTIN/CIN with verification states), wallet balance, and the derived approval summary block. Single API call powers the Vendor Detail page.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "userId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Vendor detail",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "Vendor retrieved.",
+                  "data": {
+                    "user": { "id": "...", "firstName": "Rohit", "lastName": "Sharma", "email": "rohit@acme.com", "phone": "9999999999", "isActive": false, "emailVerifiedAt": "...", "avatarUrl": null, "authProvider": "LOCAL", "createdAt": "...", "updatedAt": "..." },
+                    "kycStatus": "SUBMITTED",
+                    "kyc": { "companyName": "Acme Tours Pvt Ltd", "companyType": "PVT_LTD", "country": "India", "officeAddress": "...", "services": ["Family Tours", "Honeymoon"], "destinations": ["Vietnam"], "submittedAt": "...", "reviewedAt": null, "reviewedByAdminId": null, "rejectionReason": null },
+                    "documents": [
+                      { "type": "PAN", "documentNumber": "ABCDE1234F", "thirdPartyVerified": true, "thirdPartyProvider": "SUREPASS" },
+                      { "type": "AADHAR", "documentNumber": "********1234", "thirdPartyVerified": true, "thirdPartyProvider": "SUREPASS" },
+                      { "type": "GSTIN", "documentNumber": "29ABCDE1234F1Z5", "thirdPartyVerified": true, "thirdPartyProvider": "FORMAT_ONLY" }
+                    ],
+                    "wallet": { "balanceCredits": 100, "createdAt": "...", "updatedAt": "..." },
+                    "approval": {
+                      "status": "PENDING_ADMIN_REVIEW",
+                      "adminApproved": false,
+                      "canLogin": false,
+                      "message": "Your application is under review. We will email you once an admin approves your account."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "description": "Vendor not found" }
+        }
+      }
+    },
     "/api/v1/admin/vendor-kyc": {
       "get": {
         "tags": ["Admin - Vendor KYC"],
-        "summary": "List vendor KYC submissions",
+        "summary": "List vendor KYC submissions (legacy — prefer /admin/vendors)",
         "security": [{ "bearerAuth": [] }],
         "parameters": [
           { "name": "status", "in": "query", "schema": { "$ref": "#/components/schemas/KycStatus" } },
@@ -654,27 +772,7 @@
           { "name": "userId", "in": "path", "required": true, "schema": { "type": "string" } }
         ],
         "responses": {
-          "200": {
-            "description": "KYC approved",
-            "content": {
-              "application/json": {
-                "example": {
-                  "success": true,
-                  "message": "KYC approved successfully.",
-                  "data": {
-                    "kycStatus": "APPROVED",
-                    "kyc": { "vendorUserId": "...", "companyName": "Acme Tours" },
-                    "approval": {
-                      "status": "APPROVED",
-                      "adminApproved": true,
-                      "canLogin": true,
-                      "message": "Your KYC is approved. You now have full marketplace access."
-                    }
-                  }
-                }
-              }
-            }
-          },
+          "200": { "description": "KYC approved" },
           "400": { "description": "Vendor not in SUBMITTED state" },
           "401": { "$ref": "#/components/responses/Unauthorized" },
           "403": { "$ref": "#/components/responses/Forbidden" },
@@ -695,11 +793,7 @@
           "required": true,
           "content": {
             "application/json": {
-              "schema": {
-                "type": "object",
-                "required": ["reason"],
-                "properties": { "reason": { "type": "string", "minLength": 5, "maxLength": 500 } }
-              },
+              "schema": { "type": "object", "required": ["reason"], "properties": { "reason": { "type": "string", "minLength": 5, "maxLength": 500 } } },
               "example": { "reason": "PAN number does not match company name. Please re-upload." }
             }
           }
@@ -729,34 +823,9 @@
       "get": {
         "tags": ["Vendor KYC"],
         "summary": "Get current KYC status + documents + approval summary",
-        "description": "Returns `kycStatus`, the KYC payload, every verified document, and an `approval` block that tells the frontend exactly where the vendor stands.",
         "security": [{ "bearerAuth": [] }],
         "responses": {
-          "200": {
-            "description": "KYC retrieved",
-            "content": {
-              "application/json": {
-                "example": {
-                  "success": true,
-                  "message": "KYC status retrieved.",
-                  "data": {
-                    "kycStatus": "SUBMITTED",
-                    "kyc": { "companyName": "Acme Tours" },
-                    "documents": [
-                      { "type": "PAN", "thirdPartyVerified": true, "thirdPartyProvider": "SUREPASS" },
-                      { "type": "AADHAR", "thirdPartyVerified": true, "thirdPartyProvider": "SUREPASS" }
-                    ],
-                    "approval": {
-                      "status": "PENDING_ADMIN_REVIEW",
-                      "adminApproved": false,
-                      "canLogin": false,
-                      "message": "Your application is under review. We will email you once an admin approves your account."
-                    }
-                  }
-                }
-              }
-            }
-          },
+          "200": { "description": "KYC retrieved" },
           "401": { "$ref": "#/components/responses/Unauthorized" },
           "403": { "$ref": "#/components/responses/Forbidden" },
           "404": { "description": "Vendor profile not found" }
@@ -770,33 +839,11 @@
         "requestBody": {
           "required": true,
           "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/VendorKycSubmitRequest" }
-            }
+            "application/json": { "schema": { "$ref": "#/components/schemas/VendorKycSubmitRequest" } }
           }
         },
         "responses": {
-          "201": {
-            "description": "KYC submitted",
-            "content": {
-              "application/json": {
-                "example": {
-                  "success": true,
-                  "message": "KYC submitted. Awaiting admin review.",
-                  "data": {
-                    "kycStatus": "SUBMITTED",
-                    "kyc": { "companyName": "Acme Tours" },
-                    "approval": {
-                      "status": "PENDING_ADMIN_REVIEW",
-                      "adminApproved": false,
-                      "canLogin": false,
-                      "message": "Your application is under review. We will email you once an admin approves your account."
-                    }
-                  }
-                }
-              }
-            }
-          },
+          "201": { "description": "KYC submitted, awaiting admin review" },
           "400": { "description": "Validation failed or terms not accepted" },
           "401": { "$ref": "#/components/responses/Unauthorized" },
           "403": { "description": "KYC already approved or already submitted" },
@@ -820,39 +867,7 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "PAN verified",
-            "content": {
-              "application/json": {
-                "examples": {
-                  "FreshVerification": {
-                    "summary": "First call — Surepass hit",
-                    "value": {
-                      "success": true,
-                      "message": "PAN verified successfully.",
-                      "data": {
-                        "document": { "type": "PAN", "thirdPartyVerified": true, "thirdPartyProvider": "SUREPASS" },
-                        "holderName": "RAHUL KUMAR",
-                        "alreadyVerified": false
-                      }
-                    }
-                  },
-                  "AlreadyVerified": {
-                    "summary": "Second call — cached, no credits used",
-                    "value": {
-                      "success": true,
-                      "message": "PAN is already verified.",
-                      "data": {
-                        "document": { "type": "PAN", "thirdPartyVerified": true },
-                        "holderName": "RAHUL KUMAR",
-                        "alreadyVerified": true
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          },
+          "200": { "description": "PAN verified (fresh or cached)" },
           "400": { "$ref": "#/components/responses/ValidationError" },
           "401": { "$ref": "#/components/responses/Unauthorized" },
           "422": { "description": "Surepass rejected (number not found in records)" }
@@ -874,21 +889,7 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "GSTIN saved",
-            "content": {
-              "application/json": {
-                "example": {
-                  "success": true,
-                  "message": "GSTIN saved. Admin will verify the uploaded certificate.",
-                  "data": {
-                    "document": { "type": "GSTIN", "thirdPartyVerified": true, "thirdPartyProvider": "FORMAT_ONLY" },
-                    "alreadyVerified": false
-                  }
-                }
-              }
-            }
-          },
+          "200": { "description": "GSTIN saved" },
           "422": { "description": "GSTIN format is invalid" }
         }
       }
@@ -917,7 +918,7 @@
       "post": {
         "tags": ["Vendor KYC"],
         "summary": "Step 1 of Aadhaar — start DigiLocker session",
-        "description": "Calls Surepass `/digilocker/initialize` and returns a DigiLocker SDK URL. The frontend opens this URL; the user authenticates on DigiLocker (UIDAI OTP handled there). DigiLocker redirects back to the URL configured in `SUREPASS_REDIRECT_URL`. The frontend's callback page then fires `/aadhaar/complete`.\n\n**Idempotent:** if Aadhaar is already verified for this vendor, returns `alreadyVerified: true` and SKIPS the Surepass call (frontend can skip DigiLocker too).",
+        "description": "Calls Surepass `/digilocker/initialize` and returns a DigiLocker SDK URL. The frontend opens this URL; user authenticates on DigiLocker. DigiLocker then redirects back to `SUREPASS_REDIRECT_URL`, and the frontend's callback page calls `/aadhaar/complete`.\n\n**Idempotent:** if Aadhaar is already verified for this vendor, returns `alreadyVerified: true` and SKIPS the Surepass call.",
         "security": [{ "bearerAuth": [] }],
         "requestBody": {
           "required": true,
@@ -933,31 +934,8 @@
             "content": {
               "application/json": {
                 "examples": {
-                  "FreshSession": {
-                    "value": {
-                      "success": true,
-                      "message": "DigiLocker verification initiated. Open the redirect URL to complete it.",
-                      "data": {
-                        "sessionId": "f866f25b-35ac-4b1a-87e7-4631dbb656ea",
-                        "expiresAt": "2026-06-12T10:00:00Z",
-                        "redirectUrl": "https://digilocker-sdk.notbot.in/?gateway=sandbox&type=digilocker&token=...&auth_type=web",
-                        "alreadyVerified": false
-                      }
-                    }
-                  },
-                  "AlreadyVerified": {
-                    "value": {
-                      "success": true,
-                      "message": "Aadhaar is already verified.",
-                      "data": {
-                        "sessionId": null,
-                        "expiresAt": null,
-                        "redirectUrl": null,
-                        "alreadyVerified": true,
-                        "holderName": "RAHUL KUMAR"
-                      }
-                    }
-                  }
+                  "FreshSession":     { "value": { "success": true, "message": "DigiLocker verification initiated. Open the redirect URL to complete it.", "data": { "sessionId": "f866f25b-...", "expiresAt": "...", "redirectUrl": "https://digilocker-sdk.notbot.in/...", "alreadyVerified": false } } },
+                  "AlreadyVerified":  { "value": { "success": true, "message": "Aadhaar is already verified.", "data": { "sessionId": null, "expiresAt": null, "redirectUrl": null, "alreadyVerified": true, "holderName": "RAHUL KUMAR" } } }
                 }
               }
             }
@@ -972,19 +950,13 @@
       "post": {
         "tags": ["Vendor KYC"],
         "summary": "Step 2 of Aadhaar — fetch verified Aadhaar from Surepass",
-        "description": "Called from the frontend callback page AFTER the user finishes DigiLocker. Backend uses the parked `client_id` to call Surepass `GET /digilocker/download-aadhaar/<client_id>` and persists the verified Aadhaar data.\n\nNo OTP is passed — DigiLocker owns the OTP step end-to-end.",
+        "description": "Called from the frontend callback page AFTER the user finishes DigiLocker. Backend uses the parked `client_id` to call Surepass `GET /digilocker/download-aadhaar/<client_id>` and persists the verified Aadhaar data. No OTP is passed — DigiLocker owns the OTP step.",
         "security": [{ "bearerAuth": [] }],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": {
-                "type": "object",
-                "required": ["sessionId"],
-                "properties": {
-                  "sessionId": { "type": "string", "description": "Returned by /aadhaar/initiate; persists across the DigiLocker redirect (frontend stores in localStorage)." }
-                }
-              }
+              "schema": { "type": "object", "required": ["sessionId"], "properties": { "sessionId": { "type": "string" } } }
             }
           }
         },
@@ -999,12 +971,7 @@
                   "data": {
                     "document": { "type": "AADHAR", "thirdPartyVerified": true, "thirdPartyProvider": "SUREPASS" },
                     "holderName": "RAHUL KUMAR",
-                    "metadata": {
-                      "name": "RAHUL KUMAR",
-                      "gender": "M",
-                      "dob": "1995-05-15",
-                      "mobile_number": "9876543210"
-                    }
+                    "metadata": { "name": "RAHUL KUMAR", "gender": "M", "dob": "1995-05-15", "mobile_number": "9876543210" }
                   }
                 }
               }
@@ -1028,43 +995,52 @@
         }
       }
     },
-    "/api/v1/marketplace/leads": {
+    "/api/v1/client/leads": {
       "get": {
-        "tags": ["Marketplace"],
-        "summary": "Browse active leads in teaser mode",
-        "description": "Returns active leads. For leads the vendor has NOT unlocked, `email` and `phone` are masked (e.g., `tr****@example.com`, `********1332`). For unlocked leads, full contact details are returned.\n\nRequires APPROVED KYC.",
+        "tags": ["Client - Leads"],
+        "summary": "List the customer's own inquiries (with pagination)",
+        "description": "Returns leads owned by the currently logged-in CLIENT. This includes:\n- Leads they submitted while logged in (linked at submission)\n- Anonymous leads they submitted BEFORE registering, where the email matched — automatically linked at registration.\n\nCustomer DOES NOT see which vendors unlocked their lead (privacy + monetisation — vendors paid for the contact). They only see the unlock count.",
         "security": [{ "bearerAuth": [] }],
         "parameters": [
-          { "name": "destination", "in": "query", "schema": { "type": "string" } },
           { "name": "take", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 50, "default": 20 } },
           { "name": "skip", "in": "query", "schema": { "type": "integer", "minimum": 0, "default": 0 } }
         ],
         "responses": {
           "200": {
-            "description": "Leads retrieved",
+            "description": "Customer's leads",
             "content": {
               "application/json": {
                 "example": {
                   "success": true,
-                  "message": "Marketplace leads retrieved.",
+                  "message": "Your inquiries.",
                   "data": {
                     "items": [
                       {
                         "id": "lead-uuid-1",
                         "destination": "Vietnam",
-                        "email": "tr****@example.com",
-                        "phone": "********1332",
                         "budget": null,
-                        "requirements": { "departureCity": "Amritsar", "duration": "6 Days", "adults": 2 },
+                        "requirements": { "departureCity": "Delhi", "duration": "6 Days", "adults": "2", "tourType": "Family" },
                         "status": "ACTIVE",
                         "priceInCredits": 10,
                         "maxUnlocks": 3,
-                        "unlockCount": 1,
-                        "createdAt": "2026-06-12T10:30:00Z",
-                        "isUnlocked": false
+                        "unlockCount": 2,
+                        "createdAt": "2026-06-10T10:30:00Z",
+                        "updatedAt": "2026-06-12T11:00:00Z"
+                      },
+                      {
+                        "id": "lead-uuid-2",
+                        "destination": "Goa",
+                        "budget": 35000,
+                        "requirements": { "departureCity": "Mumbai", "tourType": "Honeymoon" },
+                        "status": "PENDING_REVIEW",
+                        "priceInCredits": 10,
+                        "maxUnlocks": 3,
+                        "unlockCount": 0,
+                        "createdAt": "2026-06-12T11:00:00Z",
+                        "updatedAt": "2026-06-12T11:00:00Z"
                       }
                     ],
-                    "total": 47,
+                    "total": 2,
                     "take": 20,
                     "skip": 0
                   }
@@ -1072,6 +1048,25 @@
               }
             }
           },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/api/v1/marketplace/leads": {
+      "get": {
+        "tags": ["Marketplace"],
+        "summary": "Browse active leads in teaser mode",
+        "description": "Returns active leads. For leads the vendor has NOT unlocked, `email` and `phone` are masked. For unlocked leads, full contact details are returned. Requires APPROVED KYC.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "destination", "in": "query", "schema": { "type": "string" } },
+          { "name": "take", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 50, "default": 20 } },
+          { "name": "skip", "in": "query", "schema": { "type": "integer", "minimum": 0, "default": 0 } }
+        ],
+        "responses": {
+          "200": { "description": "Leads retrieved" },
           "401": { "$ref": "#/components/responses/Unauthorized" },
           "403": { "description": "KYC not approved or vendor deactivated" }
         }
@@ -1087,47 +1082,13 @@
           { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
         ],
         "responses": {
-          "200": {
-            "description": "Lead unlocked",
-            "content": {
-              "application/json": {
-                "example": {
-                  "success": true,
-                  "message": "Lead unlocked. Contact details are now visible.",
-                  "data": {
-                    "leadId": "lead-uuid-1",
-                    "assignmentId": "assignment-uuid",
-                    "unlockedAt": "2026-06-12T11:05:00Z",
-                    "priceInCreditsPaid": 10,
-                    "walletBalanceAfter": 90,
-                    "lead": {
-                      "id": "lead-uuid-1",
-                      "destination": "Vietnam",
-                      "email": "traveler@example.com",
-                      "phone": "9027441332",
-                      "budget": null,
-                      "requirements": { "departureCity": "Amritsar", "duration": "6 Days", "adults": 2 },
-                      "status": "ACTIVE",
-                      "priceInCredits": 10,
-                      "maxUnlocks": 3,
-                      "unlockCount": 2,
-                      "createdAt": "2026-06-12T10:30:00Z"
-                    }
-                  }
-                }
-              }
-            }
-          },
+          "200": { "description": "Lead unlocked" },
           "401": { "$ref": "#/components/responses/Unauthorized" },
           "402": {
             "description": "Insufficient credits in wallet",
             "content": {
               "application/json": {
-                "example": {
-                  "success": false,
-                  "message": "Insufficient credits in your wallet.",
-                  "errors": { "code": "INSUFFICIENT_CREDITS", "required": 10 }
-                }
+                "example": { "success": false, "message": "Insufficient credits in your wallet.", "errors": { "code": "INSUFFICIENT_CREDITS", "required": 10 } }
               }
             }
           },
@@ -1189,38 +1150,14 @@
       }
     },
     "schemas": {
-      "UserRole": {
-        "type": "string",
-        "enum": ["SUPER_ADMIN", "ADMIN", "VENDOR", "CLIENT"]
-      },
-      "AuthProvider": {
-        "type": "string",
-        "enum": ["LOCAL", "GOOGLE", "HYBRID"]
-      },
-      "KycStatus": {
-        "type": "string",
-        "enum": ["PENDING", "SUBMITTED", "APPROVED", "REJECTED"]
-      },
-      "LeadStatus": {
-        "type": "string",
-        "enum": ["PENDING_REVIEW", "ACTIVE", "EXHAUSTED", "EXPIRED", "REJECTED", "CLOSED"]
-      },
-      "CompanyType": {
-        "type": "string",
-        "enum": ["PROPRIETORSHIP", "PARTNERSHIP", "LLP", "PVT_LTD", "PUBLIC_LTD", "OTHER"]
-      },
-      "ReferralSource": {
-        "type": "string",
-        "enum": ["REFERENCE", "GOOGLE", "SOCIAL_MEDIA", "ADVERTISEMENT", "OTHER"]
-      },
-      "KycDocumentType": {
-        "type": "string",
-        "enum": ["PAN", "GSTIN", "CIN", "AADHAR", "OTHER"]
-      },
-      "WalletTransactionType": {
-        "type": "string",
-        "enum": ["DEBIT_LEAD_UNLOCK", "CREDIT_TOP_UP", "CREDIT_REFUND", "CREDIT_ADMIN_ADJUSTMENT", "DEBIT_ADMIN_ADJUSTMENT"]
-      },
+      "UserRole":              { "type": "string", "enum": ["SUPER_ADMIN", "ADMIN", "VENDOR", "CLIENT"] },
+      "AuthProvider":          { "type": "string", "enum": ["LOCAL", "GOOGLE", "HYBRID"] },
+      "KycStatus":             { "type": "string", "enum": ["PENDING", "SUBMITTED", "APPROVED", "REJECTED"] },
+      "LeadStatus":            { "type": "string", "enum": ["PENDING_REVIEW", "ACTIVE", "EXHAUSTED", "EXPIRED", "REJECTED", "CLOSED"] },
+      "CompanyType":           { "type": "string", "enum": ["PROPRIETORSHIP", "PARTNERSHIP", "LLP", "PVT_LTD", "PUBLIC_LTD", "OTHER"] },
+      "ReferralSource":        { "type": "string", "enum": ["REFERENCE", "GOOGLE", "SOCIAL_MEDIA", "ADVERTISEMENT", "OTHER"] },
+      "KycDocumentType":       { "type": "string", "enum": ["PAN", "GSTIN", "CIN", "AADHAR", "OTHER"] },
+      "WalletTransactionType": { "type": "string", "enum": ["DEBIT_LEAD_UNLOCK", "CREDIT_TOP_UP", "CREDIT_REFUND", "CREDIT_ADMIN_ADJUSTMENT", "DEBIT_ADMIN_ADJUSTMENT"] },
       "User": {
         "type": "object",
         "properties": {
@@ -1237,25 +1174,24 @@
           "createdAt":       { "type": "string", "format": "date-time" }
         }
       },
+      "ApprovalSummary": {
+        "type": "object",
+        "description": "Derived from VendorProfile.kycStatus. Frontend uses this to decide what to show on the dashboard.",
+        "properties": {
+          "status":        { "type": "string", "enum": ["KYC_NOT_SUBMITTED", "PENDING_ADMIN_REVIEW", "APPROVED", "REJECTED", "UNKNOWN"] },
+          "adminApproved": { "type": "boolean" },
+          "canLogin":      { "type": "boolean" },
+          "message":       { "type": "string" }
+        }
+      },
       "OtpMetadata": {
         "type": "object",
-        "description": "Metadata returned alongside any endpoint that sends an OTP — lets the frontend render countdown timers and disable resend buttons accurately.",
         "properties": {
           "ttlSeconds":            { "type": "integer", "example": 600 },
           "resendCooldownSeconds": { "type": "integer", "example": 60 },
           "maxAttempts":           { "type": "integer", "example": 5 },
           "sentAt":                { "type": "string", "format": "date-time" },
           "expiresAt":             { "type": "string", "format": "date-time" }
-        }
-      },
-      "ApprovalSummary": {
-        "type": "object",
-        "description": "Frontend-friendly summary of vendor's KYC approval state. Derived from kycStatus.",
-        "properties": {
-          "status":        { "type": "string", "enum": ["KYC_NOT_SUBMITTED", "PENDING_ADMIN_REVIEW", "APPROVED", "REJECTED", "UNKNOWN"] },
-          "adminApproved": { "type": "boolean" },
-          "canLogin":      { "type": "boolean" },
-          "message":       { "type": "string" }
         }
       },
       "RegisterRequest": {
@@ -1266,7 +1202,7 @@
           "lastName":  { "type": "string", "minLength": 2, "maxLength": 40 },
           "email":     { "type": "string", "format": "email" },
           "phone":     { "type": "string", "pattern": "^\\d{10,15}$" },
-          "password":  { "type": "string", "minLength": 8, "maxLength": 72, "description": "Must include uppercase, lowercase, and a digit." },
+          "password":  { "type": "string", "minLength": 8, "maxLength": 72 },
           "role":      { "type": "string", "enum": ["CLIENT", "VENDOR"] }
         }
       },
@@ -1282,7 +1218,7 @@
         "type": "object",
         "required": ["token"],
         "properties": {
-          "token": { "type": "string", "description": "Google ID token (JWT) from the frontend's Google Sign-In flow." },
+          "token": { "type": "string" },
           "role":  { "type": "string", "enum": ["CLIENT", "VENDOR"], "description": "Required only for brand-new account creation." }
         }
       },
@@ -1296,8 +1232,8 @@
       },
       "VerifyResetOtpRequest": {
         "type": "object",
-        "description": "Used in step 2 of the password-reset 3-step wizard. Validates the OTP without consuming it.",
         "required": ["email", "otp"],
+        "description": "Step 2 of password reset wizard. On success the OTP is CONSUMED and a JWT reset token is returned.",
         "properties": {
           "email": { "type": "string", "format": "email" },
           "otp":   { "type": "string", "pattern": "^\\d+$", "minLength": 4, "maxLength": 10 }
@@ -1305,10 +1241,10 @@
       },
       "ResetPasswordRequest": {
         "type": "object",
-        "required": ["email", "otp", "newPassword"],
+        "required": ["resetToken", "newPassword"],
+        "description": "Step 3 of password reset wizard. The resetToken from step 2 carries the user identity — no email needed.",
         "properties": {
-          "email":       { "type": "string", "format": "email" },
-          "otp":         { "type": "string", "pattern": "^\\d+$" },
+          "resetToken":  { "type": "string", "minLength": 20 },
           "newPassword": { "type": "string", "minLength": 8, "maxLength": 72 }
         }
       },
@@ -1323,31 +1259,60 @@
           "password":  { "type": "string", "minLength": 8, "maxLength": 72 }
         }
       },
+      "ActivateVendorRequest": {
+        "type": "object",
+        "properties": {
+          "reason": { "type": "string", "maxLength": 500, "description": "Optional reason for the audit log." }
+        }
+      },
+      "DeactivateVendorRequest": {
+        "type": "object",
+        "required": ["reason"],
+        "properties": {
+          "reason": { "type": "string", "minLength": 5, "maxLength": 500, "description": "Required reason for the audit log." }
+        }
+      },
+      "GrantCreditsRequest": {
+        "type": "object",
+        "required": ["amount"],
+        "properties": {
+          "amount": { "type": "integer", "minimum": 1, "maximum": 100000 },
+          "notes":  { "type": "string", "maxLength": 500 }
+        }
+      },
+      "RevokeCreditsRequest": {
+        "type": "object",
+        "required": ["amount", "notes"],
+        "properties": {
+          "amount": { "type": "integer", "minimum": 1, "maximum": 100000 },
+          "notes":  { "type": "string", "minLength": 5, "maxLength": 500, "description": "Required reason for the audit log." }
+        }
+      },
       "VendorKycSubmitRequest": {
         "type": "object",
         "required": ["companyName", "country", "officeAddress", "agreeTerms", "declareTrue"],
         "properties": {
-          "companyName":         { "type": "string", "minLength": 2, "maxLength": 100 },
-          "businessName":        { "type": "string", "nullable": true },
-          "companyType":         { "type": "string", "description": "Accepts canonical enum values or verbose labels like \"Proprietorship Firm\"." },
-          "companySince":        { "type": "integer", "nullable": true },
-          "teamSize":            { "type": "integer", "nullable": true },
-          "companyLogo":         { "type": "string", "nullable": true, "description": "Cloudinary URL from /uploads/image" },
-          "country":             { "type": "string", "minLength": 2 },
-          "officeAddress":       { "type": "string", "minLength": 5 },
-          "officeCity":          { "type": "string", "nullable": true },
-          "officeState":         { "type": "string", "nullable": true },
-          "services":            { "type": "array", "items": { "type": "string" } },
-          "destinations":        { "type": "array", "items": { "type": "string" } },
-          "dailyLeadRequirement": { "type": "integer", "nullable": true },
-          "profileUrl":          { "type": "string", "nullable": true, "description": "Mapped to VendorKyc.websiteUrl" },
-          "facebookUrl":         { "type": "string", "nullable": true },
-          "instagramUrl":        { "type": "string", "nullable": true },
-          "referralSource":      { "type": "string", "nullable": true },
-          "otherSource":         { "type": "string", "nullable": true },
-          "marketplaceWorked":   { "type": "boolean" },
-          "agreeTerms":          { "type": "boolean", "description": "Must be true." },
-          "declareTrue":         { "type": "boolean", "description": "Must be true." }
+          "companyName":           { "type": "string", "minLength": 2, "maxLength": 100 },
+          "businessName":          { "type": "string", "nullable": true },
+          "companyType":           { "type": "string" },
+          "companySince":          { "type": "integer", "nullable": true },
+          "teamSize":              { "type": "integer", "nullable": true },
+          "companyLogo":           { "type": "string", "nullable": true },
+          "country":               { "type": "string", "minLength": 2 },
+          "officeAddress":         { "type": "string", "minLength": 5 },
+          "officeCity":            { "type": "string", "nullable": true },
+          "officeState":           { "type": "string", "nullable": true },
+          "services":              { "type": "array", "items": { "type": "string" } },
+          "destinations":          { "type": "array", "items": { "type": "string" } },
+          "dailyLeadRequirement":  { "type": "integer", "nullable": true },
+          "profileUrl":            { "type": "string", "nullable": true },
+          "facebookUrl":           { "type": "string", "nullable": true },
+          "instagramUrl":          { "type": "string", "nullable": true },
+          "referralSource":        { "type": "string", "nullable": true },
+          "otherSource":           { "type": "string", "nullable": true },
+          "marketplaceWorked":     { "type": "boolean" },
+          "agreeTerms":            { "type": "boolean" },
+          "declareTrue":           { "type": "boolean" }
         }
       },
       "LeadSubmitRequest": {
@@ -1368,8 +1333,8 @@
               "phone":             { "type": "string" },
               "whatsappUpdates":   { "type": "boolean" },
               "hotelCategory":     { "type": "string" },
-              "flightRequired":    { "type": "string", "description": "\"Yes\"/\"No\" or boolean." },
-              "budget":            { "type": "string", "description": "Empty string → null. Numeric → INR amount." },
+              "flightRequired":    { "type": "string" },
+              "budget":            { "type": "string" },
               "adults":            { "type": "string" },
               "infants":           { "type": "string" },
               "children":          { "type": "string" },

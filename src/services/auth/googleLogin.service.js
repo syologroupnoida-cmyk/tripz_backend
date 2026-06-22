@@ -1,6 +1,7 @@
 import { ApiError } from '../../utils/ApiError.js';
 import { verifyGoogleIdToken } from '../../utils/googleAuth.js';
 import * as userRepo from '../../repositories/user.repository.js';
+import * as leadRepo from '../../repositories/lead.repository.js';
 import { SELF_SIGNUP_ROLES } from '../../validators/auth.validator.js';
 import { sanitizeUser, issueTokenPair } from './_helpers.js';
 
@@ -72,6 +73,15 @@ export const loginWithGoogle = async ({ token, role }) => {
       },
     });
     isNewAccount = true;
+
+    // Auto-link any anonymous leads submitted with this Google email — only
+    // for new CLIENT signups (vendors don't have a customer-leads dashboard).
+    if (role === 'CLIENT') {
+      await leadRepo.claimLeadsForEmail({
+        userId: user.id,
+        email: identity.email,
+      });
+    }
   }
 
   if (!user.isActive) {

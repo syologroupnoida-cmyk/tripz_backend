@@ -15,6 +15,15 @@ import { ApiError } from '../../utils/ApiError.js';
 import * as vendorRepo from '../../repositories/vendor.repository.js';
 
 /**
+ * Strip internal-only fields from a documents array before returning to the
+ * client. `thirdPartyResponse` is a fat JSONB blob (full Surepass payload —
+ * up to ~10KB per doc) that admins/vendors don't need. The summary fields
+ * (`thirdPartyVerified`, `thirdPartyProvider`, `thirdPartyVerifiedAt`) stay.
+ */
+const stripInternalDocFields = (documents) =>
+  (documents ?? []).map(({ thirdPartyResponse, ...rest }) => rest);
+
+/**
  * Frontend-friendly approval summary, mirrors the one in vendorKyc service.
  * Derived from kycStatus so the frontend doesn't have to interpret the enum.
  */
@@ -92,7 +101,7 @@ export const getVendorDetail = async (vendorUserId) => {
     user: profile.user,
     kycStatus: profile.kycStatus,
     kyc: profile.kyc ?? null,
-    documents: profile.documents ?? [],
+    documents: stripInternalDocFields(profile.documents),
     wallet: profile.wallet ?? { balanceCredits: 0 },
     approval: buildApprovalSummary(profile.kycStatus),
   };

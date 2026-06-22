@@ -1,4 +1,5 @@
 import prisma from '../config/db.js';
+import { createUserWithGeneratedId } from '../utils/userId.js';
 
 const PUBLIC_USER_SELECT = {
   id: true,
@@ -15,53 +16,62 @@ const PUBLIC_USER_SELECT = {
 };
 
 export const createCustomer = async ({ firstName, lastName, email, phone, password }) => {
-  return prisma.user.create({
-    data: {
-      firstName,
-      lastName,
-      email,
-      phone,
-      password,
-      role: 'CLIENT',
-      authProvider: 'LOCAL',
-      customerProfile: { create: {} },
-    },
-    select: PUBLIC_USER_SELECT,
-  });
+  return createUserWithGeneratedId('CLIENT', ({ id }) =>
+    prisma.user.create({
+      data: {
+        id,
+        firstName,
+        lastName,
+        email,
+        phone,
+        password,
+        role: 'CLIENT',
+        authProvider: 'LOCAL',
+        customerProfile: { create: {} },
+      },
+      select: PUBLIC_USER_SELECT,
+    }),
+  );
 };
 
 export const createAgent = async ({ firstName, lastName, email, phone, password }) => {
-  return prisma.user.create({
-    data: {
-      firstName,
-      lastName,
-      email,
-      phone,
-      password,
-      role: 'VENDOR',
-      authProvider: 'LOCAL',
-      // VendorProfile starts with kycStatus = PENDING; vendor submits KYC separately.
-      vendorProfile: { create: {} },
-    },
-    select: PUBLIC_USER_SELECT,
-  });
+  return createUserWithGeneratedId('VENDOR', ({ id }) =>
+    prisma.user.create({
+      data: {
+        id,
+        firstName,
+        lastName,
+        email,
+        phone,
+        password,
+        role: 'VENDOR',
+        authProvider: 'LOCAL',
+        // VendorProfile starts with kycStatus = PENDING; vendor submits KYC separately.
+        vendorProfile: { create: {} },
+      },
+      select: PUBLIC_USER_SELECT,
+    }),
+  );
 };
 
 export const createAdmin = async ({ firstName, lastName, email, phone, password }) => {
-  return prisma.user.create({
-    data: {
-      firstName,
-      lastName,
-      email,
-      phone,
-      password,
-      role: 'ADMIN',
-      authProvider: 'LOCAL',
-      // Admins are pre-verified by SuperAdmin — no OTP flow.
-      emailVerifiedAt: new Date(),
-    },
-    select: PUBLIC_USER_SELECT,
-  });
+  return createUserWithGeneratedId('ADMIN', ({ id }) =>
+    prisma.user.create({
+      data: {
+        id,
+        firstName,
+        lastName,
+        email,
+        phone,
+        password,
+        role: 'ADMIN',
+        authProvider: 'LOCAL',
+        // Admins are pre-verified by SuperAdmin — no OTP flow.
+        emailVerifiedAt: new Date(),
+      },
+      select: PUBLIC_USER_SELECT,
+    }),
+  );
 };
 
 // ---- Google OAuth creation ----
@@ -73,21 +83,24 @@ export const createCustomerViaGoogle = async ({
   googleId,
   avatarUrl,
 }) => {
-  return prisma.user.create({
-    data: {
-      firstName,
-      lastName,
-      email,
-      googleId,
-      avatarUrl,
-      role: 'CLIENT',
-      authProvider: 'GOOGLE',
-      // Google already verified the email — skip the OTP flow.
-      emailVerifiedAt: new Date(),
-      customerProfile: { create: {} },
-    },
-    select: PUBLIC_USER_SELECT,
-  });
+  return createUserWithGeneratedId('CLIENT', ({ id }) =>
+    prisma.user.create({
+      data: {
+        id,
+        firstName,
+        lastName,
+        email,
+        googleId,
+        avatarUrl,
+        role: 'CLIENT',
+        authProvider: 'GOOGLE',
+        // Google already verified the email — skip the OTP flow.
+        emailVerifiedAt: new Date(),
+        customerProfile: { create: {} },
+      },
+      select: PUBLIC_USER_SELECT,
+    }),
+  );
 };
 
 export const createAgentViaGoogle = async ({
@@ -97,21 +110,24 @@ export const createAgentViaGoogle = async ({
   googleId,
   avatarUrl,
 }) => {
-  return prisma.user.create({
-    data: {
-      firstName,
-      lastName,
-      email,
-      googleId,
-      avatarUrl,
-      role: 'VENDOR',
-      authProvider: 'GOOGLE',
-      emailVerifiedAt: new Date(),
-      // KYC still required — vendorProfile.kycStatus defaults to PENDING.
-      vendorProfile: { create: {} },
-    },
-    select: PUBLIC_USER_SELECT,
-  });
+  return createUserWithGeneratedId('VENDOR', ({ id }) =>
+    prisma.user.create({
+      data: {
+        id,
+        firstName,
+        lastName,
+        email,
+        googleId,
+        avatarUrl,
+        role: 'VENDOR',
+        authProvider: 'GOOGLE',
+        emailVerifiedAt: new Date(),
+        // KYC still required — vendorProfile.kycStatus defaults to PENDING.
+        vendorProfile: { create: {} },
+      },
+      select: PUBLIC_USER_SELECT,
+    }),
+  );
 };
 
 // ---- Lookups ----

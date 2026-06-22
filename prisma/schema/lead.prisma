@@ -38,5 +38,6 @@ model Lead {
   @@index([status])
   @@index([destination])
   @@index([createdAt])
+  @@index([email]) // fast auto-link of anonymous leads at customer registration
   @@map("leads")
 }

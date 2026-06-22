@@ -5,6 +5,14 @@ import {
   sendVendorRejectedNotice,
 } from '../mail/index.js';
 
+/**
+ * Strip the fat `thirdPartyResponse` JSONB blob before sending to clients.
+ * Vendors/admins don't need the raw Surepass payload (~5-10KB per doc). The
+ * summary fields stay (verified flag, provider, timestamp).
+ */
+const stripInternalDocFields = (documents) =>
+  (documents ?? []).map(({ thirdPartyResponse, ...rest }) => rest);
+
 export {
   verifyPan,
   verifyGstin,
@@ -16,7 +24,7 @@ export {
 const buildVendorKycView = (profile) => ({
   kycStatus: profile.kycStatus,
   kyc: profile.kyc ?? null,
-  documents: profile.documents ?? [],
+  documents: stripInternalDocFields(profile.documents),
   approval: buildApprovalSummary(profile.kycStatus),
 });
 
@@ -156,7 +164,13 @@ export const submitMyKyc = async ({ vendorUserId, payload }) => {
 };
 
 export const listKycForAdmin = async (query) => {
-  return kycRepo.listKycSubmissions(query);
+  const { items, total } = await kycRepo.listKycSubmissions(query);
+  // Strip the fat thirdPartyResponse from each item's documents.
+  const cleanItems = items.map((item) => ({
+    ...item,
+    documents: stripInternalDocFields(item.documents),
+  }));
+  return { items: cleanItems, total };
 };
 
 export const approveVendorKyc = async ({ vendorUserId, adminId }) => {
