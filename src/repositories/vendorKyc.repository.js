@@ -56,6 +56,15 @@ export const findVendorProfile = async (userId) => {
   });
 };
 
+// Lightweight lookup used by login / /auth/me to drive the frontend's
+// post-login redirect (KYC page vs dashboard).
+export const findVendorKycStatus = async (userId) => {
+  return prisma.vendorProfile.findUnique({
+    where: { userId },
+    select: { kycStatus: true },
+  });
+};
+
 /**
  * Fetch a single KYC document row by (vendorUserId, type). Used by the verify
  * services to check whether a document has already been verified before making

@@ -42,6 +42,18 @@ const envSchema = z
 
     CORS_ORIGIN: z.string().default('*'),
 
+    // ---- Frontend URL ----
+    // Base URL of the public Tripz frontend. Used inside transactional emails
+    // to build "Login Now" / "Resubmit" buttons that link the user back into
+    // the app. Override per environment via .env:
+    //   FRONTEND_URL=https://trip-z.in           # production
+    //   FRONTEND_URL=https://staging.trip-z.in   # staging
+    //   FRONTEND_URL=http://localhost:3000       # local frontend dev
+    FRONTEND_URL: z
+      .string()
+      .url('FRONTEND_URL must be a valid URL')
+      .default('http://localhost:3000'),
+
     // ---- Email / SMTP ----
     SMTP_HOST: z.string({ required_error: 'SMTP_HOST is required' }).min(1),
     SMTP_PORT: z.coerce.number().int().positive().default(587),

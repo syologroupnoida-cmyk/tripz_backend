@@ -6,7 +6,7 @@ export const submitLead = asyncHandler(async (req, res) => {
   // `req.user` will be set only if the public route is hit with a valid
   // bearer token (we don't require auth, but we link the lead if present).
   const customerUserId = req.user?.id ?? null;
-
+  console.log('this is userId', customerUserId)
   const data = await leadService.submitLead({
     payload: req.body,
     customerUserId,

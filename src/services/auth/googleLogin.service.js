@@ -2,11 +2,12 @@ import { ApiError } from '../../utils/ApiError.js';
 import { verifyGoogleIdToken } from '../../utils/googleAuth.js';
 import * as userRepo from '../../repositories/user.repository.js';
 import * as leadRepo from '../../repositories/lead.repository.js';
+import * as kycRepo from '../../repositories/vendorKyc.repository.js';
 import { SELF_SIGNUP_ROLES } from '../../validators/auth.validator.js';
 import { sanitizeUser, issueTokenPair } from './_helpers.js';
 
-const buildLoginResult = (user, isNewAccount) => ({
-  user: sanitizeUser(user),
+const buildLoginResult = (user, isNewAccount, vendorProfile) => ({
+  user: sanitizeUser(user, { vendorProfile }),
   isNewAccount,
 });
 
@@ -90,8 +91,11 @@ export const loginWithGoogle = async ({ token, role }) => {
 
   const tokens = await issueTokenPair(user);
 
+  const vendorProfile =
+    user.role === 'VENDOR' ? await kycRepo.findVendorKycStatus(user.id) : null;
+
   return {
-    ...buildLoginResult(user, isNewAccount),
+    ...buildLoginResult(user, isNewAccount, vendorProfile),
     accessToken: tokens.accessToken,
     refreshToken: tokens.refreshToken,
     refreshExpiresAt: tokens.refreshExpiresAt,

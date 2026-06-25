@@ -1,0 +1,861 @@
+{
+  "info": {
+    "name": "Tripz Backend API",
+    "description": "Hand-crafted collection for the Tripz B2B travel marketplace backend.\n\n## Quick Start\n\n1. Import this file and the matching environment file (`tripz-postman-environment.json`) into Postman.\n2. Select the **Tripz Local** environment from the top-right dropdown.\n3. **Edit the environment** — set `testVendorEmail`, `testVendorPassword`, `testOtp` etc. to YOUR real test values.\n4. Run **Auth > Login** — `accessToken` and `refreshToken` are auto-saved to the environment.\n5. All authed requests use `{{accessToken}}` via the collection-level Bearer auth.\n\n## Why request bodies use {{variables}}\n\nRequest bodies pull email/password/phone/otp from the ENVIRONMENT, not hardcoded in the collection. This way you can RE-IMPORT the collection any time you add a new endpoint, and YOUR test values stay safe in the environment.\n\n**Edit values in:** Environment tab → eye icon (👁) → CURRENT VALUE column.\n\n## Conventions\n\n- Collection-level Bearer auth attaches `Authorization: Bearer {{accessToken}}` to every authed request.\n- Path variables like `{{leadId}}`, `{{vendorId}}`, `{{assignmentId}}` are auto-saved by Tests scripts after the first successful list/create call.\n- The 3-step password reset flow auto-saves `resetToken` on the verify-OTP step.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "37937269-ebaacef3-76e1-4c9a-947e-7f0040449726"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      { "key": "token", "value": "{{accessToken}}", "type": "string" }
+    ]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:4000/api/v1", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "description": "Liveness + reachability checks. No auth required.",
+      "item": [
+        {
+          "name": "Health check",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] },
+            "description": "Returns `{ status: 'ok' }` if the service is up."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth — Public",
+      "description": "Endpoints that do NOT require an access token. Use these to register, log in, and reset passwords.",
+      "item": [
+        {
+          "name": "Register",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.user?.id) {",
+                  "  pm.environment.set('userId', res.data.user.id);",
+                  "  if (res.data.user.role === 'VENDOR') pm.environment.set('vendorId', res.data.user.id);",
+                  "  if (res.data.user.role === 'CLIENT') pm.environment.set('clientId', res.data.user.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Rahul\",\n  \"lastName\": \"Sharma\",\n  \"email\": \"{{testVendorEmail}}\",\n  \"phone\": \"{{testPhone}}\",\n  \"password\": \"{{testVendorPassword}}\",\n  \"role\": \"VENDOR\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth", "register"] },
+            "description": "Self-signup for CLIENT or VENDOR. ADMIN/SUPER_ADMIN can only be created by Super Admin via `/super-admin/admins`.\n\n**Body fields:**\n- `role` — `CLIENT` or `VENDOR`\n- `password` — min 8 chars, must contain upper, lower, digit, special\n- `phone` — 10 digits, unique\n\n**Side effect:** Sends an OTP to the email for verification."
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.accessToken) {",
+                  "  pm.environment.set('accessToken', res.data.accessToken);",
+                  "  pm.environment.set('refreshToken', res.data.refreshToken);",
+                  "  pm.environment.set('userId', res.data.user.id);",
+                  "  pm.environment.set('userRole', res.data.user.role);",
+                  "  if (res.data.user.role === 'VENDOR') pm.environment.set('vendorId', res.data.user.id);",
+                  "  if (res.data.user.role === 'CLIENT') pm.environment.set('clientId', res.data.user.id);",
+                  "  if (res.data.user.role === 'ADMIN' || res.data.user.role === 'SUPER_ADMIN') pm.environment.set('adminId', res.data.user.id);",
+                  "  console.log('Auto-saved tokens for', res.data.user.email, '(' + res.data.user.role + ')');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testVendorEmail}}\",\n  \"password\": \"{{testVendorPassword}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+            "description": "Email + password login. Auto-saves `accessToken`, `refreshToken`, `userId`, `userRole` to the environment via the Tests script.\n\n**Response for vendors:** includes `vendorProfile.kycStatus` and `vendorProfile.nextStep` so the frontend can decide where to redirect (KYC page vs dashboard).\n\n**Errors:**\n- 401 — wrong credentials\n- 403 `ACCOUNT_UNDER_REVIEW` — vendor with SUBMITTED KYC\n- 403 `EMAIL_NOT_VERIFIED` — email not verified yet (auto-resends OTP)"
+          }
+        },
+        {
+          "name": "Google Login",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"GOOGLE_ID_TOKEN_FROM_FRONTEND\",\n  \"role\": \"VENDOR\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/google/login", "host": ["{{baseUrl}}"], "path": ["auth", "google", "login"] },
+            "description": "Single entry point for Google sign-in. Handles 3 cases:\n1. Returning Google user → log in\n2. Existing email account → auto-link Google identity, log in\n3. Brand-new email → create + log in (requires `role`)\n\n`role` is required only for case 3; ignored otherwise."
+          }
+        },
+        {
+          "name": "Refresh tokens",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.accessToken) {",
+                  "  pm.environment.set('accessToken', res.data.accessToken);",
+                  "  pm.environment.set('refreshToken', res.data.refreshToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/refresh", "host": ["{{baseUrl}}"], "path": ["auth", "refresh"] },
+            "description": "Trade in your refresh token for a fresh access + refresh token pair (rotates the refresh token). Auto-saves both to the environment."
+          }
+        },
+        {
+          "name": "Verify Email (OTP)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testVendorEmail}}\",\n  \"otp\": \"{{testOtp}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/verify-email", "host": ["{{baseUrl}}"], "path": ["auth", "verify-email"] },
+            "description": "Consume the email-verification OTP sent on registration. Once verified, `emailVerifiedAt` is set and login becomes possible.\n\n**Body:** `{ email, otp }` — both required. OTP must be 4-10 digits."
+          }
+        },
+        {
+          "name": "Resend Email OTP",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testVendorEmail}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/resend-otp", "host": ["{{baseUrl}}"], "path": ["auth", "resend-otp"] },
+            "description": "Re-issue the email verification OTP (subject to the resend cooldown returned in `otp.resendCooldownSeconds`)."
+          }
+        },
+        {
+          "name": "Forgot Password (Step 1: send OTP)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testVendorEmail}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/password/forgot", "host": ["{{baseUrl}}"], "path": ["auth", "password", "forgot"] },
+            "description": "Anti-enumeration endpoint — always returns a generic success message whether the email exists or not. If the account exists, an OTP is emailed.\n\nResponse includes `otp` metadata: `{ ttlSeconds, resendCooldownSeconds, maxAttempts, sentAt, expiresAt }` so the UI can render a countdown."
+          }
+        },
+        {
+          "name": "Forgot Password (Step 2: verify OTP)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.resetToken) {",
+                  "  pm.environment.set('resetToken', res.data.resetToken);",
+                  "  console.log('Saved resetToken — valid for 10 minutes.');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testVendorEmail}}\",\n  \"otp\": \"{{testOtp}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/password/verify-otp", "host": ["{{baseUrl}}"], "path": ["auth", "password", "verify-otp"] },
+            "description": "Validates the OTP and returns a short-lived `resetToken` (JWT, ~10 min TTL). Does NOT consume the OTP — that happens in Step 3.\n\n**Body:** `{ email, otp }` — both required.\n\nThe Tests script auto-saves the token to `{{resetToken}}`."
+          }
+        },
+        {
+          "name": "Forgot Password (Step 3: reset)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"resetToken\": \"{{resetToken}}\",\n  \"newPassword\": \"NewPass@2024\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/password/reset", "host": ["{{baseUrl}}"], "path": ["auth", "password", "reset"] },
+            "description": "Final step. Validates the reset token, consumes the underlying OTP, and updates the password. All existing refresh tokens for this user are revoked.\n\nAfter this succeeds, the user must log in again with the new password."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth — Authenticated",
+      "description": "Requires a valid `accessToken`. Inherits Bearer auth from collection root.",
+      "item": [
+        {
+          "name": "Get current user (/me)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/auth/me", "host": ["{{baseUrl}}"], "path": ["auth", "me"] },
+            "description": "Returns the logged-in user's profile. For vendors, includes `vendorProfile.kycStatus` + `vendorProfile.nextStep` (mirror of the login response) so the frontend can redirect after a page refresh."
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/logout", "host": ["{{baseUrl}}"], "path": ["auth", "logout"] },
+            "description": "Revokes the supplied refresh token. The access token continues to work until it expires (~15 min) — frontend should clear it from storage."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Leads — Public (anonymous form)",
+      "description": "The travel inquiry form. Works with OR without auth: if a bearer token is present, the lead is linked to that customer; otherwise it's anonymous and auto-linked at registration via email match.",
+      "item": [
+        {
+          "name": "Submit lead (anonymous OR logged-in)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lead\": {\n    \"destination\": \"Goa\",\n    \"email\": \"{{testClientEmail}}\",\n    \"phone\": \"{{testPhone}}\",\n    \"budget\": 75000,\n    \"departureCity\": \"Delhi\",\n    \"travelDate\": \"2026-12-15\",\n    \"duration\": \"5 Days\",\n    \"adults\": \"2\",\n    \"children\": \"1\",\n    \"infants\": \"0\",\n    \"hotelCategory\": \"4-star\",\n    \"flightRequired\": \"YES\",\n    \"cabRequired\": \"YES\",\n    \"packageType\": \"family\",\n    \"preferredCallTime\": \"evening\",\n    \"whatsappUpdates\": true,\n    \"tourType\": \"family\",\n    \"bookingTimeline\": \"within 1 month\"\n  }\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/leads", "host": ["{{baseUrl}}"], "path": ["leads"] },
+            "description": "Submits a travel inquiry. Lead is created with `status: PENDING_REVIEW`, `priceInCredits: 10`, `maxUnlocks: 3` (defaults).\n\n**Body shape:** `{ lead: { ...flat fields... } }` — the wizard fields are FLAT inside `lead`, NOT nested in a `requirements` sub-object. Backend extracts `destination/email/phone/budget` to top-level columns and bundles everything else into the `requirements` JSONB column.\n\n**Auth behaviour (optional):** if a bearer token is sent and valid → `customerUserId` = user id. If missing or invalid → anonymous lead. The lead is later auto-linked when a customer registers with the same email.\n\n**Type coercion:**\n- `adults/children/infants` — accepts `\"2\"` or `2` (string or int)\n- `flightRequired/cabRequired/otherDestinations` — accepts `\"YES\"`/`\"NO\"`/boolean\n- `budget` — empty string → null"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Uploads",
+      "description": "Cloudinary-backed image upload. Used for vendor company logo, KYC document images, etc.",
+      "item": [
+        {
+          "name": "Upload image",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": [], "description": "Image file (JPG/PNG/WEBP, max 5 MB)" },
+                { "key": "purpose", "value": "company-logo", "type": "text", "description": "REQUIRED enum: kyc-pan | kyc-aadhaar | kyc-gst | kyc-cin | company-logo | avatar | favicon_icon | header_logo | other" },
+                { "key": "name", "value": "", "type": "text", "disabled": true, "description": "Optional logical slot name (e.g. 'pan-card'). Only letters/numbers/dash/underscore. Allows overwriting on re-upload." }
+              ]
+            },
+            "url": { "raw": "{{baseUrl}}/uploads/image", "host": ["{{baseUrl}}"], "path": ["uploads", "image"] },
+            "description": "Returns `{ url, publicId, width, height }`. Use the returned `url` in subsequent KYC submit / profile edit requests.\n\n**Form fields:**\n- `file` — image (JPG/PNG/WEBP, ≤ 5MB)\n- `purpose` — REQUIRED enum (see above)\n- `name` — optional logical slot name; same name re-uploaded → overwrites previous file"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Vendor — KYC",
+      "description": "Vendor's own KYC wizard. Requires VENDOR role. The wizard is incremental — each verify endpoint stores the verified doc, and the final `POST /vendor/kyc` submits the wizard.",
+      "item": [
+        {
+          "name": "Get KYC status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/vendor/kyc", "host": ["{{baseUrl}}"], "path": ["vendor", "kyc"] },
+            "description": "Full KYC payload — profile, kycStatus, verified documents, admin review info if any."
+          }
+        },
+        {
+          "name": "Verify PAN (Surepass)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"number\": \"ABCDE1234F\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/vendor/kyc/verify/pan", "host": ["{{baseUrl}}"], "path": ["vendor", "kyc", "verify", "pan"] },
+            "description": "Calls Surepass PAN verification + saves the verified document. Idempotent — won't recharge the API if the PAN is already verified for this vendor.\n\n**Body:** `{ number }` — the 10-character PAN. Auto-uppercased server-side."
+          }
+        },
+        {
+          "name": "Verify GSTIN (format only)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"number\": \"29ABCDE1234F1Z5\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/vendor/kyc/verify/gstin", "host": ["{{baseUrl}}"], "path": ["vendor", "kyc", "verify", "gstin"] },
+            "description": "Validates the GSTIN format (saves Surepass credits — no third-party call). Stores the document with `isVerified: true` once format passes.\n\n**Body:** `{ number }` — the 15-character GSTIN."
+          }
+        },
+        {
+          "name": "Verify CIN (format only)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"number\": \"U72200KA2010PTC053791\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/vendor/kyc/verify/cin", "host": ["{{baseUrl}}"], "path": ["vendor", "kyc", "verify", "cin"] },
+            "description": "Validates the CIN format. Same idea as GSTIN — saves third-party credits.\n\n**Body:** `{ number }` — the 21-character CIN."
+          }
+        },
+        {
+          "name": "Aadhaar Step 1 — DigiLocker init",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"number\": \"123412341234\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/vendor/kyc/verify/aadhaar/initiate", "host": ["{{baseUrl}}"], "path": ["vendor", "kyc", "verify", "aadhaar", "initiate"] },
+            "description": "Returns a DigiLocker OAuth URL + `sessionId` (parked Surepass client_id). Open the URL in a browser, complete Aadhaar OAuth at DigiLocker. Save the `sessionId` to the env as `{{digilockerSessionId}}` for Step 2.\n\n**Body:** `{ number }` — the 12-digit Aadhaar number."
+          }
+        },
+        {
+          "name": "Aadhaar Step 2 — Complete + fetch",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sessionId\": \"{{digilockerSessionId}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/vendor/kyc/verify/aadhaar/complete", "host": ["{{baseUrl}}"], "path": ["vendor", "kyc", "verify", "aadhaar", "complete"] },
+            "description": "Fetches the verified Aadhaar data from DigiLocker via the parked Surepass session. Idempotent — won't refetch if Aadhaar is already verified for this vendor.\n\n**Body:** `{ sessionId }` — the value returned from Step 1 (initiate)."
+          }
+        },
+        {
+          "name": "Submit KYC wizard (final step)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"companyName\": \"Acme Travel Pvt Ltd\",\n  \"businessName\": \"Acme Trips\",\n  \"companyType\": \"PVT_LTD\",\n  \"companySince\": 5,\n  \"teamSize\": 12,\n  \"companyLogo\": \"https://res.cloudinary.com/your-upload-url.jpg\",\n  \"country\": \"India\",\n  \"officeAddress\": \"123, MG Road\",\n  \"officeCity\": \"Bangalore\",\n  \"officeState\": \"Karnataka\",\n  \"services\": [\"PACKAGES\", \"FLIGHTS\", \"HOTELS\"],\n  \"destinations\": [\"Goa\", \"Kerala\", \"Bali\"],\n  \"dailyLeadRequirement\": 10,\n  \"profileUrl\": \"https://acmetrips.com\",\n  \"facebookUrl\": \"https://facebook.com/acmetrips\",\n  \"instagramUrl\": \"https://instagram.com/acmetrips\",\n  \"referralSource\": \"GOOGLE\",\n  \"otherSource\": \"\",\n  \"marketplaceWorked\": \"YES\",\n  \"agreeTerms\": true,\n  \"declareTrue\": true\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/vendor/kyc", "host": ["{{baseUrl}}"], "path": ["vendor", "kyc"] },
+            "description": "Persists company-level fields and flips `kycStatus → SUBMITTED`.\n\n**Side effects:** `User.isActive = false`, all refresh tokens revoked, vendor appears in admin review queue.\n\n**Pre-req:** PAN must be third-party verified. Returns 422 if not.\n\n**Field reference:**\n- `companyType` — one of: `PROPRIETORSHIP`, `PARTNERSHIP`, `LLP`, `PVT_LTD`, `PUBLIC_LTD`, `OTHER` (aliases accepted: `'PRIVATE LIMITED'`, `'PVT LTD'`, etc.)\n- `companySince` — years in business (integer)\n- `companyLogo` — Cloudinary URL (use `/uploads/image` first)\n- `profileUrl` — your website URL\n- `referralSource` — `REFERENCE`, `GOOGLE`, `SOCIAL_MEDIA`, `ADVERTISEMENT`, `OTHER`\n- `marketplaceWorked` — `\"YES\"` / `\"NO\"` / boolean\n- `agreeTerms` & `declareTrue` — booleans (legal declaration)"
+          }
+        },
+        {
+          "name": "Vendor ping",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/vendor/ping", "host": ["{{baseUrl}}"], "path": ["vendor", "ping"] },
+            "description": "Reachability check (VENDOR only)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Vendor — Wallet",
+      "description": "Vendor's wallet view. Balance + transaction ledger.",
+      "item": [
+        {
+          "name": "Get my wallet (balance + recent txns)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/vendor/wallet", "host": ["{{baseUrl}}"], "path": ["vendor", "wallet"] },
+            "description": "Returns `{ balanceCredits, recentTransactions: [...] }` — last 10 transactions for the dashboard widget. Lazy-creates the wallet row if missing (balance = 0)."
+          }
+        },
+        {
+          "name": "List my transactions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/vendor/wallet/transactions?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["vendor", "wallet", "transactions"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "type", "value": "DEBIT_LEAD_UNLOCK", "disabled": true, "description": "Optional filter: DEBIT_LEAD_UNLOCK | CREDIT_TOP_UP | CREDIT_REFUND | CREDIT_ADMIN_ADJUSTMENT | DEBIT_ADMIN_ADJUSTMENT" }
+              ]
+            },
+            "description": "Full paginated transaction ledger. Optional `type` filter for one specific transaction type."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Vendor — My Unlocks",
+      "description": "Vendor's purchase history — leads they have unlocked.",
+      "item": [
+        {
+          "name": "List my unlocked leads",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/vendor/leads/unlocked?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["vendor", "leads", "unlocked"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            },
+            "description": "Paginated list of leads the vendor has unlocked. Newest first. Each item includes the full unmasked lead (vendor paid for it)."
+          }
+        },
+        {
+          "name": "Get single unlocked lead",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/vendor/leads/unlocked/{{assignmentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["vendor", "leads", "unlocked", "{{assignmentId}}"]
+            },
+            "description": "Re-view a previously unlocked lead. Returns 404 if the assignment doesn't exist OR belongs to a different vendor (scoped lookup)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Marketplace",
+      "description": "Vendor's marketplace — browse ACTIVE leads, unlock with credits. Requires APPROVED KYC.",
+      "item": [
+        {
+          "name": "Browse active leads",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/marketplace/leads?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["marketplace", "leads"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "destination", "value": "goa", "disabled": true, "description": "Case-insensitive contains" },
+                { "key": "sortBy", "value": "createdAt", "disabled": true },
+                { "key": "order", "value": "desc", "disabled": true }
+              ]
+            },
+            "description": "Lists ACTIVE leads only. Email/phone are masked (`r***@gmail.com`, `98****1332`) until vendor unlocks. Each item includes `isUnlocked: boolean`."
+          }
+        },
+        {
+          "name": "Unlock a lead (pay credits)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.assignmentId) pm.environment.set('assignmentId', res.data.assignmentId);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": {
+              "raw": "{{baseUrl}}/marketplace/leads/{{leadId}}/unlock",
+              "host": ["{{baseUrl}}"],
+              "path": ["marketplace", "leads", "{{leadId}}", "unlock"]
+            },
+            "description": "Atomic transaction:\n1. Verifies lead is ACTIVE\n2. CAS-reserves an unlock slot\n3. CAS-debits the wallet\n4. Writes a DEBIT_LEAD_UNLOCK ledger row\n5. Creates LeadAssignment\n6. Marks lead EXHAUSTED if last slot consumed\n\n**Errors:**\n- 402 `INSUFFICIENT_CREDITS`\n- 409 `ALREADY_UNLOCKED` / `LEAD_EXHAUSTED` / `LEAD_NOT_ACTIVE`\n\nAuto-saves `assignmentId` to env."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin — Vendors",
+      "description": "Admin/Super Admin view of vendor accounts.",
+      "item": [
+        {
+          "name": "List vendors",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/vendors?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "vendors"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "kycStatus", "value": "APPROVED", "disabled": true },
+                { "key": "isActive", "value": "true", "disabled": true },
+                { "key": "search", "value": "acme", "disabled": true }
+              ]
+            },
+            "description": "Paginated list of all vendors with summary info (name, email, KYC status, wallet balance, isActive)."
+          }
+        },
+        {
+          "name": "Get vendor detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/vendors/{{vendorId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "vendors", "{{vendorId}}"]
+            },
+            "description": "Full vendor detail: profile, KYC, documents, wallet, recent transactions."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin — Vendor KYC",
+      "description": "Review queue for KYC submissions. Approve to activate vendor, reject to send them back with a reason.",
+      "item": [
+        {
+          "name": "List vendor KYC queue",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/vendor-kyc?status=SUBMITTED&page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "vendor-kyc"],
+              "query": [
+                { "key": "status", "value": "SUBMITTED", "description": "PENDING | SUBMITTED | APPROVED | REJECTED" },
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            },
+            "description": "Use `status=SUBMITTED` to get the review queue."
+          }
+        },
+        {
+          "name": "Approve vendor KYC",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": {
+              "raw": "{{baseUrl}}/admin/vendor-kyc/{{vendorId}}/approve",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "vendor-kyc", "{{vendorId}}", "approve"]
+            },
+            "description": "Sets `kycStatus = APPROVED`, `isActive = true`. Vendor can now log in + use marketplace."
+          }
+        },
+        {
+          "name": "Reject vendor KYC",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Aadhaar address does not match office address. Please resubmit with a recent utility bill.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/vendor-kyc/{{vendorId}}/reject",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "vendor-kyc", "{{vendorId}}", "reject"]
+            },
+            "description": "Sets `kycStatus = REJECTED`, `isActive = true` (so vendor can log in to see the reason + resubmit). `reason` is required (min 5 chars)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin — Leads",
+      "description": "The lead approval workflow. Review queue, approve/reject/close (single endpoint), and re-pricing.",
+      "item": [
+        {
+          "name": "List leads (with all filters)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/leads?status=PENDING_REVIEW&page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "leads"],
+              "query": [
+                { "key": "status", "value": "PENDING_REVIEW", "description": "PENDING_REVIEW | ACTIVE | EXHAUSTED | EXPIRED | REJECTED | CLOSED" },
+                { "key": "destination", "value": "goa", "disabled": true, "description": "Case-insensitive contains" },
+                { "key": "search", "value": "rahul", "disabled": true, "description": "Matches email/phone/destination" },
+                { "key": "priceMin", "value": "10", "disabled": true },
+                { "key": "priceMax", "value": "50", "disabled": true },
+                { "key": "maxUnlocks", "value": "5", "disabled": true },
+                { "key": "unlockCountMin", "value": "0", "disabled": true },
+                { "key": "unlockCountMax", "value": "0", "disabled": true, "description": "Set to 0 to find leads nobody has bought" },
+                { "key": "budgetMin", "value": "50000", "disabled": true },
+                { "key": "budgetMax", "value": "200000", "disabled": true },
+                { "key": "createdFrom", "value": "2026-06-01", "disabled": true, "description": "ISO date" },
+                { "key": "createdTo", "value": "2026-06-30", "disabled": true },
+                { "key": "reviewedFrom", "value": "2026-06-15", "disabled": true },
+                { "key": "reviewedTo", "value": "2026-06-30", "disabled": true },
+                { "key": "sortBy", "value": "createdAt", "description": "createdAt | updatedAt | reviewedAt | priceInCredits | unlockCount | budget" },
+                { "key": "order", "value": "desc", "description": "asc | desc" },
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            },
+            "description": "Most filters are disabled by default — enable from Postman's query params panel as needed. Pagination supports BOTH `page+size` and `take+skip` styles."
+          }
+        },
+        {
+          "name": "Get lead detail (with vendor unlocks)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.id) pm.environment.set('leadId', res.data.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/leads/{{leadId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "leads", "{{leadId}}"]
+            },
+            "description": "Returns the full lead + customer info + array of all vendors who have unlocked it (with price paid + timestamp)."
+          }
+        },
+        {
+          "name": "Approve / Reject / Close lead",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ACTIVE\",\n  \"priceInCredits\": 25,\n  \"maxUnlocks\": 5\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/leads/{{leadId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "leads", "{{leadId}}", "status"]
+            },
+            "description": "Single endpoint for all 3 state transitions:\n\n- `{ \"status\": \"ACTIVE\" }` — approve (PENDING_REVIEW → ACTIVE)\n- `{ \"status\": \"ACTIVE\", \"priceInCredits\": 25, \"maxUnlocks\": 5 }` — approve with custom pricing\n- `{ \"status\": \"REJECTED\", \"reason\": \"duplicate inquiry\" }` — reject (reason required, min 5 chars)\n- `{ \"status\": \"CLOSED\", \"reason\": \"customer cancelled\" }` — close (ACTIVE → CLOSED, reason optional)\n\nReturns 409 INVALID_STATE_TRANSITION if the lead isn't in the expected starting state."
+          }
+        },
+        {
+          "name": "Re-price a lead",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"priceInCredits\": 15\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/leads/{{leadId}}/pricing",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "leads", "{{leadId}}", "pricing"]
+            },
+            "description": "Adjust `priceInCredits` and/or `maxUnlocks` on an existing lead. At least one field required.\n\n**Guards (409 on failure):**\n- Lead must be PENDING_REVIEW or ACTIVE\n- `unlockCount` must be 0 (price locks once first vendor unlocks)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin — Misc",
+      "description": "Misc admin endpoints.",
+      "item": [
+        {
+          "name": "Admin ping",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/admin/ping", "host": ["{{baseUrl}}"], "path": ["admin", "ping"] },
+            "description": "Reachability check (ADMIN/SUPER_ADMIN only)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Super Admin",
+      "description": "Super-admin-only endpoints.",
+      "item": [
+        {
+          "name": "Super Admin ping",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/super-admin/ping", "host": ["{{baseUrl}}"], "path": ["super-admin", "ping"] },
+            "description": "Reachability check (SUPER_ADMIN only)."
+          }
+        },
+        {
+          "name": "Create Admin user",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Priya\",\n  \"lastName\": \"Verma\",\n  \"email\": \"{{testAdminEmail}}\",\n  \"phone\": \"{{testPhone}}\",\n  \"password\": \"{{testAdminPassword}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/super-admin/admins", "host": ["{{baseUrl}}"], "path": ["super-admin", "admins"] },
+            "description": "Creates an ADMIN account. Only SUPER_ADMIN can call this — `/auth/register` blocks ADMIN role for safety."
+          }
+        },
+        {
+          "name": "Activate vendor",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": {
+              "raw": "{{baseUrl}}/super-admin/vendors/{{vendorId}}/activate",
+              "host": ["{{baseUrl}}"],
+              "path": ["super-admin", "vendors", "{{vendorId}}", "activate"]
+            },
+            "description": "Manually flip `isActive = true`. Useful for un-banning."
+          }
+        },
+        {
+          "name": "Deactivate vendor",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Repeated TOS violations.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/super-admin/vendors/{{vendorId}}/deactivate",
+              "host": ["{{baseUrl}}"],
+              "path": ["super-admin", "vendors", "{{vendorId}}", "deactivate"]
+            },
+            "description": "Sets `isActive = false` and revokes all refresh tokens. Vendor cannot log in until reactivated."
+          }
+        },
+        {
+          "name": "Grant credits",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 100,\n  \"notes\": \"Welcome bonus on KYC approval\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/super-admin/vendors/{{vendorId}}/credits/grant",
+              "host": ["{{baseUrl}}"],
+              "path": ["super-admin", "vendors", "{{vendorId}}", "credits", "grant"]
+            },
+            "description": "Adds credits to the vendor's wallet and writes a CREDIT_ADMIN_GRANT ledger row. `amount` 1–100000."
+          }
+        },
+        {
+          "name": "Revoke credits",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 20,\n  \"notes\": \"Refund clawback for fraudulent lead unlock\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/super-admin/vendors/{{vendorId}}/credits/revoke",
+              "host": ["{{baseUrl}}"],
+              "path": ["super-admin", "vendors", "{{vendorId}}", "credits", "revoke"]
+            },
+            "description": "Subtracts credits and writes a DEBIT_ADMIN_REVOKE ledger row. Fails if balance would go negative. `notes` is required."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Client",
+      "description": "Customer (CLIENT role) endpoints — view own leads.",
+      "item": [
+        {
+          "name": "Client ping",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/client/ping", "host": ["{{baseUrl}}"], "path": ["client", "ping"] },
+            "description": "Reachability check (CLIENT only)."
+          }
+        },
+        {
+          "name": "My leads (customer's own inquiries)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/client/leads?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["client", "leads"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "status", "value": "ACTIVE", "disabled": true }
+              ]
+            },
+            "description": "Returns leads where `customerUserId` matches the logged-in client. Includes leads auto-linked at registration via email match."
+          }
+        }
+      ]
+    }
+  ]
+}

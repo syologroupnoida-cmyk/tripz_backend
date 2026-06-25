@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Tripz Backend API",
-    "version": "1.3.0",
+    "version": "1.4.0",
     "description": "Multi-panel travel-marketplace backend exposing Super Admin, Admin, Vendor, Client, and Marketplace surfaces.\n\n**Response envelope** — every endpoint returns:\n- Success: `{ success: true, message: string, data: object | null }`\n- Error: `{ success: false, message: string, errors: object | array | null }`\n\n**Auth** — all authenticated endpoints expect a JWT access token via `Authorization: Bearer <token>`. Refresh tokens are delivered as an httpOnly cookie (web) and also in the JSON body (mobile / API clients).\n\n**Account states** — vendors who submit KYC are immediately deactivated (`isActive=false`) and only re-activated when an admin approves/rejects the KYC. Login & refresh return `code: ACCOUNT_UNDER_REVIEW` while pending.\n\n**Role values** — `CLIENT` (customer), `VENDOR` (agent), `ADMIN`, `SUPER_ADMIN`. The public signup endpoints accept only `CLIENT` and `VENDOR`.\n\n**Password reset** uses a 3-step token-based wizard: forgot → verify-otp (returns short-lived JWT) → reset (uses JWT, no OTP retype)."
   },
   "servers": [
@@ -20,8 +20,11 @@
     { "name": "Admin", "description": "Endpoints available to SUPER_ADMIN and ADMIN roles" },
     { "name": "Admin - Vendors", "description": "Vendor list + detail browsing (ADMIN+SUPER_ADMIN)" },
     { "name": "Admin - Vendor KYC", "description": "KYC review queue + approval / rejection (ADMIN+SUPER_ADMIN)" },
+    { "name": "Admin - Leads", "description": "Lead review queue + approve / reject / close (ADMIN+SUPER_ADMIN)" },
     { "name": "Vendor", "description": "Endpoints restricted to VENDOR role" },
     { "name": "Vendor KYC", "description": "Vendor-side KYC submission and per-document verification" },
+    { "name": "Vendor - Wallet", "description": "Vendor's own wallet view (balance + transaction history)" },
+    { "name": "Vendor - My Unlocks", "description": "Vendor's own purchase history — leads they have unlocked" },
     { "name": "Client", "description": "Endpoints restricted to CLIENT role" },
     { "name": "Client - Leads", "description": "Customer's own inquiries — auto-linked from anonymous submissions when they sign up with the same email" },
     { "name": "Marketplace", "description": "Vendor-facing leads marketplace (browse + unlock via credit wallet)" }
@@ -807,6 +810,248 @@
         }
       }
     },
+    "/api/v1/admin/leads": {
+      "get": {
+        "tags": ["Admin - Leads"],
+        "summary": "List leads with filters + pagination",
+        "description": "Paginated review queue of all leads. Filter by status to see PENDING_REVIEW (awaiting approval), ACTIVE (live), REJECTED, CLOSED, EXHAUSTED, or EXPIRED.\n\nSupports both `page+size` and `take+skip` pagination styles.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "status", "in": "query", "schema": { "$ref": "#/components/schemas/LeadStatus" }, "description": "Filter by lifecycle status" },
+          { "name": "destination", "in": "query", "schema": { "type": "string", "maxLength": 120 }, "description": "Destination case-insensitive contains" },
+          { "name": "search", "in": "query", "schema": { "type": "string", "maxLength": 100 }, "description": "Matches email / phone / destination (case-insensitive)" },
+          { "name": "priceMin", "in": "query", "schema": { "type": "integer", "minimum": 0, "maximum": 1000 }, "description": "Lower bound for priceInCredits" },
+          { "name": "priceMax", "in": "query", "schema": { "type": "integer", "minimum": 0, "maximum": 1000 }, "description": "Upper bound for priceInCredits" },
+          { "name": "maxUnlocks", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 20 }, "description": "Exact maxUnlocks value" },
+          { "name": "unlockCountMin", "in": "query", "schema": { "type": "integer", "minimum": 0 }, "description": "Lower bound for unlockCount (use 1 for 'has at least one unlock')" },
+          { "name": "unlockCountMax", "in": "query", "schema": { "type": "integer", "minimum": 0 }, "description": "Upper bound for unlockCount (use 0 for 'no unlocks yet')" },
+          { "name": "budgetMin", "in": "query", "schema": { "type": "integer", "minimum": 0 }, "description": "Lower bound for customer budget (INR)" },
+          { "name": "budgetMax", "in": "query", "schema": { "type": "integer", "minimum": 0 }, "description": "Upper bound for customer budget (INR)" },
+          { "name": "createdFrom", "in": "query", "schema": { "type": "string", "format": "date-time" }, "description": "ISO-8601 date or date-time, inclusive lower bound on createdAt" },
+          { "name": "createdTo", "in": "query", "schema": { "type": "string", "format": "date-time" }, "description": "ISO-8601 date or date-time, inclusive upper bound on createdAt" },
+          { "name": "reviewedFrom", "in": "query", "schema": { "type": "string", "format": "date-time" }, "description": "ISO-8601 inclusive lower bound on reviewedAt" },
+          { "name": "reviewedTo", "in": "query", "schema": { "type": "string", "format": "date-time" }, "description": "ISO-8601 inclusive upper bound on reviewedAt" },
+          { "name": "sortBy", "in": "query", "schema": { "type": "string", "enum": ["createdAt", "updatedAt", "reviewedAt", "priceInCredits", "unlockCount", "budget"], "default": "createdAt" } },
+          { "name": "order", "in": "query", "schema": { "type": "string", "enum": ["asc", "desc"], "default": "desc" } },
+          { "name": "take", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } },
+          { "name": "skip", "in": "query", "schema": { "type": "integer", "minimum": 0, "default": 0 } },
+          { "name": "page", "in": "query", "schema": { "type": "integer", "minimum": 0 }, "description": "Page-based pagination alternative (0-indexed). Takes priority over take/skip if provided." },
+          { "name": "size", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100 }, "description": "Page-based pagination alternative" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Leads retrieved",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "Leads retrieved.",
+                  "data": {
+                    "items": [
+                      {
+                        "id": "lead-uuid-1",
+                        "destination": "Vietnam",
+                        "email": "traveler@example.com",
+                        "phone": "9027441332",
+                        "budget": null,
+                        "status": "PENDING_REVIEW",
+                        "priceInCredits": 10,
+                        "maxUnlocks": 3,
+                        "unlockCount": 0,
+                        "reviewedAt": null,
+                        "reviewedByAdminId": null,
+                        "rejectionReason": null,
+                        "createdAt": "2026-06-12T10:30:00Z",
+                        "customerUserId": "CLIENT-273728"
+                      }
+                    ],
+                    "total": 47,
+                    "take": 20,
+                    "skip": 0
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/api/v1/admin/leads/{id}": {
+      "get": {
+        "tags": ["Admin - Leads"],
+        "summary": "Get full lead detail with customer + unlocks",
+        "description": "Returns the full lead, the customer who submitted it (if registered), and all vendors who have unlocked it. Use this for the admin review page.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lead detail",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "Lead retrieved.",
+                  "data": {
+                    "id": "lead-uuid-1",
+                    "destination": "Vietnam",
+                    "email": "traveler@example.com",
+                    "phone": "9027441332",
+                    "budget": null,
+                    "requirements": { "departureCity": "Delhi", "duration": "6 Days", "adults": "2" },
+                    "status": "ACTIVE",
+                    "priceInCredits": 10,
+                    "maxUnlocks": 3,
+                    "unlockCount": 1,
+                    "createdAt": "2026-06-12T10:30:00Z",
+                    "customer": { "id": "CLIENT-273728", "firstName": "Mohit", "lastName": "Kumar", "email": "mohit@example.com" },
+                    "assignments": [
+                      { "id": "assignment-uuid", "vendorUserId": "VEND-849201", "priceInCreditsPaid": 10, "unlockedAt": "...", "vendor": { "user": { "id": "VEND-849201", "firstName": "Rohit", "email": "rohit@acme.com" } } }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "description": "Lead not found" }
+        }
+      }
+    },
+    "/api/v1/admin/leads/{id}/status": {
+      "patch": {
+        "tags": ["Admin - Leads"],
+        "summary": "Approve / reject / close a lead",
+        "description": "Single endpoint handling all three state transitions:\n\n- `status: ACTIVE` — approves (PENDING_REVIEW → ACTIVE). Lead becomes visible in marketplace. No reason required. **May optionally include `priceInCredits` and/or `maxUnlocks` to override defaults at approval time.**\n- `status: REJECTED` — rejects (PENDING_REVIEW → REJECTED). **Reason required** (min 5 chars).\n- `status: CLOSED` — closes (ACTIVE → CLOSED). Reason optional.\n\nUses CAS-style state transitions internally — fails with `INVALID_STATE_TRANSITION` if the lead isn't in the expected starting state.\n\nPricing fields are rejected by the schema if sent with REJECTED or CLOSED.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdateLeadStatusRequest" },
+              "examples": {
+                "Approve (defaults)": { "value": { "status": "ACTIVE" } },
+                "Approve with custom pricing": { "value": { "status": "ACTIVE", "priceInCredits": 25, "maxUnlocks": 5 } },
+                "Reject": { "value": { "status": "REJECTED", "reason": "Duplicate inquiry from same number" } },
+                "Close":  { "value": { "status": "CLOSED", "reason": "Customer cancelled travel" } }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Lead status updated",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "Approved": { "value": { "success": true, "message": "Lead approved. Now visible in the marketplace.", "data": { "lead": { "id": "lead-uuid", "status": "ACTIVE" } } } },
+                  "Rejected": { "value": { "success": true, "message": "Lead rejected.", "data": { "lead": { "id": "lead-uuid", "status": "REJECTED", "rejectionReason": "Duplicate inquiry from same number" } } } },
+                  "Closed":   { "value": { "success": true, "message": "Lead closed. Removed from the marketplace.", "data": { "lead": { "id": "lead-uuid", "status": "CLOSED" } } } }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "description": "Lead not found" },
+          "409": {
+            "description": "Invalid state transition",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": false,
+                  "message": "Cannot approve lead from status ACTIVE. Lead must be PENDING_REVIEW.",
+                  "errors": { "code": "INVALID_STATE_TRANSITION", "currentStatus": "ACTIVE" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/leads/{id}/pricing": {
+      "patch": {
+        "tags": ["Admin - Leads"],
+        "summary": "Update lead pricing (price / max unlocks)",
+        "description": "Adjust `priceInCredits` and/or `maxUnlocks` on an already-existing lead. Use this when you need to re-price a stale lead that isn't selling, or bump the unlock cap.\n\n**Guards (returns 409 on failure):**\n- Lead must be in `PENDING_REVIEW` or `ACTIVE` state.\n- `unlockCount` must be 0 — pricing locks the moment the first vendor unlocks, so all buyers paid the same price.\n\nAt least one of `priceInCredits` / `maxUnlocks` must be provided.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdateLeadPricingRequest" },
+              "examples": {
+                "Drop price only":  { "value": { "priceInCredits": 5 } },
+                "Bump max unlocks": { "value": { "maxUnlocks": 8 } },
+                "Both at once":     { "value": { "priceInCredits": 15, "maxUnlocks": 5 } }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Lead pricing updated",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "Lead pricing updated.",
+                  "data": {
+                    "lead": {
+                      "id": "lead-uuid",
+                      "destination": "Goa",
+                      "status": "ACTIVE",
+                      "priceInCredits": 15,
+                      "maxUnlocks": 5,
+                      "unlockCount": 0
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "description": "Lead not found" },
+          "409": {
+            "description": "Pricing locked or invalid lead state",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "Pricing locked (vendor already bought)": {
+                    "value": {
+                      "success": false,
+                      "message": "Pricing is locked: 2 vendor(s) have already unlocked this lead.",
+                      "errors": { "code": "PRICING_LOCKED", "currentUnlockCount": 2 }
+                    }
+                  },
+                  "Invalid state": {
+                    "value": {
+                      "success": false,
+                      "message": "Cannot update pricing on a CLOSED lead. Lead must be PENDING_REVIEW or ACTIVE.",
+                      "errors": { "code": "INVALID_STATE_FOR_PRICING", "currentStatus": "CLOSED" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/vendor/ping": {
       "get": {
         "tags": ["Vendor"],
@@ -980,6 +1225,151 @@
           "400": { "description": "Missing or invalid sessionId, or no pending Aadhaar session" },
           "401": { "description": "Invalid session, expired, or DigiLocker not yet completed" },
           "422": { "description": "Surepass returned no verified data" }
+        }
+      }
+    },
+    "/api/v1/vendor/wallet": {
+      "get": {
+        "tags": ["Vendor - Wallet"],
+        "summary": "Get current wallet balance + recent transactions",
+        "description": "Quick overview for the dashboard widget — current credit balance plus the last 10 wallet transactions. Lazy-creates the wallet row with 0 balance if missing.",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Wallet retrieved",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "Wallet retrieved.",
+                  "data": {
+                    "balanceCredits": 90,
+                    "walletCreatedAt": "2026-06-10T09:00:00Z",
+                    "walletUpdatedAt": "2026-06-12T11:30:00Z",
+                    "recentTransactions": [
+                      { "id": "txn-uuid-1", "type": "DEBIT_LEAD_UNLOCK", "amount": 10, "balanceAfter": 90, "referenceType": "LEAD_ASSIGNMENT", "referenceId": "assignment-uuid", "notes": null, "createdAt": "2026-06-12T11:30:00Z" },
+                      { "id": "txn-uuid-2", "type": "CREDIT_ADMIN_ADJUSTMENT", "amount": 100, "balanceAfter": 100, "referenceType": "ADMIN", "referenceId": "ADMIN-123456", "notes": "Onboarding bonus", "createdAt": "2026-06-10T09:00:00Z" }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/api/v1/vendor/wallet/transactions": {
+      "get": {
+        "tags": ["Vendor - Wallet"],
+        "summary": "Paginated full transaction history",
+        "description": "Full ledger view with optional type filter. Supports `page+size` and `take+skip` pagination.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "type", "in": "query", "schema": { "$ref": "#/components/schemas/WalletTransactionType" }, "description": "Optional filter — narrow to one transaction type" },
+          { "name": "page", "in": "query", "schema": { "type": "integer", "minimum": 0 } },
+          { "name": "size", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100 } },
+          { "name": "take", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } },
+          { "name": "skip", "in": "query", "schema": { "type": "integer", "minimum": 0, "default": 0 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Transactions retrieved",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "Transactions retrieved.",
+                  "data": {
+                    "items": [
+                      { "id": "txn-uuid-1", "type": "DEBIT_LEAD_UNLOCK", "amount": 10, "balanceAfter": 90, "referenceType": "LEAD_ASSIGNMENT", "referenceId": "assignment-uuid", "notes": null, "createdAt": "..." }
+                    ],
+                    "total": 12,
+                    "take": 20,
+                    "skip": 0
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/api/v1/vendor/leads/unlocked": {
+      "get": {
+        "tags": ["Vendor - My Unlocks"],
+        "summary": "List leads the vendor has unlocked (purchase history)",
+        "description": "Paginated list of all leads this vendor has unlocked, newest first. Each item includes the unlock metadata (price paid, when) AND the full lead with **unmasked contact info** — the vendor paid for it.\n\nScoped to the authenticated vendor's own unlocks only.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer", "minimum": 0 } },
+          { "name": "size", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100 } },
+          { "name": "take", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } },
+          { "name": "skip", "in": "query", "schema": { "type": "integer", "minimum": 0, "default": 0 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Unlocked leads retrieved",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "Your unlocked leads.",
+                  "data": {
+                    "items": [
+                      {
+                        "id": "assignment-uuid-1",
+                        "leadId": "lead-uuid-1",
+                        "priceInCreditsPaid": 10,
+                        "unlockedAt": "2026-06-12T11:30:00Z",
+                        "walletTransactionId": "txn-uuid-1",
+                        "lead": {
+                          "id": "lead-uuid-1",
+                          "destination": "Vietnam",
+                          "email": "traveler@example.com",
+                          "phone": "9027441332",
+                          "budget": null,
+                          "requirements": { "departureCity": "Delhi", "duration": "6 Days", "adults": "2" },
+                          "status": "ACTIVE",
+                          "priceInCredits": 10,
+                          "maxUnlocks": 3,
+                          "unlockCount": 2,
+                          "createdAt": "2026-06-12T10:30:00Z"
+                        }
+                      }
+                    ],
+                    "total": 5,
+                    "take": 20,
+                    "skip": 0
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/api/v1/vendor/leads/unlocked/{assignmentId}": {
+      "get": {
+        "tags": ["Vendor - My Unlocks"],
+        "summary": "Re-view a single unlocked lead",
+        "description": "Returns one specific unlock with full lead + contact info. Useful if the vendor lost the page from the original unlock — they can come back here anytime to find the contact info again.\n\nReturns 404 if the assignment ID doesn't belong to this vendor (cross-vendor access blocked).",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "assignmentId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Lead retrieved" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "description": "Unlocked lead not found in your purchase history" }
         }
       }
     },
@@ -1278,6 +1668,25 @@
         "properties": {
           "amount": { "type": "integer", "minimum": 1, "maximum": 100000 },
           "notes":  { "type": "string", "maxLength": 500 }
+        }
+      },
+      "UpdateLeadStatusRequest": {
+        "type": "object",
+        "required": ["status"],
+        "description": "Body for PATCH /admin/leads/:id/status.\n- `reason` is REQUIRED when status is REJECTED, optional for CLOSED.\n- `priceInCredits` / `maxUnlocks` are optional overrides only honored when status is ACTIVE (approve). Sending them with REJECTED/CLOSED is a validation error.",
+        "properties": {
+          "status": { "type": "string", "enum": ["ACTIVE", "REJECTED", "CLOSED"], "description": "ACTIVE = approve, REJECTED = reject, CLOSED = close" },
+          "reason": { "type": "string", "maxLength": 500, "description": "Required (min 5 chars) when status is REJECTED" },
+          "priceInCredits": { "type": "integer", "minimum": 1, "maximum": 1000, "description": "Optional pricing override applied at approval time only." },
+          "maxUnlocks": { "type": "integer", "minimum": 1, "maximum": 20, "description": "Optional unlock-cap override applied at approval time only." }
+        }
+      },
+      "UpdateLeadPricingRequest": {
+        "type": "object",
+        "description": "Body for PATCH /admin/leads/:id/pricing. At least one of `priceInCredits` / `maxUnlocks` must be provided. Server returns 409 if any vendor has already unlocked the lead, or if the lead is not in PENDING_REVIEW / ACTIVE state.",
+        "properties": {
+          "priceInCredits": { "type": "integer", "minimum": 1, "maximum": 1000 },
+          "maxUnlocks": { "type": "integer", "minimum": 1, "maximum": 20 }
         }
       },
       "RevokeCreditsRequest": {

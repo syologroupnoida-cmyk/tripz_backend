@@ -1,9 +1,14 @@
 import { ApiError } from '../../utils/ApiError.js';
+import { env } from '../../config/env.js';
 import * as kycRepo from '../../repositories/vendorKyc.repository.js';
 import {
   sendVendorApprovedNotice,
   sendVendorRejectedNotice,
 } from '../mail/index.js';
+
+// Vendor-facing login page. Centralized here so all KYC outcome emails point
+// to the same URL — change once when the frontend route changes.
+const VENDOR_LOGIN_URL = `${env.FRONTEND_URL}/vendor/login`;
 
 /**
  * Strip the fat `thirdPartyResponse` JSONB blob before sending to clients.
@@ -193,6 +198,7 @@ export const approveVendorKyc = async ({ vendorUserId, adminId }) => {
   sendVendorApprovedNotice({
     to: user.email,
     firstName: user.firstName,
+    loginUrl: VENDOR_LOGIN_URL,
   }).catch((err) =>
     console.error('[kyc] Failed to send vendor-approved notice:', err?.message),
   );
@@ -225,6 +231,7 @@ export const rejectVendorKyc = async ({ vendorUserId, adminId, reason }) => {
     to: user.email,
     firstName: user.firstName,
     reason,
+    loginUrl: VENDOR_LOGIN_URL,
   }).catch((err) =>
     console.error('[kyc] Failed to send vendor-rejected notice:', err?.message),
   );

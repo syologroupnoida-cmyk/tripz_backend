@@ -57,8 +57,13 @@ export const loginUser = async ({ email, password }) => {
 
   const tokens = await issueTokenPair(user);
 
+  // Vendors need their KYC status in the response so the frontend can decide
+  // whether to land them on /vendor/kyc or /vendor/dashboard.
+  const vendorProfile =
+    user.role === 'VENDOR' ? await kycRepo.findVendorKycStatus(user.id) : null;
+
   return {
-    user: sanitizeUser(user),
+    user: sanitizeUser(user, { vendorProfile }),
     accessToken: tokens.accessToken,
     refreshToken: tokens.refreshToken,
     refreshExpiresAt: tokens.refreshExpiresAt,

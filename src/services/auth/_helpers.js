@@ -33,19 +33,65 @@ export const buildOtpMetadata = ({ createdAt = new Date() } = {}) => {
   };
 };
 
-export const sanitizeUser = (user) => ({
-  id: user.id,
-  firstName: user.firstName,
-  lastName: user.lastName,
-  email: user.email,
-  phone: user.phone ?? null,
-  role: user.role,
-  isActive: user.isActive,
-  emailVerifiedAt: user.emailVerifiedAt ?? null,
-  avatarUrl: user.avatarUrl ?? null,
-  authProvider: user.authProvider ?? 'LOCAL',
-  createdAt: user.createdAt,
-});
+/**
+ * Maps a vendor's `kycStatus` to a frontend-friendly `nextStep` hint so the
+ * UI can route the user to the right screen after login without duplicating
+ * the mapping logic in every client.
+ *
+ *   NOT_SUBMITTED / IN_PROGRESS → COMPLETE_KYC   (start or resume KYC wizard)
+ *   REJECTED                    → RESUBMIT_KYC   (fix + resubmit)
+ *   SUBMITTED                   → AWAITING_APPROVAL  (rarely seen — login is
+ *                                                    blocked in this state)
+ *   APPROVED                    → DASHBOARD      (full access)
+ */
+export const deriveVendorNextStep = (kycStatus) => {
+  switch (kycStatus) {
+    case 'APPROVED':
+      return 'DASHBOARD';
+    case 'REJECTED':
+      return 'RESUBMIT_KYC';
+    case 'SUBMITTED':
+      return 'AWAITING_APPROVAL';
+    case 'IN_PROGRESS':
+    case 'NOT_SUBMITTED':
+    default:
+      return 'COMPLETE_KYC';
+  }
+};
+
+/**
+ * Strip server-side fields (password, googleId, etc.) before sending the user
+ * to the client.
+ *
+ * For vendors, an optional `vendorProfile` arg attaches the KYC status and a
+ * `nextStep` hint so the frontend can decide where to land them post-login.
+ * Non-vendors do not get this block.
+ */
+export const sanitizeUser = (user, { vendorProfile } = {}) => {
+  const base = {
+    id: user.id,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    email: user.email,
+    phone: user.phone ?? null,
+    role: user.role,
+    isActive: user.isActive,
+    emailVerifiedAt: user.emailVerifiedAt ?? null,
+    avatarUrl: user.avatarUrl ?? null,
+    authProvider: user.authProvider ?? 'LOCAL',
+    createdAt: user.createdAt,
+  };
+
+  if (user.role === 'VENDOR') {
+    const kycStatus = vendorProfile?.kycStatus ?? 'NOT_SUBMITTED';
+    base.vendorProfile = {
+      kycStatus,
+      nextStep: deriveVendorNextStep(kycStatus),
+    };
+  }
+
+  return base;
+};
 
 export const buildAccessPayload = (user) => ({
   sub: user.id,

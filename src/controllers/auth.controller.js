@@ -3,6 +3,8 @@ import { sendSuccess } from '../utils/response.js';
 import { sendError } from '../utils/response.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { findUserById } from '../repositories/user.repository.js';
+import { findVendorKycStatus } from '../repositories/vendorKyc.repository.js';
+import { deriveVendorNextStep } from '../services/auth/_helpers.js';
 import { ApiError } from '../utils/ApiError.js';
 import {
   setRefreshCookie,
@@ -162,6 +164,18 @@ export const me = asyncHandler(async (req, res) => {
   if (!user) {
     throw ApiError.notFound('User profile not found.');
   }
+
+  // For vendors, attach KYC status + nextStep so the frontend can mirror
+  // the same redirect logic it uses post-login when the user refreshes the page.
+  if (user.role === 'VENDOR') {
+    const vendorProfile = await findVendorKycStatus(user.id);
+    const kycStatus = vendorProfile?.kycStatus ?? 'NOT_SUBMITTED';
+    user.vendorProfile = {
+      kycStatus,
+      nextStep: deriveVendorNextStep(kycStatus),
+    };
+  }
+
   return sendSuccess(res, {
     statusCode: 200,
     message: 'Profile retrieved.',
