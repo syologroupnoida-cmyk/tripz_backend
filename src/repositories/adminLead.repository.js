@@ -4,6 +4,8 @@ import prisma from '../config/db.js';
 const LEAD_LIST_SELECT = {
   id: true,
   destination: true,
+  departureCity: true,
+  travelDate: true,
   email: true,
   phone: true,
   budget: true,
@@ -61,6 +63,7 @@ const ASSIGNMENT_SELECT = {
 export const listLeadsForAdmin = async ({
   status,
   destination,
+  departureCity,
   search,
   priceMin,
   priceMax,
@@ -73,6 +76,8 @@ export const listLeadsForAdmin = async ({
   createdTo,
   reviewedFrom,
   reviewedTo,
+  travelFrom,
+  travelTo,
   sortBy,
   order,
   take,
@@ -84,11 +89,15 @@ export const listLeadsForAdmin = async ({
   if (destination) {
     where.destination = { contains: destination, mode: 'insensitive' };
   }
+  if (departureCity) {
+    where.departureCity = { contains: departureCity, mode: 'insensitive' };
+  }
   if (search) {
     where.OR = [
       { email: { contains: search, mode: 'insensitive' } },
       { phone: { contains: search } },
       { destination: { contains: search, mode: 'insensitive' } },
+      { departureCity: { contains: search, mode: 'insensitive' } },
     ];
   }
 
@@ -116,6 +125,9 @@ export const listLeadsForAdmin = async ({
 
   const reviewedRange = range(reviewedFrom, reviewedTo);
   if (reviewedRange) where.reviewedAt = reviewedRange;
+
+  const travelRange = range(travelFrom, travelTo);
+  if (travelRange) where.travelDate = travelRange;
 
   const [items, total] = await Promise.all([
     prisma.lead.findMany({

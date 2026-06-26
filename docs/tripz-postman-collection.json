@@ -488,12 +488,23 @@
               "query": [
                 { "key": "page", "value": "0" },
                 { "key": "size", "value": "20" },
-                { "key": "destination", "value": "goa", "disabled": true, "description": "Case-insensitive contains" },
-                { "key": "sortBy", "value": "createdAt", "disabled": true },
-                { "key": "order", "value": "desc", "disabled": true }
+                { "key": "search", "value": "goa", "disabled": true, "description": "Free-text search across destination (case-insensitive)" },
+                { "key": "destination", "value": "goa", "disabled": true, "description": "Case-insensitive contains on destination" },
+                { "key": "departureCity", "value": "Delhi", "disabled": true, "description": "Filter by traveler's departure city. Case-INSENSITIVE contains (top-level column since 2026-06-26)." },
+                { "key": "travelFrom", "value": "2026-07-01", "disabled": true, "description": "ISO date — leads with travelDate on/after" },
+                { "key": "travelTo", "value": "2026-07-31", "disabled": true, "description": "ISO date — leads with travelDate on/before. Combine with travelFrom for a window." },
+                { "key": "budgetMin", "value": "50000", "disabled": true, "description": "Premium leads only (customer budget ≥)" },
+                { "key": "budgetMax", "value": "200000", "disabled": true, "description": "Cap customer budget ≤" },
+                { "key": "priceMin", "value": "5", "disabled": true, "description": "Min cost to unlock (credits)" },
+                { "key": "priceMax", "value": "20", "disabled": true, "description": "Cheap leads only — max cost (credits)" },
+                { "key": "createdFrom", "value": "2026-06-01", "disabled": true, "description": "ISO date — leads created on/after" },
+                { "key": "createdTo", "value": "2026-06-30", "disabled": true, "description": "ISO date — leads created on/before" },
+                { "key": "excludeUnlocked", "value": "true", "disabled": true, "description": "Hide leads YOU already unlocked (true / false)" },
+                { "key": "sortBy", "value": "createdAt", "description": "createdAt | priceInCredits | budget" },
+                { "key": "order", "value": "desc", "description": "asc | desc" }
               ]
             },
-            "description": "Lists ACTIVE leads only. Email/phone are masked (`r***@gmail.com`, `98****1332`) until vendor unlocks. Each item includes `isUnlocked: boolean`."
+            "description": "Lists ACTIVE leads only. Email/phone are masked (`r***@gmail.com`, `98****1332`) until vendor unlocks. Each item includes `isUnlocked: boolean` so the UI knows whether to show 'Unlock' or 'View' button.\n\n**All filters are optional — enable from Postman's query params panel as needed.**\n\nCommon use cases:\n- Premium leads only: `?budgetMin=100000`\n- Sasti unlock chahiye: `?priceMax=10`\n- Fresh leads (last 7 days): `?createdFrom=2026-06-18`\n- Hide already-bought: `?excludeUnlocked=true`\n- Sort by highest budget: `?sortBy=budget&order=desc`"
           }
         },
         {
@@ -634,7 +645,10 @@
               "query": [
                 { "key": "status", "value": "PENDING_REVIEW", "description": "PENDING_REVIEW | ACTIVE | EXHAUSTED | EXPIRED | REJECTED | CLOSED" },
                 { "key": "destination", "value": "goa", "disabled": true, "description": "Case-insensitive contains" },
-                { "key": "search", "value": "rahul", "disabled": true, "description": "Matches email/phone/destination" },
+                { "key": "departureCity", "value": "Delhi", "disabled": true, "description": "Filter by departure city (top-level, case-insensitive)" },
+                { "key": "travelFrom", "value": "2026-07-01", "disabled": true, "description": "ISO date — travelDate on/after" },
+                { "key": "travelTo", "value": "2026-07-31", "disabled": true, "description": "ISO date — travelDate on/before" },
+                { "key": "search", "value": "rahul", "disabled": true, "description": "Matches email/phone/destination/departureCity" },
                 { "key": "priceMin", "value": "10", "disabled": true },
                 { "key": "priceMax", "value": "50", "disabled": true },
                 { "key": "maxUnlocks", "value": "5", "disabled": true },

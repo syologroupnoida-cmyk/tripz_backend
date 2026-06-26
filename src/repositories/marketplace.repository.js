@@ -4,6 +4,8 @@ import { ApiError } from '../utils/ApiError.js';
 const UNLOCKED_LEAD_SELECT = {
   id: true,
   destination: true,
+  departureCity: true,
+  travelDate: true,
   email: true,
   phone: true,
   budget: true,

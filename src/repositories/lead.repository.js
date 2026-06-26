@@ -3,6 +3,8 @@ import prisma from '../config/db.js';
 const LEAD_PUBLIC_SELECT = {
   id: true,
   destination: true,
+  departureCity: true,
+  travelDate: true,
   email: true,           // masked downstream when not unlocked
   phone: true,           // masked downstream when not unlocked
   budget: true,
@@ -16,6 +18,8 @@ const LEAD_PUBLIC_SELECT = {
 
 export const createLead = async ({
   destination,
+  departureCity,
+  travelDate,
   email,
   phone,
   budget,
@@ -25,6 +29,8 @@ export const createLead = async ({
   return prisma.lead.create({
     data: {
       destination,
+      departureCity,
+      travelDate,
       email,
       phone,
       budget,
@@ -44,16 +50,74 @@ export const findLeadById = async (id) => {
   });
 };
 
-export const listActiveLeads = async ({ destination, take, skip }) => {
+export const listActiveLeads = async ({
+  vendorUserId,
+  search,
+  destination,
+  departureCity,
+  travelFrom,
+  travelTo,
+  budgetMin,
+  budgetMax,
+  priceMin,
+  priceMax,
+  createdFrom,
+  createdTo,
+  excludeUnlocked,
+  sortBy,
+  order,
+  take,
+  skip,
+}) => {
   const where = { status: 'ACTIVE' };
+
+  // ---- Text filters (top-level, indexed, case-insensitive) ----
   if (destination) {
     where.destination = { contains: destination, mode: 'insensitive' };
+  }
+  if (departureCity) {
+    where.departureCity = { contains: departureCity, mode: 'insensitive' };
+  }
+  if (search) {
+    where.OR = [
+      { destination: { contains: search, mode: 'insensitive' } },
+      { departureCity: { contains: search, mode: 'insensitive' } },
+      // email/phone search intentionally omitted here — they're masked for
+      // vendors anyway, so searching by them would leak existence info.
+    ];
+  }
+
+  // ---- Range filters ----
+  const range = (min, max) => {
+    const r = {};
+    if (min !== undefined) r.gte = min;
+    if (max !== undefined) r.lte = max;
+    return Object.keys(r).length ? r : undefined;
+  };
+
+  const budgetRange = range(budgetMin, budgetMax);
+  if (budgetRange) where.budget = budgetRange;
+
+  const priceRange = range(priceMin, priceMax);
+  if (priceRange) where.priceInCredits = priceRange;
+
+  const createdRange = range(createdFrom, createdTo);
+  if (createdRange) where.createdAt = createdRange;
+
+  const travelRange = range(travelFrom, travelTo);
+  if (travelRange) where.travelDate = travelRange;
+
+  // ---- Hide leads this vendor already unlocked ----
+  // Using a NOT-IN against the LeadAssignment relation — Prisma resolves this
+  // as a single SQL with a NOT EXISTS subquery. Indexed on (leadId, vendorUserId).
+  if (excludeUnlocked && vendorUserId) {
+    where.assignments = { none: { vendorUserId } };
   }
 
   const [items, total] = await Promise.all([
     prisma.lead.findMany({
       where,
-      orderBy: { createdAt: 'desc' },
+      orderBy: { [sortBy ?? 'createdAt']: order ?? 'desc' },
       take,
       skip,
       select: LEAD_PUBLIC_SELECT,
@@ -83,6 +147,8 @@ export const findVendorAssignmentLeadIds = async ({ vendorUserId, leadIds }) => 
 const CUSTOMER_LEAD_SELECT = {
   id: true,
   destination: true,
+  departureCity: true,
+  travelDate: true,
   budget: true,
   requirements: true,
   status: true,

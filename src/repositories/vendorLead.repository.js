@@ -12,6 +12,8 @@ const ASSIGNMENT_WITH_LEAD_SELECT = {
     select: {
       id: true,
       destination: true,
+      departureCity: true,
+      travelDate: true,
       email: true, // unmasked — vendor paid for this
       phone: true, // unmasked
       budget: true,

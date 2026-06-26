@@ -1,5 +1,5 @@
 // A travel inquiry submitted by a customer. Two-layer storage:
-//   - Hot/indexed columns up top (destination, contact, status, pricing).
+//   - Hot/indexed columns up top (destination, contact, status, pricing, dates).
 //   - Everything else from the wizard goes into `requirements` (JSONB) so we
 //     can evolve the form without migrations.
 model Lead {
@@ -7,15 +7,18 @@ model Lead {
 
   // ---- Indexed top-level fields ----
   destination    String // form.destination
+  departureCity  String?   // form.departureCity — promoted from JSONB; vendors filter by hub
+  travelDate     DateTime? // form.travelDate — promoted from JSONB; date-range + expiry cron
   email          String // form.email (masked in teaser mode)
   phone          String // form.phone (masked in teaser mode)
   budget         Int? // form.budget; "" -> null, else INR amount
   customerUserId String? // null for anonymous/public submissions
 
   // ---- Dynamic requirements (JSONB) ----
-  // Bundles departureCity, travelDate, duration, ticketsBooked, hotelCategory,
+  // Bundles non-hot wizard fields: duration, ticketsBooked, hotelCategory,
   // flightRequired, adults, infants, children, bookingTimeline, cabRequired,
   // packageType, preferredCallTime, otherDestinations, tourType, whatsappUpdates.
+  // departureCity + travelDate now live as top-level columns (above).
   requirements Json
 
   // ---- Marketplace mechanics ----
@@ -37,6 +40,8 @@ model Lead {
 
   @@index([status])
   @@index([destination])
+  @@index([departureCity])
+  @@index([travelDate]) // powers upcoming auto-EXPIRED cron + vendor "next 30 days" filter
   @@index([createdAt])
   @@index([email]) // fast auto-link of anonymous leads at customer registration
   @@map("leads")

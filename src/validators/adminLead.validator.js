@@ -34,7 +34,12 @@ export const listLeadsQuerySchema = z
       .enum(['PENDING_REVIEW', 'ACTIVE', 'EXHAUSTED', 'EXPIRED', 'REJECTED', 'CLOSED'])
       .optional(),
     destination: z.string().trim().max(120).optional(),
+    departureCity: z.string().trim().max(120).optional(),
     search: z.string().trim().max(100).optional(),
+
+    // ---- Travel date range (top-level since 2026-06-26 migration) ----
+    travelFrom: isoDate.optional(),
+    travelTo: isoDate.optional(),
 
     // ---- Pricing filters ----
     priceMin: z.coerce.number().int().min(0).max(1000).optional(),
@@ -63,7 +68,7 @@ export const listLeadsQuerySchema = z
 
     // ---- Sorting ----
     sortBy: z
-      .enum(['createdAt', 'updatedAt', 'reviewedAt', 'priceInCredits', 'unlockCount', 'budget'])
+      .enum(['createdAt', 'updatedAt', 'reviewedAt', 'travelDate', 'priceInCredits', 'unlockCount', 'budget'])
       .optional()
       .default('createdAt'),
     order: z.enum(['asc', 'desc']).optional().default('desc'),
@@ -75,6 +80,7 @@ export const listLeadsQuerySchema = z
     return {
       status: q.status,
       destination: q.destination,
+      departureCity: q.departureCity,
       search: q.search,
       priceMin: q.priceMin,
       priceMax: q.priceMax,
@@ -87,6 +93,8 @@ export const listLeadsQuerySchema = z
       createdTo: q.createdTo ? new Date(q.createdTo) : undefined,
       reviewedFrom: q.reviewedFrom ? new Date(q.reviewedFrom) : undefined,
       reviewedTo: q.reviewedTo ? new Date(q.reviewedTo) : undefined,
+      travelFrom: q.travelFrom ? new Date(q.travelFrom) : undefined,
+      travelTo: q.travelTo ? new Date(q.travelTo) : undefined,
       sortBy: q.sortBy,
       order: q.order,
       take,

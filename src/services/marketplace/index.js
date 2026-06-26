@@ -16,7 +16,12 @@ const toTeaserView = (lead, isUnlocked) => {
 };
 
 export const browseLeads = async ({ vendorUserId, query }) => {
-  const { items, total } = await leadRepo.listActiveLeads(query);
+  // Pass vendorUserId down so the repo can resolve the `excludeUnlocked` filter
+  // (it needs the relation NOT-EXISTS subquery to skip leads this vendor owns).
+  const { items, total } = await leadRepo.listActiveLeads({
+    ...query,
+    vendorUserId,
+  });
 
   const unlockedIds = await leadRepo.findVendorAssignmentLeadIds({
     vendorUserId,
