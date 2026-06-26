@@ -41,3 +41,42 @@ export const verifyRefreshToken = (token) => {
 export const hashToken = (token) => {
   return crypto.createHash('sha256').update(token).digest('hex');
 };
+
+// -----------------------------------------------------------------------------
+//   Password-reset token — short-lived (10 min), single purpose.
+//
+// Issued by /password/verify-otp once the OTP has been validated. The user
+// presents this token (NOT the OTP) on /password/reset to actually set their
+// new password. Decoupling these into two clocks means a slow user on the
+// "type new password" screen doesn't fail when the OTP expires.
+//
+// Purpose claim prevents token confusion attacks — an attacker can't use a
+// reset token where an access token is expected and vice versa.
+// -----------------------------------------------------------------------------
+
+const RESET_TOKEN_OPTIONS = {
+  expiresIn: '10m',
+  issuer: 'tripz-api',
+  audience: 'tripz-clients',
+};
+
+const RESET_TOKEN_PURPOSE = 'PASSWORD_RESET';
+
+export const signPasswordResetToken = (userId) => {
+  return jwt.sign(
+    { sub: userId, purpose: RESET_TOKEN_PURPOSE },
+    env.JWT_RESET_SECRET,
+    RESET_TOKEN_OPTIONS,
+  );
+};
+
+export const verifyPasswordResetToken = (token) => {
+  const payload = jwt.verify(token, env.JWT_RESET_SECRET, {
+    issuer: RESET_TOKEN_OPTIONS.issuer,
+    audience: RESET_TOKEN_OPTIONS.audience,
+  });
+  if (payload.purpose !== RESET_TOKEN_PURPOSE) {
+    throw new jwt.JsonWebTokenError('Token purpose mismatch');
+  }
+  return payload;
+};

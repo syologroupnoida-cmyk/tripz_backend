@@ -7,8 +7,8 @@ import {
   verifyPanSchema,
   verifyGstinSchema,
   verifyCinSchema,
-  aadhaarSendOtpSchema,
-  aadhaarConfirmOtpSchema,
+  aadhaarInitiateSchema,
+  aadhaarCompleteSchema,
 } from '../../validators/vendorKyc.validator.js';
 
 const router = Router();
@@ -30,6 +30,8 @@ router.post(
   validateRequest(verifyPanSchema),
   kycController.verifyPan,
 );
+// GSTIN + CIN: format-only validation (no third-party API call, no credits used).
+// Admin manually verifies the uploaded certificate during KYC review.
 router.post(
   '/kyc/verify/gstin',
   validateRequest(verifyGstinSchema),
@@ -41,16 +43,20 @@ router.post(
   kycController.verifyCin,
 );
 
-// ---- Aadhaar two-step OTP flow ----
+// ---- Aadhaar — DigiLocker-backed verification ----
+// `initiate` returns a DigiLocker SDK URL; the frontend opens it. After the
+// user finishes verification on DigiLocker (UIDAI OTP happens there), they
+// are redirected back to the Tripz frontend callback page which fires
+// `complete` to pull the verified Aadhaar data from Surepass.
 router.post(
-  '/kyc/verify/aadhaar/send-otp',
-  validateRequest(aadhaarSendOtpSchema),
-  kycController.sendAadhaarOtp,
+  '/kyc/verify/aadhaar/initiate',
+  validateRequest(aadhaarInitiateSchema),
+  kycController.initiateAadhaarVerification,
 );
 router.post(
-  '/kyc/verify/aadhaar/confirm-otp',
-  validateRequest(aadhaarConfirmOtpSchema),
-  kycController.confirmAadhaarOtp,
+  '/kyc/verify/aadhaar/complete',
+  validateRequest(aadhaarCompleteSchema),
+  kycController.completeAadhaarVerification,
 );
 
 export default router;

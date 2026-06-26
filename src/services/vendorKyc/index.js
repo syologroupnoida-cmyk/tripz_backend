@@ -1,19 +1,83 @@
 import { ApiError } from '../../utils/ApiError.js';
+import { env } from '../../config/env.js';
 import * as kycRepo from '../../repositories/vendorKyc.repository.js';
+import {
+  sendVendorApprovedNotice,
+  sendVendorRejectedNotice,
+} from '../mail/index.js';
+
+// Vendor-facing login page. Centralized here so all KYC outcome emails point
+// to the same URL — change once when the frontend route changes.
+const VENDOR_LOGIN_URL = `${env.FRONTEND_URL}/vendor/login`;
+
+/**
+ * Strip the fat `thirdPartyResponse` JSONB blob before sending to clients.
+ * Vendors/admins don't need the raw Surepass payload (~5-10KB per doc). The
+ * summary fields stay (verified flag, provider, timestamp).
+ */
+const stripInternalDocFields = (documents) =>
+  (documents ?? []).map(({ thirdPartyResponse, ...rest }) => rest);
 
 export {
   verifyPan,
   verifyGstin,
   verifyCin,
-  sendAadhaarOtp,
-  confirmAadhaarOtp,
+  initiateAadhaarVerification,
+  completeAadhaarVerification,
 } from './documentVerification.service.js';
 
 const buildVendorKycView = (profile) => ({
   kycStatus: profile.kycStatus,
   kyc: profile.kyc ?? null,
-  documents: profile.documents ?? [],
+  documents: stripInternalDocFields(profile.documents),
+  approval: buildApprovalSummary(profile.kycStatus),
 });
+
+/**
+ * Frontend-friendly summary of where the vendor stands in the approval
+ * pipeline. Derived from `kycStatus` — single source of truth in the DB.
+ */
+const buildApprovalSummary = (kycStatus) => {
+  switch (kycStatus) {
+    case 'PENDING':
+      return {
+        status: 'KYC_NOT_SUBMITTED',
+        adminApproved: false,
+        canLogin: true,
+        message: 'Please complete and submit your KYC to continue.',
+      };
+    case 'SUBMITTED':
+      return {
+        status: 'PENDING_ADMIN_REVIEW',
+        adminApproved: false,
+        canLogin: false,
+        message:
+          'Your application is under review. We will email you once an admin approves your account.',
+      };
+    case 'APPROVED':
+      return {
+        status: 'APPROVED',
+        adminApproved: true,
+        canLogin: true,
+        message: 'Your KYC is approved. You now have full marketplace access.',
+      };
+    case 'REJECTED':
+      return {
+        status: 'REJECTED',
+        adminApproved: false,
+        canLogin: true,
+        message:
+          'Your KYC was rejected. Please review the reason, fix the issues, and resubmit.',
+      };
+    default:
+      return {
+        status: 'UNKNOWN',
+        adminApproved: false,
+        canLogin: false,
+        message: null,
+      };
+  }
+};
 
 /**
  * Reshape the wizard payload to ONLY the company-level fields persisted on
@@ -97,11 +161,21 @@ export const submitMyKyc = async ({ vendorUserId, payload }) => {
     kyc: kycFields,
   });
 
-  return { kycStatus: updatedProfile.kycStatus, kyc };
+  return {
+    kycStatus: updatedProfile.kycStatus,
+    kyc,
+    approval: buildApprovalSummary(updatedProfile.kycStatus),
+  };
 };
 
 export const listKycForAdmin = async (query) => {
-  return kycRepo.listKycSubmissions(query);
+  const { items, total } = await kycRepo.listKycSubmissions(query);
+  // Strip the fat thirdPartyResponse from each item's documents.
+  const cleanItems = items.map((item) => ({
+    ...item,
+    documents: stripInternalDocFields(item.documents),
+  }));
+  return { items: cleanItems, total };
 };
 
 export const approveVendorKyc = async ({ vendorUserId, adminId }) => {
@@ -114,8 +188,26 @@ export const approveVendorKyc = async ({ vendorUserId, adminId }) => {
       `Cannot approve KYC from status ${profile.kycStatus}. Vendor must have a SUBMITTED submission.`,
     );
   }
-  const { kyc, profile: updatedProfile } = await kycRepo.approveKyc({ vendorUserId, adminId });
-  return { kycStatus: updatedProfile.kycStatus, kyc };
+  const { kyc, profile: updatedProfile, user } = await kycRepo.approveKyc({
+    vendorUserId,
+    adminId,
+  });
+
+  // Fire-and-forget approval email. Approval still succeeds if SMTP fails —
+  // admin can resend manually if needed.
+  sendVendorApprovedNotice({
+    to: user.email,
+    firstName: user.firstName,
+    loginUrl: VENDOR_LOGIN_URL,
+  }).catch((err) =>
+    console.error('[kyc] Failed to send vendor-approved notice:', err?.message),
+  );
+
+  return {
+    kycStatus: updatedProfile.kycStatus,
+    kyc,
+    approval: buildApprovalSummary(updatedProfile.kycStatus),
+  };
 };
 
 export const rejectVendorKyc = async ({ vendorUserId, adminId, reason }) => {
@@ -128,10 +220,25 @@ export const rejectVendorKyc = async ({ vendorUserId, adminId, reason }) => {
       `Cannot reject KYC from status ${profile.kycStatus}. Vendor must have a SUBMITTED submission.`,
     );
   }
-  const { kyc, profile: updatedProfile } = await kycRepo.rejectKyc({
+  const { kyc, profile: updatedProfile, user } = await kycRepo.rejectKyc({
     vendorUserId,
     adminId,
     reason,
   });
-  return { kycStatus: updatedProfile.kycStatus, kyc };
+
+  // Fire-and-forget rejection email so vendor knows to log back in and fix.
+  sendVendorRejectedNotice({
+    to: user.email,
+    firstName: user.firstName,
+    reason,
+    loginUrl: VENDOR_LOGIN_URL,
+  }).catch((err) =>
+    console.error('[kyc] Failed to send vendor-rejected notice:', err?.message),
+  );
+
+  return {
+    kycStatus: updatedProfile.kycStatus,
+    kyc,
+    approval: buildApprovalSummary(updatedProfile.kycStatus),
+  };
 };

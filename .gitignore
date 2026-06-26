@@ -14,3 +14,10 @@ coverage/
 logs/
 *.log
 
+docs/PROJECT_DOCUMENTATION.md
+
+# Local scratch / connection test scripts — never commit (often hold hardcoded creds)
+test-db.js
+test-*.js
+scratch.js
+scratch-*.js

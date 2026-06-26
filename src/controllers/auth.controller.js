@@ -3,6 +3,8 @@ import { sendSuccess } from '../utils/response.js';
 import { sendError } from '../utils/response.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { findUserById } from '../repositories/user.repository.js';
+import { findVendorKycStatus } from '../repositories/vendorKyc.repository.js';
+import { deriveVendorNextStep } from '../services/auth/_helpers.js';
 import { ApiError } from '../utils/ApiError.js';
 import {
   setRefreshCookie,
@@ -15,7 +17,7 @@ export const register = asyncHandler(async (req, res) => {
   const args = { firstName, lastName, email, phone, password };
 
   const result =
-    role === 'agent'
+    role === 'VENDOR'
       ? await authService.registerAgent(args)
       : await authService.registerCustomer(args);
 
@@ -120,7 +122,7 @@ export const resendOtp = asyncHandler(async (req, res) => {
   return sendSuccess(res, {
     statusCode: 200,
     message: result.message,
-    data: null,
+    data: { otp: result.otp },
   });
 });
 
@@ -131,13 +133,24 @@ export const forgotPassword = asyncHandler(async (req, res) => {
   return sendSuccess(res, {
     statusCode: 200,
     message: result.message,
-    data: null,
+    data: { otp: result.otp },
+  });
+});
+
+export const verifyResetOtp = asyncHandler(async (req, res) => {
+  const { email, otp } = req.body;
+  const result = await authService.verifyPasswordResetOtp({ email, otp });
+
+  return sendSuccess(res, {
+    statusCode: 200,
+    message: 'OTP verified. You can now set a new password.',
+    data: result,
   });
 });
 
 export const resetPassword = asyncHandler(async (req, res) => {
-  const { email, otp, newPassword } = req.body;
-  await authService.resetPassword({ email, otp, newPassword });
+  const { resetToken, newPassword } = req.body;
+  await authService.resetPassword({ resetToken, newPassword });
 
   return sendSuccess(res, {
     statusCode: 200,
@@ -151,6 +164,18 @@ export const me = asyncHandler(async (req, res) => {
   if (!user) {
     throw ApiError.notFound('User profile not found.');
   }
+
+  // For vendors, attach KYC status + nextStep so the frontend can mirror
+  // the same redirect logic it uses post-login when the user refreshes the page.
+  if (user.role === 'VENDOR') {
+    const vendorProfile = await findVendorKycStatus(user.id);
+    const kycStatus = vendorProfile?.kycStatus ?? 'NOT_SUBMITTED';
+    user.vendorProfile = {
+      kycStatus,
+      nextStep: deriveVendorNextStep(kycStatus),
+    };
+  }
+
   return sendSuccess(res, {
     statusCode: 200,
     message: 'Profile retrieved.',

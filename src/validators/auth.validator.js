@@ -2,11 +2,9 @@ import { z } from 'zod';
 
 export const USER_ROLES = ['SUPER_ADMIN', 'ADMIN', 'VENDOR', 'CLIENT'];
 
-// Public-facing role names (in the payload) → internal Prisma UserRole.
-export const PUBLIC_ROLE_TO_INTERNAL = {
-  customer: 'CLIENT',
-  agent: 'VENDOR',
-};
+// Self-signup is only allowed for CLIENT or VENDOR — ADMIN/SUPER_ADMIN are
+// created via the SuperAdmin endpoint, never via the public auth API.
+export const SELF_SIGNUP_ROLES = ['CLIENT', 'VENDOR'];
 
 const passwordSchema = z
   .string({ required_error: 'Password is required' })
@@ -40,8 +38,8 @@ export const registerSchema = z
     email: emailField,
     phone: phoneField,
     password: passwordSchema,
-    role: z.enum(['customer', 'agent'], {
-      errorMap: () => ({ message: 'Role must be either "customer" or "agent"' }),
+    role: z.enum(['CLIENT', 'VENDOR'], {
+      errorMap: () => ({ message: 'Role must be either "CLIENT" or "VENDOR"' }),
     }),
   })
   .strict();
@@ -90,7 +88,8 @@ export const forgotPasswordSchema = z
   })
   .strict();
 
-export const resetPasswordSchema = z
+// Step 2 of password reset — verify OTP only (no new password yet).
+export const verifyResetOtpSchema = z
   .object({
     email: emailField,
     otp: z
@@ -99,6 +98,17 @@ export const resetPasswordSchema = z
       .regex(/^\d+$/, 'OTP must contain only digits')
       .min(4, 'OTP is too short')
       .max(10, 'OTP is too long'),
+  })
+  .strict();
+
+// Step 3 of password reset — exchange the reset token (from step 2) for a
+// new password. The token carries the user identity, so we no longer need
+// `email` or `otp` in this request.
+export const resetPasswordSchema = z
+  .object({
+    resetToken: z
+      .string({ required_error: 'resetToken is required' })
+      .min(20, 'resetToken is invalid'),
     newPassword: passwordSchema,
   })
   .strict();
@@ -111,7 +121,7 @@ export const googleLoginSchema = z
     token: z
       .string({ required_error: 'Google ID token is required' })
       .min(20, 'Google token is invalid'),
-    role: z.enum(['customer', 'agent']).optional(),
+    role: z.enum(['CLIENT', 'VENDOR']).optional(),
   })
   // .strict() rejects extra fields — we tolerate extras because frontend may
   // ship email/picture/etc for debugging. We always ignore them server-side.

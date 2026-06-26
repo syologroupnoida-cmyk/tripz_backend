@@ -23,6 +23,13 @@ const envSchema = z
       .string({ required_error: 'JWT_REFRESH_SECRET is required' })
       .min(32, 'JWT_REFRESH_SECRET must be at least 32 characters'),
 
+    // Used to sign short-lived (~10 min) password-reset tokens issued by
+    // /auth/password/verify-otp. Separate from access/refresh secrets so a
+    // leaked reset token can never be used as an access token.
+    JWT_RESET_SECRET: z
+      .string({ required_error: 'JWT_RESET_SECRET is required' })
+      .min(32, 'JWT_RESET_SECRET must be at least 32 characters'),
+
     JWT_ACCESS_EXPIRES_IN: z.string().default('15m'),
     JWT_REFRESH_EXPIRES_IN: z.string().default('7d'),
 
@@ -34,6 +41,18 @@ const envSchema = z
       .default(12),
 
     CORS_ORIGIN: z.string().default('*'),
+
+    // ---- Frontend URL ----
+    // Base URL of the public Tripz frontend. Used inside transactional emails
+    // to build "Login Now" / "Resubmit" buttons that link the user back into
+    // the app. Override per environment via .env:
+    //   FRONTEND_URL=https://trip-z.in           # production
+    //   FRONTEND_URL=https://staging.trip-z.in   # staging
+    //   FRONTEND_URL=http://localhost:3000       # local frontend dev
+    FRONTEND_URL: z
+      .string()
+      .url('FRONTEND_URL must be a valid URL')
+      .default('http://localhost:3000'),
 
     // ---- Email / SMTP ----
     SMTP_HOST: z.string({ required_error: 'SMTP_HOST is required' }).min(1),
@@ -74,10 +93,35 @@ const envSchema = z
     SUREPASS_TOKEN: z.string().min(10).optional(),
     SUREPASS_BASE_URL: z.string().url().default('https://kyc-api.surepass.io/api/v1'),
     SUREPASS_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
+
+    // Public Tripz frontend URL where DigiLocker will redirect the user
+    // after they finish Aadhaar verification. Must be HTTPS (Surepass
+    // rejects http://). Example: https://trip-z.in/kyc/aadhaar-callback
+    // Falls back to the Surepass console URL when unset (only useful for
+    // dashboard testing — set this for real users).
+    SUREPASS_REDIRECT_URL: z
+      .string()
+      .url()
+      .default('https://console.surepass.app/product/console/api/digilocker'),
+
+    // (Kept for backwards compat; new code calls /digilocker/download-aadhaar
+    // directly in the provider. Override only if your account uses a non-
+    // standard path.)
+    SUREPASS_DIGILOCKER_FETCH_PATH: z
+      .string()
+      .default('/digilocker/download-aadhaar'),
   })
   .refine((data) => data.JWT_ACCESS_SECRET !== data.JWT_REFRESH_SECRET, {
     message: 'JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must be different values',
     path: ['JWT_REFRESH_SECRET'],
+  })
+  .refine((data) => data.JWT_RESET_SECRET !== data.JWT_ACCESS_SECRET, {
+    message: 'JWT_RESET_SECRET must differ from JWT_ACCESS_SECRET',
+    path: ['JWT_RESET_SECRET'],
+  })
+  .refine((data) => data.JWT_RESET_SECRET !== data.JWT_REFRESH_SECRET, {
+    message: 'JWT_RESET_SECRET must differ from JWT_REFRESH_SECRET',
+    path: ['JWT_RESET_SECRET'],
   });
 
 const parsed = envSchema.safeParse(process.env);

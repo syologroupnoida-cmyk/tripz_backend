@@ -10,6 +10,7 @@ import {
   verifyEmailSchema,
   resendOtpSchema,
   forgotPasswordSchema,
+  verifyResetOtpSchema,
   resetPasswordSchema,
   googleLoginSchema,
 } from '../../validators/auth.validator.js';
@@ -29,10 +30,19 @@ router.post('/logout', validateRequest(logoutSchema), authController.logout);
 router.post('/verify-email', validateRequest(verifyEmailSchema), authController.verifyEmail);
 router.post('/resend-otp', validateRequest(resendOtpSchema), authController.resendOtp);
 
+// Password reset is a 3-step wizard:
+//   1. /password/forgot      → send OTP
+//   2. /password/verify-otp  → validate OTP only (does NOT consume it)
+//   3. /password/reset       → re-validate + consume OTP, set new password
 router.post(
   '/password/forgot',
   validateRequest(forgotPasswordSchema),
   authController.forgotPassword,
+);
+router.post(
+  '/password/verify-otp',
+  validateRequest(verifyResetOtpSchema),
+  authController.verifyResetOtp,
 );
 router.post(
   '/password/reset',

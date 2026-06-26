@@ -1,17 +1,18 @@
 import { ApiError } from '../../utils/ApiError.js';
 import { verifyGoogleIdToken } from '../../utils/googleAuth.js';
 import * as userRepo from '../../repositories/user.repository.js';
+import * as leadRepo from '../../repositories/lead.repository.js';
+import * as kycRepo from '../../repositories/vendorKyc.repository.js';
+import { SELF_SIGNUP_ROLES } from '../../validators/auth.validator.js';
 import { sanitizeUser, issueTokenPair } from './_helpers.js';
 
-const ROLE_MAP = { customer: 'CLIENT', agent: 'VENDOR' };
-
-const buildLoginResult = (user, isNewAccount) => ({
-  user: sanitizeUser(user),
+const buildLoginResult = (user, isNewAccount, vendorProfile) => ({
+  user: sanitizeUser(user, { vendorProfile }),
   isNewAccount,
 });
 
 const createUserForRole = async ({ role, identity }) => {
-  if (role === 'agent') {
+  if (role === 'VENDOR') {
     return userRepo.createAgentViaGoogle(identity);
   }
   return userRepo.createCustomerViaGoogle(identity);
@@ -54,12 +55,12 @@ export const loginWithGoogle = async ({ token, role }) => {
   if (!user) {
     if (!role) {
       throw ApiError.badRequest(
-        'A `role` is required to create a new account. Pass role: "customer" or "agent".',
+        'A `role` is required to create a new account. Pass role: "CLIENT" or "VENDOR".',
         { code: 'ROLE_REQUIRED' },
       );
     }
-    if (!ROLE_MAP[role]) {
-      throw ApiError.badRequest('Role must be either "customer" or "agent".');
+    if (!SELF_SIGNUP_ROLES.includes(role)) {
+      throw ApiError.badRequest('Role must be either "CLIENT" or "VENDOR".');
     }
 
     user = await createUserForRole({
@@ -73,6 +74,15 @@ export const loginWithGoogle = async ({ token, role }) => {
       },
     });
     isNewAccount = true;
+
+    // Auto-link any anonymous leads submitted with this Google email — only
+    // for new CLIENT signups (vendors don't have a customer-leads dashboard).
+    if (role === 'CLIENT') {
+      await leadRepo.claimLeadsForEmail({
+        userId: user.id,
+        email: identity.email,
+      });
+    }
   }
 
   if (!user.isActive) {
@@ -81,8 +91,11 @@ export const loginWithGoogle = async ({ token, role }) => {
 
   const tokens = await issueTokenPair(user);
 
+  const vendorProfile =
+    user.role === 'VENDOR' ? await kycRepo.findVendorKycStatus(user.id) : null;
+
   return {
-    ...buildLoginResult(user, isNewAccount),
+    ...buildLoginResult(user, isNewAccount, vendorProfile),
     accessToken: tokens.accessToken,
     refreshToken: tokens.refreshToken,
     refreshExpiresAt: tokens.refreshExpiresAt,

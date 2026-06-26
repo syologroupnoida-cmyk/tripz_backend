@@ -16,15 +16,19 @@ cloudinary.config({
  * @param {string} args.folder        — Cloudinary folder, e.g. "tripz/kyc-pan/<userId>"
  * @param {string} [args.publicId]    — explicit asset name (else Cloudinary chooses)
  * @param {'image'|'raw'|'video'|'auto'} [args.resourceType='auto']
+ * @param {boolean} [args.overwrite=false] — if true and publicId already exists, replace
+ *                                            previous file in the same slot. Default false
+ *                                            (so accidental re-uploads don't clobber data).
  */
-export const uploadBuffer = ({ buffer, folder, publicId, resourceType = 'auto' }) =>
+export const uploadBuffer = ({ buffer, folder, publicId, resourceType = 'auto', overwrite = false }) =>
   new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
       {
         folder,
         public_id: publicId,
         resource_type: resourceType,
-        overwrite: false,
+        overwrite,
+        invalidate: overwrite, // bust CDN cache when replacing a slot
         // Cloudinary auto-compresses + serves the best format per client browser.
         // For PDFs/raw assets these flags are ignored, so safe to always pass.
         quality: 'auto',

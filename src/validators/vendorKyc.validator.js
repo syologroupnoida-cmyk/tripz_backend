@@ -131,14 +131,6 @@ export const submitKycSchema = z
     panNumber: optionalTrimmed(20, 'PAN number'),
     panDocument: optionalUrl,
 
-    // Both gstNumber and gstinNumber accepted (frontend sends both with same value).
-    gstNumber: optionalTrimmed(20, 'GST number'),
-    gstinNumber: optionalTrimmed(20, 'GSTIN number'),
-    gstinDocument: optionalUrl,
-
-    cinNumber: optionalTrimmed(30, 'CIN number'),
-    cinDocument: optionalUrl,
-
     aadharNumber: optionalTrimmed(20, 'Aadhar number'),
     aadharDocument: optionalUrl,
   })
@@ -165,7 +157,7 @@ export const verifyCinSchema = z
   .object({ number: docNumberField('CIN', 21) })
   .strict();
 
-export const aadhaarSendOtpSchema = z
+export const aadhaarInitiateSchema = z
   .object({
     number: z
       .string({ required_error: 'Aadhaar number is required' })
@@ -174,18 +166,15 @@ export const aadhaarSendOtpSchema = z
   })
   .strict();
 
-export const aadhaarConfirmOtpSchema = z
+// The OTP is collected + validated on DigiLocker (outside our app), so the
+// frontend only needs to POST the sessionId. The backend uses that to look
+// up the parked Surepass client_id and fetch the verified Aadhaar details.
+export const aadhaarCompleteSchema = z
   .object({
     sessionId: z
       .string({ required_error: 'sessionId is required' })
       .trim()
       .min(8, 'sessionId is invalid'),
-    otp: z
-      .string({ required_error: 'OTP is required' })
-      .trim()
-      .regex(/^\d+$/, 'OTP must contain only digits')
-      .min(4, 'OTP is too short')
-      .max(10, 'OTP is too long'),
   })
   .strict();
 
@@ -198,7 +187,15 @@ export const rejectKycSchema = z
 export const listKycQuerySchema = z
   .object({
     status: z.enum(['PENDING', 'SUBMITTED', 'APPROVED', 'REJECTED']).optional(),
-    take: z.coerce.number().int().min(1).max(100).optional().default(20),
-    skip: z.coerce.number().int().min(0).optional().default(0),
+    // Dual-style pagination — same pattern as adminLead/vendorManagement/vendorWallet.
+    take: z.coerce.number().int().min(1).max(100).optional(),
+    skip: z.coerce.number().int().min(0).optional(),
+    page: z.coerce.number().int().min(0).optional(),
+    size: z.coerce.number().int().min(1).max(100).optional(),
   })
-  .strict();
+  .strict()
+  .transform((q) => {
+    const take = q.size ?? q.take ?? 20;
+    const skip = q.page !== undefined ? q.page * take : q.skip ?? 0;
+    return { status: q.status, take, skip };
+  });

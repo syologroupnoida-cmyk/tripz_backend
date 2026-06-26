@@ -6,6 +6,13 @@ dotenv.config();
 
 const prisma = new PrismaClient();
 
+// Local mirror of the generator (can't import ES modules here trivially from
+// the seed script, so keep this in sync with src/utils/userId.js).
+const buildSuperAdminId = () => {
+  const num = Math.floor(Math.random() * 1_000_000);
+  return `SUDO-${String(num).padStart(6, '0')}`;
+};
+
 const required = (name) => {
   const v = process.env[name];
   if (!v || !v.trim()) {
@@ -35,19 +42,31 @@ const seedSuperAdmin = async () => {
 
   const passwordHash = await bcrypt.hash(password, saltRounds);
 
-  const user = await prisma.user.create({
-    data: {
-      firstName,
-      lastName,
-      email,
-      phone,
-      password: passwordHash,
-      role: 'SUPER_ADMIN',
-      isActive: true,
-      emailVerifiedAt: new Date(),
-    },
-    select: { id: true, email: true, role: true },
-  });
+  // Retry on collision (rare with 6-digit random space)
+  let user;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      user = await prisma.user.create({
+        data: {
+          id: buildSuperAdminId(),
+          firstName,
+          lastName,
+          email,
+          phone,
+          password: passwordHash,
+          role: 'SUPER_ADMIN',
+          isActive: true,
+          emailVerifiedAt: new Date(),
+        },
+        select: { id: true, email: true, role: true },
+      });
+      break;
+    } catch (err) {
+      const isCollision =
+        err?.code === 'P2002' && err.meta?.target?.includes('id');
+      if (!isCollision || attempt === 4) throw err;
+    }
+  }
 
   console.log(`[seed] SuperAdmin created: ${user.email} (id: ${user.id})`);
 };

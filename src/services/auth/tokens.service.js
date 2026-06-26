@@ -8,6 +8,7 @@ import {
 import { ApiError } from '../../utils/ApiError.js';
 import * as userRepo from '../../repositories/user.repository.js';
 import * as refreshRepo from '../../repositories/refreshToken.repository.js';
+import * as kycRepo from '../../repositories/vendorKyc.repository.js';
 import {
   sanitizeUser,
   buildAccessPayload,
@@ -51,7 +52,24 @@ export const refreshTokens = async (incomingRefreshToken) => {
     throw ApiError.unauthorized('User no longer exists.');
   }
   if (!user.isActive) {
-    throw ApiError.forbidden('This account has been deactivated.');
+    // Surface the same "under review" message vendors see on login, so the
+    // frontend can route them to the right screen instead of treating it as
+    // a generic auth error.
+    if (user.role === 'VENDOR') {
+      const profile = await kycRepo.findVendorProfile(user.id);
+      if (profile?.kycStatus === 'SUBMITTED') {
+        throw new ApiError(
+          403,
+          'Your application is under review. We will email you once your account is approved.',
+          { code: 'ACCOUNT_UNDER_REVIEW', kycStatus: 'SUBMITTED' },
+        );
+      }
+    }
+    throw new ApiError(
+      403,
+      'This account has been deactivated. Please contact support.',
+      { code: 'ACCOUNT_DEACTIVATED' },
+    );
   }
 
   const newAccessToken = signAccessToken(buildAccessPayload(user));
