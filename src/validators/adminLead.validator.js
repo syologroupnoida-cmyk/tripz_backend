@@ -110,25 +110,44 @@ const maxUnlocksField = z.coerce
   .max(20, 'maxUnlocks cannot exceed 20');
 
 // ----------------------------------------------------------------------------
-//   PATCH /admin/leads/:id/status — single endpoint for approve / reject / close
+//   PATCH /admin/leads/:id/status — single endpoint for state transitions
 // ----------------------------------------------------------------------------
 //
-//   status: ACTIVE    → approve  (PENDING_REVIEW → ACTIVE).   No reason required.
-//                                  Optional priceInCredits / maxUnlocks overrides
-//                                  (only honored on the approve transition).
-//   status: REJECTED  → reject   (PENDING_REVIEW → REJECTED). Reason REQUIRED (5+ chars).
-//   status: CLOSED    → close    (ACTIVE → CLOSED).           Reason optional.
+//   status: ACTIVE         → approve  (PENDING_REVIEW → ACTIVE).   No reason required.
+//                                       Optional priceInCredits / maxUnlocks overrides
+//                                       (only honored on the approve transition).
+//   status: REJECTED       → reject   (PENDING_REVIEW → REJECTED). Reason REQUIRED (5+ chars).
+//   status: CLOSED         → close    (ACTIVE → CLOSED).           Reason optional.
+//   status: EXPIRED        → expire   (ACTIVE → EXPIRED).          Reason optional.
+//                                       Manual fallback until the auto-expiry cron is built.
+//   status: PENDING_REVIEW → revert   (ACTIVE → PENDING_REVIEW).   Reason optional.
+//                                       Mistake-undo for accidental approval. Service-layer
+//                                       guard: only allowed while unlockCount === 0 (no
+//                                       vendor has paid yet). Once any vendor has unlocked,
+//                                       the lead is committed and revert is blocked.
 //
-// The conditional `.refine()` calls enforce both:
+// The conditional `.refine()` calls enforce:
 //   - `reason` required only when rejecting
 //   - pricing overrides only allowed when approving
 // ----------------------------------------------------------------------------
 export const updateLeadStatusSchema = z
   .object({
-    status: z.enum(['ACTIVE', 'REJECTED', 'CLOSED'], {
-      errorMap: () => ({
-        message: 'status must be one of: ACTIVE, REJECTED, CLOSED',
-      }),
+    status: z.enum(['ACTIVE', 'REJECTED', 'CLOSED', 'EXPIRED', 'PENDING_REVIEW'], {
+      errorMap: (issue) => {
+        // Friendlier message — `EXHAUSTED` is still system-managed and
+        // intentionally not accepted here.
+        if (issue.code === 'invalid_enum_value' && issue.received === 'EXHAUSTED') {
+          return {
+            message:
+              'EXHAUSTED is set automatically when all unlock slots are sold. ' +
+              'To remove a lead from the marketplace early, use status: "CLOSED" with a reason.',
+          };
+        }
+        return {
+          message:
+            'status must be one of: ACTIVE (approve), REJECTED (reject), CLOSED (remove), EXPIRED (travel date passed), or PENDING_REVIEW (undo accidental approval — only before any unlock).',
+        };
+      },
     }),
     reason: trimmedOptional(500, 'Reason'),
     priceInCredits: priceInCreditsField.optional(),

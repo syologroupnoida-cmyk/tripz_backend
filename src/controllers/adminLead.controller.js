@@ -54,6 +54,16 @@ export const updateLeadStatus = asyncHandler(async (req, res) => {
       message = 'Lead closed. Removed from the marketplace.';
       break;
     }
+    case 'EXPIRED': {
+      data = await adminLeadService.expireLead({ leadId, adminId, reason });
+      message = 'Lead expired. Removed from the marketplace.';
+      break;
+    }
+    case 'PENDING_REVIEW': {
+      data = await adminLeadService.revertLeadToPendingReview({ leadId, adminId, reason });
+      message = 'Lead reverted to PENDING_REVIEW for re-review.';
+      break;
+    }
     default:
       // Zod schema should have caught this; defensive fallback only.
       message = 'Unknown status transition.';

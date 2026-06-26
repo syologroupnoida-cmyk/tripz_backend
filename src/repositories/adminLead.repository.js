@@ -218,6 +218,60 @@ export const closeLead = async ({ leadId, adminId, reason }) =>
     reason: reason ?? null,
   });
 
+// Manual expiry — fallback until the auto-expiry cron job is built. Same
+// CAS guard as close: lead must be currently ACTIVE.
+export const expireLead = async ({ leadId, adminId, reason }) =>
+  transitionLeadStatus({
+    leadId,
+    expectedStatus: 'ACTIVE',
+    nextStatus: 'EXPIRED',
+    adminId,
+    reason: reason ?? null,
+  });
+
+// Atomic revert ACTIVE → PENDING_REVIEW (mistake-undo for accidental approval).
+// Only succeeds when the lead is currently ACTIVE AND no vendor has unlocked
+// yet (`unlockCount === 0`). Once a vendor has paid, reverting would lie about
+// the lead's history — admin must use CLOSED instead.
+//
+// Returns `{ updated, lead, currentStatus, currentUnlockCount, notFound }`.
+export const revertLeadToPendingReview = async ({ leadId, adminId, reason }) => {
+  const result = await prisma.lead.updateMany({
+    where: {
+      id: leadId,
+      status: 'ACTIVE',
+      unlockCount: 0,
+    },
+    data: {
+      status: 'PENDING_REVIEW',
+      // Clear out the prior review trail so the next reviewer sees a clean queue entry.
+      reviewedAt: null,
+      reviewedByAdminId: null,
+      rejectionReason: reason ?? null,
+    },
+  });
+
+  if (result.count === 1) {
+    const lead = await prisma.lead.findUnique({
+      where: { id: leadId },
+      select: LEAD_LIST_SELECT,
+    });
+    return { updated: true, lead };
+  }
+
+  // Figure out which guard failed.
+  const existing = await prisma.lead.findUnique({
+    where: { id: leadId },
+    select: { status: true, unlockCount: true },
+  });
+  if (!existing) return { updated: false, notFound: true };
+  return {
+    updated: false,
+    currentStatus: existing.status,
+    currentUnlockCount: existing.unlockCount,
+  };
+};
+
 /**
  * Atomic pricing update — only succeeds if the lead is in PENDING_REVIEW or
  * ACTIVE state AND `unlockCount === 0` (no vendor has paid yet).

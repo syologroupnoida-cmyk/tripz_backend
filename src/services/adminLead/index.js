@@ -79,6 +79,59 @@ export const closeLead = async ({ leadId, adminId, reason }) => {
   return { lead };
 };
 
+// Manual expiry — admin marks a stale lead as EXPIRED. Will be replaced by an
+// automated cron job in a future phase; the manual entry point stays as a fallback.
+export const expireLead = async ({ leadId, adminId, reason }) => {
+  const result = await adminLeadRepo.expireLead({ leadId, adminId, reason });
+  const lead = handleTransitionResult(result, 'expire', 'ACTIVE');
+  console.log(
+    `[admin-audit] LEAD_EXPIRED leadId=${leadId} by admin=${adminId} reason="${reason ?? '(none)'}"`,
+  );
+  return { lead };
+};
+
+/**
+ * Undo an accidental approval — moves the lead back to PENDING_REVIEW.
+ *
+ * Guarded — only allowed while:
+ *   - lead status is ACTIVE, AND
+ *   - unlockCount === 0  (no vendor has paid for this lead yet)
+ *
+ * Once a vendor has unlocked, reverting would falsely advertise the lead as
+ * "awaiting review" while paid vendors already hold it. In that case admin
+ * should use CLOSED instead.
+ */
+export const revertLeadToPendingReview = async ({ leadId, adminId, reason }) => {
+  const result = await adminLeadRepo.revertLeadToPendingReview({
+    leadId,
+    adminId,
+    reason,
+  });
+
+  if (result.notFound) {
+    throw ApiError.notFound('Lead not found.');
+  }
+  if (!result.updated) {
+    if (result.currentUnlockCount > 0) {
+      throw new ApiError(
+        409,
+        `Cannot revert to PENDING_REVIEW: ${result.currentUnlockCount} vendor(s) have already unlocked this lead. Use CLOSED instead.`,
+        { code: 'REVERT_LOCKED_BY_UNLOCKS', currentUnlockCount: result.currentUnlockCount },
+      );
+    }
+    throw new ApiError(
+      409,
+      `Cannot revert a ${result.currentStatus} lead to PENDING_REVIEW. Lead must currently be ACTIVE.`,
+      { code: 'INVALID_STATE_FOR_REVERT', currentStatus: result.currentStatus },
+    );
+  }
+
+  console.log(
+    `[admin-audit] LEAD_REVERTED_TO_PENDING leadId=${leadId} by admin=${adminId} reason="${reason ?? '(none)'}"`,
+  );
+  return { lead: result.lead };
+};
+
 /**
  * Update lead pricing (priceInCredits / maxUnlocks).
  *
