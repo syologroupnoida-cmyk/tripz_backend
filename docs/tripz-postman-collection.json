@@ -607,7 +607,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["admin", "vendor-kyc", "{{vendorId}}", "approve"]
             },
-            "description": "Sets `kycStatus = APPROVED`, `isActive = true`. Vendor can now log in + use marketplace."
+            "description": "Sets `kycStatus = APPROVED`, `isActive = true`. Vendor can now log in + use marketplace.\n\n**Allowed from 2 states:**\n- `SUBMITTED → APPROVED` — normal review-time approval.\n- `REJECTED → APPROVED` — mistake-undo when admin accidentally rejected. Audit log distinguishes the two cases (`KYC_REJECTION_REVERTED_AND_APPROVED` for the latter)."
           }
         },
         {
@@ -624,7 +624,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["admin", "vendor-kyc", "{{vendorId}}", "reject"]
             },
-            "description": "Sets `kycStatus = REJECTED`, `isActive = true` (so vendor can log in to see the reason + resubmit). `reason` is required (min 5 chars)."
+            "description": "Sets `kycStatus = REJECTED`, `isActive = true` (so vendor can log in to see the reason + resubmit). `reason` is required (min 5 chars).\n\n**Allowed from 2 states:**\n- `SUBMITTED → REJECTED` — normal review-time rejection.\n- `APPROVED → REJECTED` — mistake-undo when admin accidentally approved. Same endpoint, same body. Audit log distinguishes the two cases (`KYC_APPROVAL_REVERTED_AND_REJECTED` for the latter)."
           }
         }
       ]

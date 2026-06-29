@@ -178,20 +178,37 @@ export const listKycForAdmin = async (query) => {
   return { items: cleanItems, total };
 };
 
+// Allowed source states for /approve:
+//   SUBMITTED → APPROVED  — normal review-time approval
+//   REJECTED  → APPROVED  — mistake-undo for an accidental rejection
+// (NOT_SUBMITTED, IN_PROGRESS, APPROVED are blocked.)
+const APPROVABLE_KYC_STATES = ['SUBMITTED', 'REJECTED'];
+
 export const approveVendorKyc = async ({ vendorUserId, adminId }) => {
   const profile = await kycRepo.findVendorProfile(vendorUserId);
   if (!profile) {
     throw ApiError.notFound('Vendor profile not found.');
   }
-  if (profile.kycStatus !== 'SUBMITTED') {
+  if (!APPROVABLE_KYC_STATES.includes(profile.kycStatus)) {
     throw ApiError.badRequest(
-      `Cannot approve KYC from status ${profile.kycStatus}. Vendor must have a SUBMITTED submission.`,
+      `Cannot approve KYC from status ${profile.kycStatus}. ` +
+        `Vendor must be in one of: ${APPROVABLE_KYC_STATES.join(', ')}.`,
     );
   }
+  const wasRejected = profile.kycStatus === 'REJECTED';
+
   const { kyc, profile: updatedProfile, user } = await kycRepo.approveKyc({
     vendorUserId,
     adminId,
   });
+
+  // Audit trail — explicit log for the rarer "rejection undone" path so it's
+  // easy to grep later if a vendor disputes the decision or trail is audited.
+  if (wasRejected) {
+    console.log(
+      `[admin-audit] KYC_REJECTION_REVERTED_AND_APPROVED vendor=${vendorUserId} by admin=${adminId}`,
+    );
+  }
 
   // Fire-and-forget approval email. Approval still succeeds if SMTP fails —
   // admin can resend manually if needed.
@@ -210,21 +227,38 @@ export const approveVendorKyc = async ({ vendorUserId, adminId }) => {
   };
 };
 
+// Allowed source states for /reject:
+//   SUBMITTED → REJECTED  — normal review-time rejection
+//   APPROVED  → REJECTED  — mistake-undo for an accidental approval
+// All other states (NOT_SUBMITTED, IN_PROGRESS, REJECTED) are blocked.
+const REJECTABLE_KYC_STATES = ['SUBMITTED', 'APPROVED'];
+
 export const rejectVendorKyc = async ({ vendorUserId, adminId, reason }) => {
   const profile = await kycRepo.findVendorProfile(vendorUserId);
   if (!profile) {
     throw ApiError.notFound('Vendor profile not found.');
   }
-  if (profile.kycStatus !== 'SUBMITTED') {
+  if (!REJECTABLE_KYC_STATES.includes(profile.kycStatus)) {
     throw ApiError.badRequest(
-      `Cannot reject KYC from status ${profile.kycStatus}. Vendor must have a SUBMITTED submission.`,
+      `Cannot reject KYC from status ${profile.kycStatus}. ` +
+        `Vendor must be in one of: ${REJECTABLE_KYC_STATES.join(', ')}.`,
     );
   }
+  const wasApproved = profile.kycStatus === 'APPROVED';
+
   const { kyc, profile: updatedProfile, user } = await kycRepo.rejectKyc({
     vendorUserId,
     adminId,
     reason,
   });
+
+  // Audit trail — explicit log line for the rarer "approval undone" path so it's
+  // easy to grep through logs later if a vendor disputes the decision.
+  if (wasApproved) {
+    console.log(
+      `[admin-audit] KYC_APPROVAL_REVERTED_AND_REJECTED vendor=${vendorUserId} by admin=${adminId} reason="${reason}"`,
+    );
+  }
 
   // Fire-and-forget rejection email so vendor knows to log back in and fix.
   sendVendorRejectedNotice({
