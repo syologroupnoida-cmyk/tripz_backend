@@ -31,6 +31,8 @@ export const listVendorsQuerySchema = z
   .object({
     kycStatus: z.enum(['PENDING', 'SUBMITTED', 'APPROVED', 'REJECTED']).optional(),
     isActive: stringBool,
+    // ?wallet=true → include each vendor's current credit balance in the response.
+    wallet: stringBool,
     search: z.string().trim().max(100).optional(),
     // Offset-based (Prisma-native)
     take: z.coerce.number().int().min(1).max(100).optional(),
@@ -50,6 +52,7 @@ export const listVendorsQuerySchema = z
     return {
       kycStatus: q.kycStatus,
       isActive: q.isActive,
+      wallet: q.wallet ?? false,
       search: q.search,
       sortBy: q.sortBy,
       order: q.order,

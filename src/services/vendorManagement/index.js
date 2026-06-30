@@ -70,6 +70,8 @@ export const listVendors = async (query) => {
   const { items, total } = await vendorRepo.listVendors(query);
 
   // Flatten the list rows into a shape that's easy for a table UI.
+  // walletBalance is only emitted when ?wallet=true so default responses stay
+  // identical to the pre-existing shape.
   const rows = items.map((profile) => ({
     userId: profile.user.id,
     firstName: profile.user.firstName,
@@ -87,6 +89,7 @@ export const listVendors = async (query) => {
     kycSubmittedAt: profile.kyc?.submittedAt ?? null,
     kycReviewedAt: profile.kyc?.reviewedAt ?? null,
     rejectionReason: profile.kyc?.rejectionReason ?? null,
+    ...(query.wallet ? { walletBalance: profile.wallet?.balanceCredits ?? 0 } : {}),
   }));
 
   return { items: rows, total, take: query.take, skip: query.skip };

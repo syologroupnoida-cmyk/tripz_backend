@@ -29,6 +29,7 @@ const VENDOR_USER_DETAIL_SELECT = {
 export const listVendors = async ({
   kycStatus,
   isActive,
+  wallet,
   search,
   take,
   skip,
@@ -75,6 +76,8 @@ export const listVendors = async ({
             rejectionReason: true,
           },
         },
+        // Opt-in via ?wallet=true. Skipped by default to keep the list query lean.
+        ...(wallet ? { wallet: { select: { balanceCredits: true } } } : {}),
       },
     }),
     prisma.vendorProfile.count({ where }),
