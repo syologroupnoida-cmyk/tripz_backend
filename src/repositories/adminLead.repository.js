@@ -18,6 +18,7 @@ const LEAD_LIST_SELECT = {
   rejectionReason: true,
   createdAt: true,
   customerUserId: true,
+  targetVendorId: true, // null = global lead, set = direct lead
 };
 
 // Customer fields included on the detail view (enough to identify them).

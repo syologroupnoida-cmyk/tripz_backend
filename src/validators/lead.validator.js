@@ -33,7 +33,12 @@ const budgetField = z
   });
 
 // Customer-facing payload is wrapped: { lead: { ... } }
+//
+// Optional `targetVendorId` at the top level converts a Global lead into a
+// Direct lead — visible only to that vendor (maxUnlocks forced to 1 server-side).
+// Used when the customer inquires from a specific vendor's package page.
 export const submitLeadSchema = z.object({
+  targetVendorId: z.string().trim().min(1).max(40).optional(),
   lead: z
     .object({
       // ---- Top-level relational fields ----

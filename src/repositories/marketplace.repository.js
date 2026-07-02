@@ -46,6 +46,7 @@ export const unlockLeadAtomically = async ({ leadId, vendorUserId }) => {
         priceInCredits: true,
         maxUnlocks: true,
         unlockCount: true,
+        targetVendorId: true,
       },
     });
     if (!lead) throw ApiError.notFound('Lead not found.');
@@ -54,6 +55,16 @@ export const unlockLeadAtomically = async ({ leadId, vendorUserId }) => {
         code: 'LEAD_NOT_ACTIVE',
         status: lead.status,
       });
+    }
+
+    // Direct lead guard — only the targeted vendor may unlock. Prevents a
+    // vendor from sniffing a direct lead's id and trying to claim it.
+    if (lead.targetVendorId && lead.targetVendorId !== vendorUserId) {
+      throw new ApiError(
+        403,
+        'This lead is reserved for another vendor.',
+        { code: 'LEAD_NOT_FOR_THIS_VENDOR' },
+      );
     }
 
     // 1b. Idempotency: already unlocked by this vendor?

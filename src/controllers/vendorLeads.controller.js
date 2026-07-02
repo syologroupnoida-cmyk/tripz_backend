@@ -25,3 +25,15 @@ export const getMyUnlockedLead = asyncHandler(async (req, res) => {
     data,
   });
 });
+
+export const listMyDirectLeads = asyncHandler(async (req, res) => {
+  const data = await vendorLeadsService.listMyDirectLeads({
+    vendorUserId: req.user.id,
+    ...req.query,
+  });
+  return sendSuccess(res, {
+    statusCode: 200,
+    message: 'Direct leads from your packages.',
+    data,
+  });
+});

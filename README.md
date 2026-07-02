@@ -226,3 +226,29 @@ Refresh tokens are hashed (SHA-256) before storage. If a previously-rotated refr
 ## License
 
 Private — Tripz internal project.
+
+
+const knownRulesSchema = z.object({
+  // Marketplace pricing
+  marketplaceLeadUnlockPrice: z.number().int().min(0).max(1000).optional(),
+  marketplaceLeadDiscountPercent: z.number().int().min(0).max(100).optional(),
+  freeUnlocksPerMonth: z.number().int().min(0).max(1000).optional(),
+  
+  // Support
+  supportTier: z.enum(['EMAIL', 'PRIORITY', 'DEDICATED']).optional(),
+  supportSlaHours: z.number().int().min(1).max(168).optional(),
+  phoneSupport: z.boolean().optional(),
+  
+  // Package features (Phase 2)
+  packageBoostSlots: z.number().int().min(0).max(100).optional(),
+  packageAnalyticsEnabled: z.boolean().optional(),
+  
+  // Analytics/Data
+  analyticsRetentionDays: z.number().int().min(1).max(3650).optional(),
+  dataExportEnabled: z.boolean().optional(),
+  
+  // Branding
+  customBrandingAllowed: z.boolean().optional(),
+  hideTripzBranding: z.boolean().optional(),
+})
+.passthrough();  // future flex: unknown fields pass but not validated

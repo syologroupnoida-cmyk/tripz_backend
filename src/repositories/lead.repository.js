@@ -13,6 +13,7 @@ const LEAD_PUBLIC_SELECT = {
   priceInCredits: true,
   maxUnlocks: true,
   unlockCount: true,
+  targetVendorId: true,  // exposed so frontend can render "Direct" badge
   createdAt: true,
 };
 
@@ -25,6 +26,8 @@ export const createLead = async ({
   budget,
   customerUserId,
   requirements,
+  targetVendorId,
+  maxUnlocks, // undefined → Prisma uses schema default (3); 1 for direct leads
 }) => {
   return prisma.lead.create({
     data: {
@@ -36,8 +39,10 @@ export const createLead = async ({
       budget,
       customerUserId,
       requirements,
+      targetVendorId: targetVendorId ?? null,
+      ...(maxUnlocks !== undefined ? { maxUnlocks } : {}),
       // status defaults to PENDING_REVIEW - admin must approve before it
-      // appears on the marketplace feed.
+      // appears on the marketplace feed (applies to BOTH global and direct).
     },
     select: { id: true, status: true, createdAt: true },
   });
@@ -69,7 +74,9 @@ export const listActiveLeads = async ({
   take,
   skip,
 }) => {
-  const where = { status: 'ACTIVE' };
+  // Global marketplace = ACTIVE leads NOT tied to a specific vendor. Direct
+  // leads (targetVendorId set) are surfaced via /vendor/leads/direct only.
+  const where = { status: 'ACTIVE', targetVendorId: null };
 
   // ---- Text filters (top-level, indexed, case-insensitive) ----
   if (destination) {

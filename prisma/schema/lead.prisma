@@ -14,6 +14,12 @@ model Lead {
   budget         Int? // form.budget; "" -> null, else INR amount
   customerUserId String? // null for anonymous/public submissions
 
+  // ---- Routing (Phase 2: dual-lead) ----
+  // null         → Global lead (visible on the marketplace to any approved vendor)
+  // set          → Direct lead (visible only to this vendor; maxUnlocks forced to 1)
+  // sourcePackageId will be added when the Package model lands.
+  targetVendorId String?
+
   // ---- Dynamic requirements (JSONB) ----
   // Bundles non-hot wizard fields: duration, ticketsBooked, hotelCategory,
   // flightRequired, adults, infants, children, bookingTimeline, cabRequired,
@@ -35,8 +41,9 @@ model Lead {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  customer    User?            @relation(fields: [customerUserId], references: [id], onDelete: SetNull)
-  assignments LeadAssignment[]
+  customer     User?            @relation("CustomerLeads", fields: [customerUserId], references: [id], onDelete: SetNull)
+  targetVendor User?            @relation("VendorDirectLeads", fields: [targetVendorId], references: [id], onDelete: SetNull)
+  assignments  LeadAssignment[]
 
   @@index([status])
   @@index([destination])
@@ -44,5 +51,6 @@ model Lead {
   @@index([travelDate]) // powers upcoming auto-EXPIRED cron + vendor "next 30 days" filter
   @@index([createdAt])
   @@index([email]) // fast auto-link of anonymous leads at customer registration
+  @@index([targetVendorId, status]) // fast "my direct leads" lookup for vendors
   @@map("leads")
 }

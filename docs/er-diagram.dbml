@@ -75,12 +75,44 @@ Enum KycDocumentType {
   OTHER
 }
 
+Enum LeadStatus {
+  PENDING_REVIEW [note: 'Customer just submitted; awaiting admin approval']
+  ACTIVE         [note: 'Admin approved; live on the marketplace feed']
+  EXHAUSTED      [note: 'Hit maxUnlocks — no more vendors can buy']
+  EXPIRED        [note: 'Past travelDate / TTL window — auto-closed by cron']
+  REJECTED       [note: 'Admin rejected (spam, duplicate, bad data)']
+  CLOSED         [note: 'Customer or admin manually closed']
+}
+
+Enum WalletTransactionType {
+  DEBIT_LEAD_UNLOCK          [note: 'Vendor spent credits to unlock a lead']
+  CREDIT_TOP_UP              [note: 'From payment gateway (Razorpay — future)']
+  CREDIT_REFUND              [note: 'Refund for a disputed unlock']
+  CREDIT_ADMIN_ADJUSTMENT    [note: 'Admin granted credits manually']
+  DEBIT_ADMIN_ADJUSTMENT     [note: 'Admin clawed credits back']
+  CREDIT_SUBSCRIPTION_GRANT  [note: 'Credits granted on subscription plan purchase']
+}
+
+Enum SubscriptionStatus {
+  ACTIVE     [note: 'Currently valid and running']
+  EXPIRED    [note: 'Past expiresAt — no longer valid']
+  CANCELLED  [note: 'Admin or vendor cancelled before expiry']
+  UPGRADED   [note: 'Vendor moved to a higher plan; superseded by replacedBySubscriptionId']
+}
+
+Enum BillingCycle {
+  MONTHLY
+  QUARTERLY
+  HALF_YEARLY
+  YEARLY
+}
+
 // ---------------------------------------------------------------------------
-//   TABLES
+//   TABLES — Identity + Auth
 // ---------------------------------------------------------------------------
 
 Table users {
-  id              varchar      [pk]
+  id              varchar      [pk, note: 'App-generated: <PREFIX>-<6-digit random> e.g. VEND-273728, CLIENT-003434']
   firstName       varchar      [not null]
   lastName        varchar      [not null]
   email           varchar      [unique, not null]
@@ -136,6 +168,10 @@ Table email_otps {
   Note: 'Stores OTP sessions for email verification, password reset, and Aadhaar OTP rate limiting.'
 }
 
+// ---------------------------------------------------------------------------
+//   TABLES — Role Profiles
+// ---------------------------------------------------------------------------
+
 Table vendor_profiles {
   userId    varchar   [pk, ref: - users.id, note: 'PK doubles as FK to users.id']
   kycStatus KycStatus [not null, default: 'PENDING']
@@ -156,6 +192,10 @@ Table customer_profiles {
 
   Note: 'Exists only when User.role = CLIENT. Placeholder for future customer-only fields.'
 }
+
+// ---------------------------------------------------------------------------
+//   TABLES — Vendor KYC
+// ---------------------------------------------------------------------------
 
 Table vendor_kyc {
   vendorUserId         varchar        [pk, ref: - vendor_profiles.userId]
@@ -232,16 +272,216 @@ Table vendor_kyc_documents {
 }
 
 // ---------------------------------------------------------------------------
+//   TABLES — Leads Marketplace
+// ---------------------------------------------------------------------------
+
+Table leads {
+  id             varchar    [pk]
+
+  // -- Hot indexed fields
+  destination    varchar    [not null, note: 'Wizard form.destination']
+  departureCity  varchar    [note: 'Promoted from JSONB; vendors filter by hub']
+  travelDate     timestamp  [note: 'Promoted from JSONB; date-range + expiry cron']
+  email          varchar    [not null, note: 'Masked in teaser mode']
+  phone          varchar    [not null, note: 'Masked in teaser mode']
+  budget         int        [note: 'INR amount; null when not provided']
+  customerUserId varchar    [ref: > users.id, note: 'Null for anonymous submissions; SetNull on user delete']
+
+  // -- Routing (Phase 2: dual-lead)
+  targetVendorId varchar    [ref: > users.id, note: 'null = global lead (marketplace); set = direct lead (this vendor only, maxUnlocks=1)']
+
+  // -- Dynamic form payload (JSONB)
+  requirements   json       [not null, note: 'duration, hotelCategory, flightRequired, adults, infants, children, tourType, etc.']
+
+  // -- Marketplace mechanics
+  status         LeadStatus [not null, default: 'PENDING_REVIEW']
+  priceInCredits int        [not null, default: 10, note: 'Cost a vendor pays to unlock']
+  maxUnlocks     int        [not null, default: 3, note: 'Cap on vendors who can buy']
+  unlockCount    int        [not null, default: 0, note: 'Monotonically increasing counter']
+
+  // -- Admin workflow
+  reviewedAt        timestamp
+  reviewedByAdminId varchar
+  rejectionReason   text
+
+  createdAt      timestamp  [not null]
+  updatedAt      timestamp  [not null]
+
+  indexes {
+    status
+    destination
+    departureCity
+    travelDate
+    createdAt
+    email
+    (targetVendorId, status) [note: 'Fast "my direct leads" lookup for vendors']
+  }
+
+  Note: 'Travel inquiry submitted by a customer. Hybrid storage — hot fields as columns, form payload in JSONB.'
+}
+
+Table lead_assignments {
+  id                  varchar   [pk]
+  leadId              varchar   [not null, ref: > leads.id, note: 'Cascade on lead delete']
+  vendorUserId        varchar   [not null, ref: > vendor_profiles.userId, note: 'Cascade on vendor delete']
+  priceInCreditsPaid  int       [not null, note: 'Snapshot of price at unlock time']
+  walletTransactionId varchar   [unique, not null, ref: > wallet_transactions.id, note: '1:1 with the DEBIT ledger row']
+  unlockedAt          timestamp [not null]
+
+  indexes {
+    (leadId, vendorUserId) [unique, note: 'A vendor can unlock each lead only once']
+    vendorUserId
+    leadId
+  }
+
+  Note: 'Source of truth for "can this vendor see the real phone/email?". Created atomically alongside the wallet debit ledger row.'
+}
+
+// ---------------------------------------------------------------------------
+//   TABLES — Wallet + Ledger
+// ---------------------------------------------------------------------------
+
+Table wallets {
+  vendorUserId   varchar   [pk, ref: - vendor_profiles.userId, note: 'Cascade on vendor delete']
+  balanceCredits int       [not null, default: 0]
+  createdAt      timestamp [not null]
+  updatedAt      timestamp [not null]
+
+  Note: 'One wallet per vendor. Created lazily on first credit operation. Balance in abstract "credits" — INR conversion lives in the payments turn.'
+}
+
+Table wallet_transactions {
+  id            varchar               [pk]
+  vendorUserId  varchar               [not null, ref: > wallets.vendorUserId, note: 'Cascade on wallet delete']
+  type          WalletTransactionType [not null]
+  amount        int                   [not null, note: 'Always >= 0; sign implied by type']
+  balanceAfter  int                   [not null, note: 'Post-application snapshot for audit']
+  referenceType varchar               [note: '"LEAD_ASSIGNMENT" / "PAYMENT" / "ADMIN" / "SUBSCRIPTION"']
+  referenceId   varchar               [note: 'FK-ish pointer to the row that caused this ledger entry']
+  notes         text
+  createdAt     timestamp             [not null]
+
+  indexes {
+    (vendorUserId, createdAt)
+    type
+  }
+
+  Note: 'Append-only ledger. Every wallet balance change writes exactly one row here.'
+}
+
+// ---------------------------------------------------------------------------
+//   TABLES — Subscription Plans + Vendor Subscriptions
+// ---------------------------------------------------------------------------
+
+Table subscription_plans {
+  id              varchar      [pk]
+
+  // -- Core identity
+  name            varchar      [not null, note: '"Basic Brown Plan", "Advance Silver", …']
+  slug            varchar      [unique, not null, note: 'URL-friendly, auto-generated from name']
+  description     varchar      [not null, note: 'Pitch line shown under name on the pricing card']
+
+  // -- Pricing (INR × 100 — matches Razorpay amount format)
+  salePriceInPaise    int      [not null, note: 'MRP (shown crossed out)']
+  offerPriceInPaise   int      [not null, note: 'Actual price the vendor pays; used in the Add-Days upgrade formula']
+  billingCycle        BillingCycle [not null, default: 'MONTHLY']
+  durationDays        int      [not null, note: '30 for monthly, 90 for quarterly, etc.']
+  trialDays           int      [not null, default: 0]
+
+  // -- Backend business logic
+  includedCredits         int  [not null, default: 0, note: 'Credits granted to wallet on purchase']
+  maxPackages             int  [not null, note: '-1 = unlimited (enforced in Phase 2)']
+  directLeadPriceCredits  int  [not null, default: 5, note: 'Phase 2: cost of a package-inquiry direct lead']
+  priorityWeight          int  [not null, default: 0, note: 'Higher = better marketplace ranking']
+
+  // -- Display flags (queryable/sortable)
+  isFeatured      boolean      [not null, default: `false`, note: '"Most Popular" ribbon plan']
+  displayOrder    int          [not null, default: 0, note: 'Sort order on the pricing page (1, 2, 3…)']
+  isActive        boolean      [not null, default: `true`, note: 'False = hidden from vendor catalog; existing subs keep running']
+  deletedAt       timestamp    [note: 'Soft-delete marker. Non-null = permanently retired (irreversible)']
+
+  // -- Frontend content (iterate freely, no migrations)
+  displayContent  json         [not null, note: 'Pricing-card content: badgeText, ribbonText, iconUrl, themeColor, ctaButtonText, features[]']
+  rules           json         [not null, note: 'Future edge-case rules escape hatch']
+
+  createdAt       timestamp    [not null]
+  updatedAt       timestamp    [not null]
+
+  indexes {
+    (isActive, isFeatured)
+    deletedAt
+    displayOrder
+  }
+
+  Note: 'Admin-managed subscription plan catalog. Hybrid storage: business fields as columns (queryable), marketing/display content in displayContent JSONB (iterate without migrations).'
+}
+
+Table vendor_subscriptions {
+  id                       varchar            [pk]
+  vendorUserId             varchar            [not null, ref: > vendor_profiles.userId, note: 'Cascade on vendor delete']
+  planId                   varchar            [not null, ref: > subscription_plans.id]
+  status                   SubscriptionStatus [not null, default: 'ACTIVE']
+
+  startsAt                 timestamp          [not null]
+  expiresAt                timestamp          [not null, note: 'startsAt + plan.durationDays (+ bonusDays for upgrades)']
+  cancelledAt              timestamp
+  cancelledBy              varchar            [note: 'Admin userId if force-cancelled']
+
+  // -- Upgrade lineage
+  replacedBySubscriptionId varchar            [unique, note: 'If this is the "old" side of an upgrade, points at the new sub row']
+
+  // -- Purchase-time snapshots (so plan-price edits later dont rewrite history)
+  creditsGranted           int                [not null, default: 0, note: 'plan.includedCredits at purchase time']
+  bonusDays                int                [not null, default: 0, note: 'Extra days from Add-Days upgrade formula; 0 for fresh purchases']
+
+  // -- Razorpay linkage (populated in payments phase)
+  paymentRef               varchar            [note: 'Razorpay order/payment id — nullable in the Phase-1 direct-buy MVP']
+
+  createdAt                timestamp          [not null]
+  updatedAt                timestamp          [not null]
+
+  indexes {
+    (vendorUserId, status)
+    expiresAt
+    planId
+  }
+
+  Note: 'Vendor purchase instance for a plan. One ACTIVE row per vendor at a time (service-layer enforced). UPGRADED rows form an audit chain via replacedBySubscriptionId.'
+}
+
+// ---------------------------------------------------------------------------
 //   RELATIONSHIPS (explicit — same as the `ref:` annotations above,
 //   listed here for tools that prefer central declarations)
 // ---------------------------------------------------------------------------
 
-Ref: refresh_tokens.userId            > users.id            [delete: cascade]
-Ref: email_otps.userId                > users.id            [delete: cascade]
-Ref: vendor_profiles.userId           - users.id            [delete: cascade]
-Ref: customer_profiles.userId         - users.id            [delete: cascade]
-Ref: vendor_kyc.vendorUserId          - vendor_profiles.userId  [delete: cascade]
-Ref: vendor_kyc_documents.vendorUserId > vendor_profiles.userId [delete: cascade]
+// Auth
+Ref: refresh_tokens.userId                > users.id                    [delete: cascade]
+Ref: email_otps.userId                    > users.id                    [delete: cascade]
+
+// Profiles (1:1 with users)
+Ref: vendor_profiles.userId               - users.id                    [delete: cascade]
+Ref: customer_profiles.userId             - users.id                    [delete: cascade]
+
+// KYC
+Ref: vendor_kyc.vendorUserId              - vendor_profiles.userId      [delete: cascade]
+Ref: vendor_kyc_documents.vendorUserId    > vendor_profiles.userId      [delete: cascade]
+
+// Leads
+Ref: leads.customerUserId                 > users.id                    [delete: set null]
+Ref: leads.targetVendorId                 > users.id                    [delete: set null]
+
+// Lead assignments (unlock events)
+Ref: lead_assignments.leadId              > leads.id                    [delete: cascade]
+Ref: lead_assignments.vendorUserId        > vendor_profiles.userId      [delete: cascade]
+Ref: lead_assignments.walletTransactionId > wallet_transactions.id
+
+// Wallet ledger
+Ref: wallets.vendorUserId                 - vendor_profiles.userId      [delete: cascade]
+Ref: wallet_transactions.vendorUserId     > wallets.vendorUserId        [delete: cascade]
+
+// Subscriptions
+Ref: vendor_subscriptions.vendorUserId    > vendor_profiles.userId      [delete: cascade]
+Ref: vendor_subscriptions.planId          > subscription_plans.id
 
 // ---------------------------------------------------------------------------
 //   TABLE GROUPS (visual grouping in dbdiagram.io)
@@ -261,4 +501,19 @@ TableGroup profiles {
 TableGroup kyc {
   vendor_kyc
   vendor_kyc_documents
+}
+
+TableGroup leads_marketplace {
+  leads
+  lead_assignments
+}
+
+TableGroup wallet {
+  wallets
+  wallet_transactions
+}
+
+TableGroup subscriptions {
+  subscription_plans
+  vendor_subscriptions
 }

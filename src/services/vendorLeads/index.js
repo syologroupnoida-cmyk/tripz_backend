@@ -11,6 +11,7 @@
 
 import { ApiError } from '../../utils/ApiError.js';
 import * as vendorLeadRepo from '../../repositories/vendorLead.repository.js';
+import { maskEmail, maskPhone } from '../marketplace/_masking.js';
 
 export const listMyUnlockedLeads = async ({ vendorUserId, take, skip }) => {
   const { items, total } = await vendorLeadRepo.listUnlockedLeadsForVendor({
@@ -30,4 +31,29 @@ export const getMyUnlockedLead = async ({ vendorUserId, assignmentId }) => {
     throw ApiError.notFound('Unlocked lead not found in your purchase history.');
   }
   return assignment;
+};
+
+/**
+ * Vendor's direct-lead inbox — leads the customer specifically routed to them
+ * (via package inquiry). Contact info is masked here exactly like the global
+ * marketplace; the vendor must unlock to see email/phone.
+ *
+ * Already-unlocked direct leads drop off this list and live in /vendor/leads/unlocked.
+ */
+export const listMyDirectLeads = async ({ vendorUserId, take, skip }) => {
+  const { items, total } = await vendorLeadRepo.listDirectLeadsForVendor({
+    vendorUserId,
+    take,
+    skip,
+  });
+
+  const teaserItems = items.map((lead) => ({
+    ...lead,
+    email: maskEmail(lead.email),
+    phone: maskPhone(lead.phone),
+    isDirect: true,
+    isUnlocked: false,
+  }));
+
+  return { items: teaserItems, total, take, skip };
 };

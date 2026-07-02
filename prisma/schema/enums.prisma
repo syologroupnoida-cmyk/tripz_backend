@@ -68,4 +68,19 @@ enum WalletTransactionType {
   CREDIT_REFUND // Refund for a disputed unlock.
   CREDIT_ADMIN_ADJUSTMENT // Admin granted credits manually.
   DEBIT_ADMIN_ADJUSTMENT // Admin clawed credits back.
+  CREDIT_SUBSCRIPTION_GRANT // Credits granted on subscription plan purchase.
+}
+
+enum SubscriptionStatus {
+  ACTIVE // Currently valid and running.
+  EXPIRED // Past expiresAt - no longer valid.
+  CANCELLED // Admin or vendor cancelled before expiry.
+  UPGRADED // Vendor moved to a higher plan; superseded by replacedBySubscriptionId.
+}
+
+enum BillingCycle {
+  MONTHLY
+  QUARTERLY
+  HALF_YEARLY
+  YEARLY
 }

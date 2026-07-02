@@ -1,0 +1,67 @@
+// Admin-managed catalog of subscription plans. Vendors buy a plan to unlock
+// package creation + get credits + priority weighting on the marketplace.
+//
+// Storage strategy is hybrid:
+//   • Business/queryable fields → dedicated columns (type-safe, indexed).
+//   • Marketing/display content → `displayContent` JSONB (iterate freely without
+//     migrations when the pricing page redesigns).
+//   • `rules` JSONB is a small escape hatch for future edge-case rules.
+//
+// Pricing is stored in paise (INR × 100) to match Razorpay's amount format.
+// `salePriceInPaise` is the crossed-out "before discount" MRP; `offerPriceInPaise`
+// is what the vendor actually pays. Matching frontend labels.
+model SubscriptionPlan {
+  id String @id @default(uuid())
+
+  // ---- Core identity ----
+  name        String
+  slug        String @unique // URL-friendly; auto-generated from name
+  description String // pitch line shown under the plan name
+
+  // ---- Pricing ----
+  salePriceInPaise  Int          // MRP (shown crossed out)
+  offerPriceInPaise Int          // Actual price the vendor pays
+  billingCycle      BillingCycle @default(MONTHLY)
+  durationDays      Int          // 30 / 90 / 180 / 365 depending on cycle
+  trialDays         Int          @default(0)
+
+  // ---- Backend business logic (used by services, must be typed) ----
+  includedCredits        Int
+  maxPackages            Int // -1 = unlimited (Phase 2 will enforce)
+  directLeadPriceCredits Int @default(5) // Phase 2: cost of a package-inquiry lead
+  priorityWeight         Int @default(0) // marketplace ranking boost
+
+  // ---- Display flags (queryable/sortable) ----
+  isFeatured   Boolean   @default(false) // "Most Popular" ribbon
+  displayOrder Int       @default(0) // sort order on the pricing page (1, 2, 3…)
+  isActive     Boolean   @default(true) // false = hidden from vendors; existing subs keep running
+  deletedAt    DateTime? // soft-delete marker; irreversible
+
+  // ---- Frontend content (iterate without migrations) ----
+  // Expected shape (documented, not enforced):
+  //   {
+  //     "badgeText": "Starter" | "Recommended" | "Best Value",
+  //     "ribbonText": "Most Popular" | null,
+  //     "iconUrl": "https://…",
+  //     "themeColor": "#8B4513",
+  //     "ctaButtonText": "Choose Basic Brown",
+  //     "features": [
+  //       { "text": "Create 5 packages per month", "included": true },
+  //       ...
+  //     ]
+  //   }
+  displayContent Json @default("{}")
+
+  // ---- Future edge-case rules ----
+  rules Json @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subscriptions VendorSubscription[]
+
+  @@index([isActive, isFeatured])
+  @@index([deletedAt])
+  @@index([displayOrder])
+  @@map("subscription_plans")
+}

@@ -32,6 +32,22 @@
       ]
     },
     {
+      "name": "Public — Subscription Plans",
+      "description": "Public-facing pricing catalog. No authentication required — anyone browsing the marketing site or landing page can see the plans before signing up.\n\nReturns the same data as the vendor-authenticated `/vendor/subscription-plans` endpoint (only active + non-deleted plans, ordered by displayOrder).",
+      "item": [
+        {
+          "name": "List active plans (anonymous pricing page)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/subscription-plans", "host": ["{{baseUrl}}"], "path": ["subscription-plans"] },
+            "description": "Returns the live plan catalog for the marketing/pricing page.\n\n**Filter rules (server-side, automatic):**\n- `isActive = true`\n- `deletedAt IS NULL`\n- Ordered by `displayOrder ASC`, then `offerPriceInPaise ASC`\n\n**Response shape:** same as `GET /vendor/subscription-plans`. See the frontend contract for the full field-by-field breakdown."
+          }
+        }
+      ]
+    },
+    {
       "name": "Auth — Public",
       "description": "Endpoints that do NOT require an access token. Use these to register, log in, and reset passwords.",
       "item": [
@@ -270,10 +286,10 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"lead\": {\n    \"destination\": \"Goa\",\n    \"email\": \"{{testClientEmail}}\",\n    \"phone\": \"{{testPhone}}\",\n    \"budget\": 75000,\n    \"departureCity\": \"Delhi\",\n    \"travelDate\": \"2026-12-15\",\n    \"duration\": \"5 Days\",\n    \"adults\": \"2\",\n    \"children\": \"1\",\n    \"infants\": \"0\",\n    \"hotelCategory\": \"4-star\",\n    \"flightRequired\": \"YES\",\n    \"cabRequired\": \"YES\",\n    \"packageType\": \"family\",\n    \"preferredCallTime\": \"evening\",\n    \"whatsappUpdates\": true,\n    \"tourType\": \"family\",\n    \"bookingTimeline\": \"within 1 month\"\n  }\n}"
+              "raw": "{\n  \"lead\": {\n    \"destination\": \"Goa\",\n    \"email\": \"{{testClientEmail}}\",\n    \"phone\": \"{{testPhone}}\",\n    \"budget\": 75000,\n    \"departureCity\": \"Delhi\",\n    \"travelDate\": \"2026-12-15\",\n    \"duration\": \"5 Days\",\n    \"adults\": \"2\",\n    \"children\": \"1\",\n    \"infants\": \"0\",\n    \"hotelCategory\": \"4-star\",\n    \"flightRequired\": \"YES\",\n    \"cabRequired\": \"YES\",\n    \"packageType\": \"family\",\n    \"preferredCallTime\": \"evening\",\n    \"whatsappUpdates\": true,\n    \"tourType\": \"family\",\n    \"bookingTimeline\": \"within 1 month\"\n  },\n  \"targetVendorId\": null\n}"
             },
             "url": { "raw": "{{baseUrl}}/leads", "host": ["{{baseUrl}}"], "path": ["leads"] },
-            "description": "Submits a travel inquiry. Lead is created with `status: PENDING_REVIEW`, `priceInCredits: 10`, `maxUnlocks: 3` (defaults).\n\n**Body shape:** `{ lead: { ...flat fields... } }` — the wizard fields are FLAT inside `lead`, NOT nested in a `requirements` sub-object. Backend extracts `destination/email/phone/budget` to top-level columns and bundles everything else into the `requirements` JSONB column.\n\n**Auth behaviour (optional):** if a bearer token is sent and valid → `customerUserId` = user id. If missing or invalid → anonymous lead. The lead is later auto-linked when a customer registers with the same email.\n\n**Type coercion:**\n- `adults/children/infants` — accepts `\"2\"` or `2` (string or int)\n- `flightRequired/cabRequired/otherDestinations` — accepts `\"YES\"`/`\"NO\"`/boolean\n- `budget` — empty string → null"
+            "description": "Submits a travel inquiry. Lead is created with `status: PENDING_REVIEW`, `priceInCredits: 10` (defaults).\n\n**Body shape:** `{ lead: { ...flat fields... }, targetVendorId?: 'VEND-...' }`\n- `lead` — wizard fields are FLAT inside `lead`, NOT nested in `requirements`. Backend extracts `destination/email/phone/budget/departureCity/travelDate` to top-level columns and bundles everything else into the `requirements` JSONB column.\n- `targetVendorId` (optional) — if set, creates a **Direct lead** (visible only to that vendor, `maxUnlocks=1` forced). If null/omitted, creates a **Global lead** (`maxUnlocks=3` default, all approved vendors can see).\n\n**Direct-lead validation:** target vendor must be `role=VENDOR`, `isActive=true`, and `kycStatus=APPROVED`. Otherwise 400 with code `TARGET_VENDOR_NOT_FOUND` / `TARGET_VENDOR_INACTIVE` / `TARGET_VENDOR_KYC_PENDING`.\n\n**Auth behaviour (optional):** if a bearer token is sent and valid → `customerUserId` = user id. If missing or invalid → anonymous lead. The lead is later auto-linked when a customer registers with the same email.\n\n**Type coercion:**\n- `adults/children/infants` — accepts `\"2\"` or `2` (string or int)\n- `flightRequired/cabRequired/otherDestinations` — accepts `\"YES\"`/`\"NO\"`/boolean\n- `budget` — empty string → null"
           }
         }
       ]
@@ -468,6 +484,23 @@
               "path": ["vendor", "leads", "unlocked", "{{assignmentId}}"]
             },
             "description": "Re-view a previously unlocked lead. Returns 404 if the assignment doesn't exist OR belongs to a different vendor (scoped lookup)."
+          }
+        },
+        {
+          "name": "List my direct leads (inbox)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/vendor/leads/direct?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["vendor", "leads", "direct"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            },
+            "description": "Vendor's direct-lead inbox — ACTIVE leads where `targetVendorId == this vendor`, not yet unlocked. Contact info is masked here (same as global marketplace); vendor must unlock to reveal.\n\nAlready-unlocked direct leads drop off this list and appear in `/vendor/leads/unlocked` instead.\n\nUse this for the 'Direct Inquiries' tab in the vendor dashboard."
           }
         }
       ]
@@ -867,6 +900,296 @@
               ]
             },
             "description": "Returns leads where `customerUserId` matches the logged-in client. Includes leads auto-linked at registration via email match."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Super Admin — Subscription Plans",
+      "description": "Plan catalog CRUD. SUPER_ADMIN only.\n\nPricing is in **paise** (INR × 100). Example: ₹999 → `99900`.\n\n**Two price fields:**\n- `salePriceInPaise` — MRP shown crossed-out on the pricing card\n- `offerPriceInPaise` — actual price the vendor pays (used for the Add-Days upgrade formula too)\n\n`maxPackages: -1` means unlimited. `displayContent` is a JSONB blob for pricing-card display (badge, features, theme color, CTA text). Frontend renders whatever fields exist — no hardcoded logic per plan.\n\n**Slug** is auto-generated from `name` — no need to send it.",
+      "item": [
+        {
+          "name": "Create plan — Basic Brown (Starter)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.id) {",
+                  "  pm.environment.set('planId', res.data.id);",
+                  "  console.log('Auto-saved planId:', res.data.id, '| slug:', res.data.slug);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Basic Brown Plan\",\n  \"description\": \"For agents starting with package marketplace creation.\",\n  \"salePriceInPaise\": 39900,\n  \"offerPriceInPaise\": 29900,\n  \"billingCycle\": \"MONTHLY\",\n  \"durationDays\": 30,\n  \"trialDays\": 0,\n  \"includedCredits\": 100,\n  \"maxPackages\": 5,\n  \"directLeadPriceCredits\": 8,\n  \"priorityWeight\": 0,\n  \"isFeatured\": false,\n  \"displayOrder\": 1,\n  \"isActive\": true,\n  \"displayContent\": {\n    \"badgeText\": \"Starter\",\n    \"ribbonText\": null,\n    \"iconUrl\": \"\",\n    \"themeColor\": \"#8B4513\",\n    \"ctaButtonText\": \"Choose Basic Brown\",\n    \"features\": [\n      { \"text\": \"Create 5 packages per month\", \"included\": true },\n      { \"text\": \"Create packages on marketplace\", \"included\": true },\n      { \"text\": \"Basic package visibility\", \"included\": true },\n      { \"text\": \"Purchase leads using wallet credits\", \"included\": true },\n      { \"text\": \"Direct mail and call access after lead purchase\", \"included\": true },\n      { \"text\": \"Standard dashboard access\", \"included\": true },\n      { \"text\": \"Email support\", \"included\": true }\n    ]\n  },\n  \"rules\": {}\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/super-admin/subscription-plans", "host": ["{{baseUrl}}"], "path": ["super-admin", "subscription-plans"] },
+            "description": "Create the Starter tier plan matching the pricing page's first card.\n\n**Body fields (structured columns):**\n- `name`, `description` — display strings\n- `salePriceInPaise` — MRP (crossed out, ₹399 = 39900)\n- `offerPriceInPaise` — actual price (₹299 = 29900). Must be ≤ salePrice.\n- `billingCycle` — MONTHLY / QUARTERLY / HALF_YEARLY / YEARLY\n- `durationDays` — how long the sub lasts (30 for monthly)\n- `trialDays` — free trial period\n- `includedCredits` — granted to vendor's wallet on purchase\n- `maxPackages` — `-1` for unlimited, else 1-1000 (Phase 2 will enforce this cap)\n- `directLeadPriceCredits` — cost of a package-inquiry direct lead (Phase 2)\n- `priorityWeight` — marketplace ranking boost (higher = better)\n- `isFeatured` — true = card gets \"Most Popular\" ribbon\n- `displayOrder` — sort order (1, 2, 3…) on the pricing page\n\n**`displayContent` (JSONB — free-form marketing content):**\n- `badgeText` — small pill next to name (\"Starter\" / \"Recommended\" / \"Best Value\")\n- `ribbonText` — top-right ribbon (usually only on featured plan)\n- `iconUrl` — circular icon URL\n- `themeColor` — hex accent (#RRGGBB)\n- `ctaButtonText` — button label\n- `features` — array of `{ text, included }` bullets\n\n**Side effect:** Auto-saves `planId` for follow-up calls. Slug is generated from `name` (`basic-brown-plan`)."
+          }
+        },
+        {
+          "name": "Create plan — Advance Silver (Featured)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Advance Silver Plan\",\n  \"description\": \"Balanced package credits and priority support for active agents.\",\n  \"salePriceInPaise\": 69900,\n  \"offerPriceInPaise\": 49900,\n  \"billingCycle\": \"MONTHLY\",\n  \"durationDays\": 30,\n  \"trialDays\": 0,\n  \"includedCredits\": 220,\n  \"maxPackages\": 25,\n  \"directLeadPriceCredits\": 5,\n  \"priorityWeight\": 50,\n  \"isFeatured\": true,\n  \"displayOrder\": 2,\n  \"isActive\": true,\n  \"displayContent\": {\n    \"badgeText\": \"Recommended\",\n    \"ribbonText\": \"Most Popular\",\n    \"iconUrl\": \"\",\n    \"themeColor\": \"#C0C0C0\",\n    \"ctaButtonText\": \"Choose Advance Silver\",\n    \"features\": [\n      { \"text\": \"Create 25 packages per month\", \"included\": true },\n      { \"text\": \"More credits for members\", \"included\": true },\n      { \"text\": \"Priority package visibility\", \"included\": true },\n      { \"text\": \"Purchase leads using wallet credits\", \"included\": true },\n      { \"text\": \"Direct mail and call access after lead purchase\", \"included\": true },\n      { \"text\": \"Package listing support\", \"included\": true },\n      { \"text\": \"Priority support\", \"included\": true }\n    ]\n  },\n  \"rules\": {}\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/super-admin/subscription-plans", "host": ["{{baseUrl}}"], "path": ["super-admin", "subscription-plans"] },
+            "description": "The mid-tier \"most popular\" plan. `isFeatured: true` marks it for the darker card + ribbon on the pricing page. `directLeadPriceCredits: 5` — direct package leads cost less than on Basic (8)."
+          }
+        },
+        {
+          "name": "Create plan — Premium Gold (Best Value)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Premium Gold Plan\",\n  \"description\": \"Best for teams creating more packages and scaling faster.\",\n  \"salePriceInPaise\": 129900,\n  \"offerPriceInPaise\": 99900,\n  \"billingCycle\": \"MONTHLY\",\n  \"durationDays\": 30,\n  \"trialDays\": 0,\n  \"includedCredits\": 500,\n  \"maxPackages\": -1,\n  \"directLeadPriceCredits\": 3,\n  \"priorityWeight\": 100,\n  \"isFeatured\": false,\n  \"displayOrder\": 3,\n  \"isActive\": true,\n  \"displayContent\": {\n    \"badgeText\": \"Best Value\",\n    \"ribbonText\": null,\n    \"iconUrl\": \"\",\n    \"themeColor\": \"#FFD700\",\n    \"ctaButtonText\": \"Choose Premium Gold\",\n    \"features\": [\n      { \"text\": \"Create unlimited packages per month\", \"included\": true },\n      { \"text\": \"Highest package credit value\", \"included\": true },\n      { \"text\": \"Premium marketplace access\", \"included\": true },\n      { \"text\": \"Purchase leads using wallet credits\", \"included\": true },\n      { \"text\": \"Direct mail and call access after lead purchase\", \"included\": true },\n      { \"text\": \"Advanced package insights\", \"included\": true },\n      { \"text\": \"Dedicated support assistance\", \"included\": true }\n    ]\n  },\n  \"rules\": {}\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/super-admin/subscription-plans", "host": ["{{baseUrl}}"], "path": ["super-admin", "subscription-plans"] },
+            "description": "Top tier with `maxPackages: -1` (unlimited) and the lowest `directLeadPriceCredits: 3` — biggest per-lead discount encourages upgrades."
+          }
+        },
+        {
+          "name": "Update plan (fields + isActive toggle)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"offerPriceInPaise\": 27900,\n  \"description\": \"Refreshed pricing for the Starter tier.\",\n  \"displayContent\": {\n    \"badgeText\": \"Starter\",\n    \"themeColor\": \"#8B4513\",\n    \"ctaButtonText\": \"Choose Basic Brown\",\n    \"features\": [\n      { \"text\": \"Create 5 packages per month\", \"included\": true },\n      { \"text\": \"Purchase leads using wallet credits\", \"included\": true },\n      { \"text\": \"Email support\", \"included\": true }\n    ]\n  }\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/super-admin/subscription-plans/{{planId}}", "host": ["{{baseUrl}}"], "path": ["super-admin", "subscription-plans", "{{planId}}"] },
+            "description": "Partial update — only supplied keys are patched.\n\n**Also handles the isActive toggle:**\n- Deactivate: `{ \"isActive\": false }` — hides from vendor catalog, existing subs continue.\n- Reactivate: `{ \"isActive\": true }` — brings a deactivated plan back.\n\n**displayContent replaces the whole JSONB blob** — send the full object you want stored, not a partial patch. If you renamed `name`, the slug will regenerate automatically.\n\nExisting vendor subs are NOT reprocessed on price/credit changes — the snapshot at purchase time lives on `VendorSubscription.creditsGranted`.\n\n**Errors:**\n- 404 — plan not found\n- 400 `PLAN_DELETED` — target is soft-deleted (retired forever, cannot be modified)\n- 400 — `offerPriceInPaise > salePriceInPaise` (only checked when both are sent)"
+          }
+        },
+        {
+          "name": "Delete plan (soft delete — permanent)",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Retiring — replaced by new pricing tier.\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/super-admin/subscription-plans/{{planId}}", "host": ["{{baseUrl}}"], "path": ["super-admin", "subscription-plans", "{{planId}}"] },
+            "description": "Soft-delete — stamps `deletedAt = now()` and force-flips `isActive = false`. Plan disappears from all catalogs.\n\n**Existing vendor subs on this plan continue to their natural `expiresAt`** — deletion only retires the catalog entry, no vendor-facing disruption.\n\n**Irreversible** — deleted plans cannot be reactivated. Idempotent (calling twice returns the same state).\n\n**Body:**\n- `reason` — optional, 0-500 chars. Logged for audit; not persisted on the plan row.\n\nTo see deleted plans on the admin list, pass `?includeDeleted=true`."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin — Subscription Plans",
+      "description": "Plan catalog READ endpoints. ADMIN + SUPER_ADMIN.",
+      "item": [
+        {
+          "name": "List plans (all — active + inactive)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/subscription-plans?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "subscription-plans"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "isActive", "value": "true", "disabled": true },
+                { "key": "includeDeleted", "value": "true", "disabled": true },
+                { "key": "sortBy", "value": "createdAt", "disabled": true },
+                { "key": "order", "value": "desc", "disabled": true }
+              ]
+            },
+            "description": "Paginated plan list. Enable the `isActive` query to filter live/hidden plans.\n\nSoft-deleted plans are hidden by default. Enable `includeDeleted=true` for the audit view (shows plans with a non-null `deletedAt`).\n\n**sortBy:** `createdAt` | `updatedAt` | `name` | `priceInPaise` | `durationDays`"
+          }
+        },
+        {
+          "name": "Get plan detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/admin/subscription-plans/{{planId}}", "host": ["{{baseUrl}}"], "path": ["admin", "subscription-plans", "{{planId}}"] },
+            "description": "Full plan record including `rules` JSONB."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin — Subscriptions",
+      "description": "Vendor subscription monitoring (READ-only). ADMIN + SUPER_ADMIN.\n\nForce-cancel is a SUPER_ADMIN power action — see the **Super Admin — Subscriptions** folder for that endpoint.",
+      "item": [
+        {
+          "name": "List all vendor subscriptions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.items?.[0]?.id) {",
+                  "  pm.environment.set('subscriptionId', res.data.items[0].id);",
+                  "  console.log('Auto-saved subscriptionId:', res.data.items[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/subscriptions?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "subscriptions"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "status", "value": "ACTIVE", "disabled": true },
+                { "key": "planId", "value": "{{planId}}", "disabled": true },
+                { "key": "vendorUserId", "value": "{{vendorId}}", "disabled": true },
+                { "key": "sortBy", "value": "createdAt", "disabled": true },
+                { "key": "order", "value": "desc", "disabled": true }
+              ]
+            },
+            "description": "Filter by `status` (ACTIVE / EXPIRED / CANCELLED / UPGRADED), `planId`, or `vendorUserId`.\n\n**Side effect:** Auto-saves `subscriptionId` (first item) for follow-up calls."
+          }
+        },
+        {
+          "name": "Get subscription detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/admin/subscriptions/{{subscriptionId}}", "host": ["{{baseUrl}}"], "path": ["admin", "subscriptions", "{{subscriptionId}}"] },
+            "description": "Full subscription record including linked plan, effectiveStatus (honours on-the-fly expiry), and `replacedBySubscriptionId` for upgrade audit."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Super Admin — Subscriptions",
+      "description": "Vendor subscription power actions. SUPER_ADMIN only.\n\nMatches the pattern used for other sensitive vendor actions (credit grant/revoke, vendor activate/deactivate) — reads are open to ADMIN, but writes that touch a live vendor's paid state require SUPER_ADMIN.",
+      "item": [
+        {
+          "name": "Force-cancel a vendor subscription",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Refund processed — cancelling active subscription.\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/super-admin/subscriptions/{{subscriptionId}}/cancel", "host": ["{{baseUrl}}"], "path": ["super-admin", "subscriptions", "{{subscriptionId}}", "cancel"] },
+            "description": "Guarded cancel — only succeeds if the sub is currently ACTIVE. Reason (5-500 chars) is REQUIRED for the audit trail.\n\n**Real-world use cases:**\n- Vendor requested cancellation via support\n- Refund initiated — closing paid access\n- Fraud detected — killing fraudulent subscription\n- Payment reconciliation issue — vendor got a sub but the payment did not clear\n- T&C violation — revoking service\n\n**What it does:** Flips the sub to `CANCELLED`, stamps `cancelledAt` + `cancelledBy`, logs an audit line.\n\n**What it does NOT do (yet):**\n- Refund credits already granted (wallet untouched)\n- Refund money via Razorpay (payment integration is a later phase)\n- Notify the vendor via email/SMS\n\n**Errors:**\n- 404 — sub not found\n- 409 `SUB_NOT_ACTIVE` — already EXPIRED / CANCELLED / UPGRADED"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Vendor — Subscriptions",
+      "description": "Vendor's own plan catalog + buy / upgrade / current / history. VENDOR role.\n\n**Direct-buy MVP:** No payment gateway. Buying a plan immediately activates it and grants the plan's `includedCredits` to the wallet. Razorpay verification will slot in front of buy/upgrade in a later phase.\n\n**Upgrade — Add Days:** Old sub's remaining value is converted into bonus days on the new plan at the new plan's daily rate. Vendor pays full new-plan price up front, gets extra time instead.\n\n**Credits — Additive:** New plan's credits stack on top of whatever the vendor already had. Old credits never expire.",
+      "item": [
+        {
+          "name": "List active plans (vendor catalog)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/vendor/subscription-plans", "host": ["{{baseUrl}}"], "path": ["vendor", "subscription-plans"] },
+            "description": "Only `isActive = true` plans. Ordered cheapest → priciest so the UI naturally renders Basic → Pro → Ultra."
+          }
+        },
+        {
+          "name": "Buy subscription (fresh)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.subscription?.id) {",
+                  "  pm.environment.set('subscriptionId', res.data.subscription.id);",
+                  "  console.log('Auto-saved subscriptionId:', res.data.subscription.id, '| Wallet:', res.data.walletBalanceAfter);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"planId\": \"{{planId}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/vendor/subscriptions", "host": ["{{baseUrl}}"], "path": ["vendor", "subscriptions"] },
+            "description": "Fresh purchase. Returns the new sub + `walletBalanceAfter` (post-credit-grant).\n\n**Errors:**\n- 404 — plan not found or inactive\n- 409 `ACTIVE_SUBSCRIPTION_EXISTS` — vendor already has an ACTIVE sub (use **Upgrade** instead)"
+          }
+        },
+        {
+          "name": "Upgrade subscription (Add Days)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.subscription?.id) {",
+                  "  pm.environment.set('subscriptionId', res.data.subscription.id);",
+                  "  console.log('Upgraded. New sub:', res.data.subscription.id, '| Bonus days:', res.data.bonusDaysGranted, '| Wallet:', res.data.walletBalanceAfter);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"planId\": \"{{planId}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/vendor/subscriptions/upgrade", "host": ["{{baseUrl}}"], "path": ["vendor", "subscriptions", "upgrade"] },
+            "description": "Upgrade to a pricier plan. Set `planId` to the target plan's id (NOT the current one).\n\n**Formula:**\n```\nremainingValue = (daysRemaining / oldPlan.durationDays) * oldPlan.priceInPaise\nbonusDays      = ceil(remainingValue / (newPlan.priceInPaise / newPlan.durationDays))\nnewExpiresAt   = now + newPlan.durationDays + bonusDays\n```\n\n**Errors:**\n- 400 — no active sub / already on this plan\n- 400 `DOWNGRADE_BLOCKED` — new plan is cheaper than current\n- 404 — plan not found or inactive\n- 409 `CONCURRENT_UPGRADE` — someone else touched the old sub between check and update"
+          }
+        },
+        {
+          "name": "Get current subscription",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/vendor/subscriptions/current", "host": ["{{baseUrl}}"], "path": ["vendor", "subscriptions", "current"] },
+            "description": "Current ACTIVE subscription (or `null` if none).\n\n**`effectiveStatus`:** Reflects real-world state — if the DB row is still ACTIVE but `expiresAt` has passed, this field returns `EXPIRED` even before the daily cron catches up."
+          }
+        },
+        {
+          "name": "Subscription history (paginated)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/vendor/subscriptions/history?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["vendor", "subscriptions", "history"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" }
+              ]
+            },
+            "description": "All of the vendor's past + current subs. Handy for the vendor's account/billing page. UPGRADED rows include `replacedBySubscriptionId` linking to the successor."
           }
         }
       ]

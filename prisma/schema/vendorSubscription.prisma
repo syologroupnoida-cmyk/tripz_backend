@@ -1,0 +1,47 @@
+// A vendor's subscription instance — links the vendor to a specific plan
+// for a bounded time window. One ACTIVE row per vendor at a time (enforced
+// in the service layer); older rows stay for audit history.
+//
+// Upgrade audit:
+//   When a vendor upgrades, the old row's status flips to UPGRADED and its
+//   `replacedBySubscriptionId` points at the new row. This gives a clean
+//   chain of "what plan was this vendor on, and why did it change".
+model VendorSubscription {
+  id           String             @id @default(uuid())
+  vendorUserId String
+  planId       String
+  status       SubscriptionStatus @default(ACTIVE)
+
+  startsAt   DateTime  @default(now())
+  expiresAt  DateTime // startsAt + plan.durationDays (+ bonus days for upgrades)
+  cancelledAt DateTime?
+  cancelledBy String? // admin userId if force-cancelled
+
+  // Upgrade lineage: if this row is the "old" side of an upgrade, this points
+  // at the new subscription; null for fresh purchases and current rows.
+  replacedBySubscriptionId String? @unique
+
+  // Snapshot of the credits granted on this purchase — plan.includedCredits
+  // at the moment of purchase. Kept here so plan-price edits later don't
+  // rewrite history.
+  creditsGranted Int @default(0)
+
+  // Bonus days added on top of plan.durationDays (upgrade-only). Zero for
+  // fresh purchases.
+  bonusDays Int @default(0)
+
+  // Razorpay linkage — populated in the payments turn. Nullable for now
+  // since Phase 1 has a mock "direct buy" flow.
+  paymentRef String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  vendor VendorProfile    @relation(fields: [vendorUserId], references: [userId], onDelete: Cascade)
+  plan   SubscriptionPlan @relation(fields: [planId], references: [id])
+
+  @@index([vendorUserId, status])
+  @@index([expiresAt])
+  @@index([planId])
+  @@map("vendor_subscriptions")
+}
