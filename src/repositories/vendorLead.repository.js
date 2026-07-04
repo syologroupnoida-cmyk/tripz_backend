@@ -2,6 +2,17 @@ import prisma from '../config/db.js';
 
 // Each unlocked lead shows: how much the vendor paid + when + the full lead.
 // The lead's contact info is included unmasked — the vendor paid for it.
+// Slim package summary attached to every lead surface so the vendor sees
+// "which package produced this lead" without a second fetch. Only exposes
+// non-sensitive display fields; package is retired-safe (SetNull on delete).
+const PACKAGE_SUMMARY_SELECT = {
+  id: true,
+  title: true,
+  slug: true,
+  destination: true,
+  mainImageUrl: true,
+};
+
 const ASSIGNMENT_WITH_LEAD_SELECT = {
   id: true,
   leadId: true,
@@ -22,6 +33,8 @@ const ASSIGNMENT_WITH_LEAD_SELECT = {
       priceInCredits: true,
       maxUnlocks: true,
       unlockCount: true,
+      packageId: true,
+      package: { select: PACKAGE_SUMMARY_SELECT },
       createdAt: true,
     },
   },
@@ -62,6 +75,8 @@ export const findUnlockedLeadForVendor = async ({ vendorUserId, assignmentId }) 
 
 // Slim lead shape for the "direct leads" inbox. Contact info is masked here
 // (matches marketplace behaviour) until the vendor actually unlocks one.
+// packageId + package summary let the frontend render a "From your package
+// <title>" badge to give context at a glance.
 const DIRECT_LEAD_SELECT = {
   id: true,
   destination: true,
@@ -75,6 +90,8 @@ const DIRECT_LEAD_SELECT = {
   priceInCredits: true,
   maxUnlocks: true,
   unlockCount: true,
+  packageId: true,
+  package: { select: PACKAGE_SUMMARY_SELECT },
   createdAt: true,
 };
 

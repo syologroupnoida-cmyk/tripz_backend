@@ -14,9 +14,22 @@ const LEAD_PUBLIC_SELECT = {
   maxUnlocks: true,
   unlockCount: true,
   targetVendorId: true,  // exposed so frontend can render "Direct" badge
+  packageId: true,       // exposed so frontend can render "From your package" badge
   createdAt: true,
 };
 
+/**
+ * Insert a new Lead. All routing/pricing overrides are optional — when
+ * omitted, Prisma applies model defaults (status=PENDING_REVIEW,
+ * priceInCredits=10, maxUnlocks=3, packageId=null).
+ *
+ * Callers:
+ *   • Regular global lead        → base fields only.
+ *   • Admin-assigned direct lead → +targetVendorId, +maxUnlocks:1.
+ *   • Package inquiry lead       → +packageId, +targetVendorId,
+ *                                  +status:'ACTIVE', +priceInCredits,
+ *                                  +maxUnlocks:1.
+ */
 export const createLead = async ({
   destination,
   departureCity,
@@ -26,8 +39,11 @@ export const createLead = async ({
   budget,
   customerUserId,
   requirements,
+  packageId,
   targetVendorId,
-  maxUnlocks, // undefined → Prisma uses schema default (3); 1 for direct leads
+  status,
+  priceInCredits,
+  maxUnlocks,
 }) => {
   return prisma.lead.create({
     data: {
@@ -40,9 +56,12 @@ export const createLead = async ({
       customerUserId,
       requirements,
       targetVendorId: targetVendorId ?? null,
+      ...(packageId ? { packageId } : {}),
+      ...(status ? { status } : {}),
+      ...(priceInCredits !== undefined ? { priceInCredits } : {}),
       ...(maxUnlocks !== undefined ? { maxUnlocks } : {}),
-      // status defaults to PENDING_REVIEW - admin must approve before it
-      // appears on the marketplace feed (applies to BOTH global and direct).
+      // When none of the overrides are provided, Prisma applies model defaults
+      // (status=PENDING_REVIEW, priceInCredits=10, maxUnlocks=3).
     },
     select: { id: true, status: true, createdAt: true },
   });
@@ -162,6 +181,10 @@ const CUSTOMER_LEAD_SELECT = {
   priceInCredits: true,
   maxUnlocks: true,
   unlockCount: true,
+  packageId: true, // lets the customer see "Inquiry for {package.title}"
+  package: {
+    select: { id: true, title: true, slug: true, destination: true, mainImageUrl: true },
+  },
   createdAt: true,
   updatedAt: true,
 };

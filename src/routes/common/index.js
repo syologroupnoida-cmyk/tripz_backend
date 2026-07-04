@@ -4,6 +4,7 @@ import healthRoutes from './health.routes.js';
 import uploadRoutes from './upload.routes.js';
 import leadRoutes from './lead.routes.js';
 import subscriptionPlansRoutes from './subscriptionPlans.routes.js';
+import packagesRoutes from './packages.routes.js';
 
 const router = Router();
 
@@ -12,5 +13,6 @@ router.use('/auth', authRoutes);
 router.use('/uploads', uploadRoutes);
 router.use('/leads', leadRoutes);
 router.use('/subscription-plans', subscriptionPlansRoutes);
+router.use('/packages', packagesRoutes);
 
 export default router;

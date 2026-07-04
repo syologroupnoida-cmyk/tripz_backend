@@ -107,6 +107,35 @@ Enum BillingCycle {
   YEARLY
 }
 
+Enum PackageStatus {
+  DRAFT     [note: 'Vendor is still editing; not visible to customers or admin queue']
+  SUBMITTED [note: 'Sent for admin review']
+  APPROVED  [note: 'Live on marketplace — customers can inquire']
+  REJECTED  [note: 'Admin rejected with a reason; vendor can edit + resubmit']
+  PAUSED    [note: 'Vendor self-paused (off-season) or auto-paused when subscription expires']
+}
+
+Enum PackageType {
+  FAMILY
+  COUPLE
+  HONEYMOON
+  SOLO
+  GROUP          [note: 'Friends / group trip (e.g., "trip-travelers")']
+  ADVENTURE      [note: 'Trekking, water sports, etc.']
+  RELIGIOUS      [note: 'Pilgrimage tours']
+  BEACH
+  HILL_STATION
+  WILDLIFE       [note: 'Safaris, national parks']
+  CULTURAL       [note: 'Heritage, temples, cultural tours']
+  CORPORATE      [note: 'Team offsites, business trips']
+  OTHER
+}
+
+Enum PackageValidityType {
+  EVERGREEN [note: 'Always available — startDate/endDate optional/null']
+  SEASONAL  [note: 'Time-boxed (festival, event) — startDate + endDate REQUIRED']
+}
+
 // ---------------------------------------------------------------------------
 //   TABLES — Identity + Auth
 // ---------------------------------------------------------------------------
@@ -289,6 +318,7 @@ Table leads {
 
   // -- Routing (Phase 2: dual-lead)
   targetVendorId varchar    [ref: > users.id, note: 'null = global lead (marketplace); set = direct lead (this vendor only, maxUnlocks=1)']
+  packageId      varchar    [ref: > packages.id, note: 'Non-null when the lead came from a package inquiry page. Auto-derives targetVendorId + destination + directLeadPriceCredits from the package']
 
   // -- Dynamic form payload (JSONB)
   requirements   json       [not null, note: 'duration, hotelCategory, flightRequired, adults, infants, children, tourType, etc.']
@@ -315,6 +345,7 @@ Table leads {
     createdAt
     email
     (targetVendorId, status) [note: 'Fast "my direct leads" lookup for vendors']
+    packageId                [note: 'Fast "all leads for this package" lookup']
   }
 
   Note: 'Travel inquiry submitted by a customer. Hybrid storage — hot fields as columns, form payload in JSONB.'
@@ -450,6 +481,81 @@ Table vendor_subscriptions {
 }
 
 // ---------------------------------------------------------------------------
+//   TABLES — Packages (vendor-created marketplace offerings)
+// ---------------------------------------------------------------------------
+
+Table packages {
+  id                 varchar             [pk]
+  vendorUserId       varchar             [not null, note: 'Owner — set from JWT, not from client payload']
+  slug               varchar             [unique, not null, note: 'URL-friendly, auto-generated from title + vendor prefix']
+
+  // -- Content
+  title              varchar             [not null, note: 'e.g., "Kashmir 4N/2D Family Package"']
+  destination        varchar             [not null, note: 'e.g., "Kashmir", "Goa" — indexed for filter']
+  route              varchar             [note: 'Descriptive route text, e.g., "2N and 2D"']
+  duration           varchar             [note: 'Descriptive duration, e.g., "4N/2D"']
+  overview           text                [note: 'Long marketing copy']
+  otherDetails       text
+  cancellationPolicy text                [note: 'Rich text — HTML allowed']
+
+  // -- Categorization
+  packageType        PackageType         [not null]
+  validityType       PackageValidityType [not null, default: 'EVERGREEN']
+
+  // -- Availability window (REQUIRED when validityType = SEASONAL)
+  startDate          timestamp           [note: 'Package available from this date']
+  endDate            timestamp           [note: 'Package available until this date']
+
+  // -- Pricing (INR × 100 — matches SubscriptionPlan convention)
+  priceInPaise       int                 [not null, note: 'Offer price the customer sees']
+  oldPriceInPaise    int                 [note: 'MRP shown crossed out — nullable if no discount shown']
+  discountPercent    int                 [note: 'For explicit "10% off" badge; nullable']
+
+  // -- Amenities (free-form strings, admin-approved)
+  hotelCategory      varchar             [note: 'e.g., "3 star", "4 star", "5 star"']
+  transfers          varchar             [note: 'e.g., "cab", "flight+cab"']
+  meals              varchar             [note: 'e.g., "breakfast included", "all meals"']
+  sightseeing        varchar
+
+  // -- Media
+  mainImageUrl       varchar             [not null, note: 'Cover image URL (Cloudinary)']
+  galleryImageUrls   "varchar[]"         [note: 'Additional gallery images']
+
+  // -- Structured lists
+  highlights         "varchar[]"         [note: 'Bullet items: "wifi", "phone", etc.']
+  inclusions         "varchar[]"
+  exclusions         "varchar[]"
+  itinerary          json                [note: 'Array of {day, title, text}']
+
+  // -- Offer highlight
+  offerTitle         varchar             [note: 'e.g., "wifi", "free upgrade"']
+  offerDescription   text
+
+  // -- Lifecycle
+  status             PackageStatus       [not null, default: 'DRAFT']
+  hasPendingReview   boolean             [not null, default: `false`, note: 'True when APPROVED package has been edited but not re-approved']
+
+  // -- Admin workflow
+  submittedAt        timestamp           [note: 'When vendor moved to SUBMITTED']
+  reviewedAt         timestamp           [note: 'When admin approved/rejected']
+  reviewedByAdminId  varchar             [note: 'Admin user id']
+  rejectionReason    text                [note: 'Admin note when REJECTED']
+
+  createdAt          timestamp           [not null]
+  updatedAt          timestamp           [not null]
+
+  indexes {
+    (status, validityType)
+    destination
+    packageType
+    (vendorUserId, status)
+    (validityType, endDate)  [note: 'Fast query for expiring SEASONAL packages']
+  }
+
+  Note: 'Vendor-created travel packages. Two visibility gates: (1) subscription must be active + within maxPackages, (2) admin approval. SEASONAL packages auto-hide when endDate passes.'
+}
+
+// ---------------------------------------------------------------------------
 //   RELATIONSHIPS (explicit — same as the `ref:` annotations above,
 //   listed here for tools that prefer central declarations)
 // ---------------------------------------------------------------------------
@@ -469,6 +575,7 @@ Ref: vendor_kyc_documents.vendorUserId    > vendor_profiles.userId      [delete:
 // Leads
 Ref: leads.customerUserId                 > users.id                    [delete: set null]
 Ref: leads.targetVendorId                 > users.id                    [delete: set null]
+Ref: leads.packageId                      > packages.id                 [delete: set null]
 
 // Lead assignments (unlock events)
 Ref: lead_assignments.leadId              > leads.id                    [delete: cascade]
@@ -482,6 +589,9 @@ Ref: wallet_transactions.vendorUserId     > wallets.vendorUserId        [delete:
 // Subscriptions
 Ref: vendor_subscriptions.vendorUserId    > vendor_profiles.userId      [delete: cascade]
 Ref: vendor_subscriptions.planId          > subscription_plans.id
+
+// Packages
+Ref: packages.vendorUserId                > vendor_profiles.userId      [delete: cascade]
 
 // ---------------------------------------------------------------------------
 //   TABLE GROUPS (visual grouping in dbdiagram.io)
@@ -516,4 +626,8 @@ TableGroup wallet {
 TableGroup subscriptions {
   subscription_plans
   vendor_subscriptions
+}
+
+TableGroup packages {
+  packages
 }

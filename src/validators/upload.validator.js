@@ -9,6 +9,8 @@ export const UPLOAD_PURPOSES = [
   'avatar',
   'favicon_icon',
   'header_logo',
+  'package-main', // Package cover image
+  'package-gallery', // Package gallery images (multiple per package)
   'other',
 ];
 

@@ -19,6 +19,7 @@ const LEAD_LIST_SELECT = {
   createdAt: true,
   customerUserId: true,
   targetVendorId: true, // null = global lead, set = direct lead
+  packageId: true, // non-null when the lead came from a package inquiry
 };
 
 // Customer fields included on the detail view (enough to identify them).
@@ -145,7 +146,8 @@ export const listLeadsForAdmin = async ({
 };
 
 /**
- * Full lead detail for the admin detail page — includes customer + all unlocks.
+ * Full lead detail for the admin detail page — includes customer + all unlocks
+ * + the source package (when the lead came from a package inquiry).
  */
 export const getLeadDetailForAdmin = async (leadId) => {
   return prisma.lead.findUnique({
@@ -153,6 +155,17 @@ export const getLeadDetailForAdmin = async (leadId) => {
     include: {
       customer: { select: CUSTOMER_SELECT },
       assignments: { select: ASSIGNMENT_SELECT, orderBy: { unlockedAt: 'desc' } },
+      package: {
+        select: {
+          id: true,
+          title: true,
+          slug: true,
+          destination: true,
+          mainImageUrl: true,
+          status: true,
+          vendorUserId: true,
+        },
+      },
     },
   });
 };

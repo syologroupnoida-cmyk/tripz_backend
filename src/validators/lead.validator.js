@@ -34,11 +34,23 @@ const budgetField = z
 
 // Customer-facing payload is wrapped: { lead: { ... } }
 //
-// Optional `targetVendorId` at the top level converts a Global lead into a
-// Direct lead — visible only to that vendor (maxUnlocks forced to 1 server-side).
-// Used when the customer inquires from a specific vendor's package page.
+// Three lead flavours are all served by this single endpoint:
+//
+//   • Global marketplace lead — no `targetVendorId`, no `packageId`.
+//     Goes through PENDING_REVIEW → admin approves → any vendor can unlock.
+//
+//   • Admin-assigned direct lead — `targetVendorId` set, no `packageId`.
+//     PENDING_REVIEW; admin approves; ONLY that vendor can unlock. This is
+//     the existing "direct lead" flow.
+//
+//   • Package inquiry lead — `packageId` set (customer inquired from a
+//     package detail page). Auto-APPROVED, no admin review. Backend derives
+//     `targetVendorId` from `package.vendorUserId` and overrides destination
+//     from the package for consistency. Any client-sent `targetVendorId` is
+//     ignored to prevent spoofing.
 export const submitLeadSchema = z.object({
   targetVendorId: z.string().trim().min(1).max(40).optional(),
+  packageId: z.string().uuid('packageId must be a valid UUID').optional(),
   lead: z
     .object({
       // ---- Top-level relational fields ----

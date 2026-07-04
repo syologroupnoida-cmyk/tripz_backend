@@ -84,3 +84,38 @@ enum BillingCycle {
   HALF_YEARLY
   YEARLY
 }
+
+enum PackageStatus {
+  DRAFT // Vendor still editing; not visible to admin queue or customers.
+  SUBMITTED // Sent for admin review.
+  APPROVED // Live on marketplace — customers can inquire.
+  REJECTED // Admin rejected with a reason; vendor can edit and resubmit.
+  PAUSED // Vendor self-paused (off-season) or auto-paused when sub expires.
+}
+
+enum PackageType {
+  HONEYMOON
+  FAMILY
+  HOLIDAY
+  COUPLE
+  SOLO
+  GROUP // Friends/group trip
+  ADVENTURE
+  RELIGIOUS
+  BEACH
+  HILL_STATION
+  WILDLIFE
+  CULTURAL
+  CORPORATE
+  OTHER
+}
+
+enum PackageRegion {
+  NATIONAL
+  INTERNATIONAL
+}
+
+enum PackageValidityType {
+  EVERGREEN // Always available; startDate/endDate optional
+  SEASONAL // Time-boxed (festival, event); startDate + endDate REQUIRED
+}

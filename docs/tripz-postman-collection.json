@@ -48,6 +48,292 @@
       ]
     },
     {
+      "name": "Public — Packages (marketplace browse)",
+      "description": "Public-facing package catalog. No authentication — customers browse without signing up.\n\n**Server-side filters (automatic):**\n- `status = 'APPROVED'` only\n- `deletedAt IS NULL`\n- EVERGREEN packages always shown; SEASONAL packages shown only when today is between startDate and endDate\n\nPrices are in **paise** (INR × 100). Frontend divides by 100 for display.",
+      "item": [
+        {
+          "name": "Browse packages (with filters)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.items?.[0]?.slug) {",
+                  "  pm.environment.set('packageSlug', res.data.items[0].slug);",
+                  "  console.log('Auto-saved packageSlug:', res.data.items[0].slug);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/packages?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["packages"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "destination", "value": "Kashmir", "disabled": true },
+                { "key": "packageRegion", "value": "NATIONAL", "disabled": true, "description": "NATIONAL or INTERNATIONAL" },
+                { "key": "packageType", "value": "GROUP", "disabled": true },
+                { "key": "validityType", "value": "EVERGREEN", "disabled": true },
+                { "key": "minPrice", "value": "100", "disabled": true, "description": "In rupees" },
+                { "key": "maxPrice", "value": "50000", "disabled": true, "description": "In rupees" },
+                { "key": "sortBy", "value": "createdAt", "disabled": true },
+                { "key": "order", "value": "desc", "disabled": true }
+              ]
+            },
+            "description": "Enable the query params to filter.\n\n**packageRegion values:** NATIONAL / INTERNATIONAL\n\n**packageType values:** HONEYMOON / FAMILY / HOLIDAY / COUPLE / SOLO / GROUP / ADVENTURE / RELIGIOUS / BEACH / HILL_STATION / WILDLIFE / CULTURAL / CORPORATE / OTHER\n\n**validityType values:** EVERGREEN / SEASONAL\n\n**sortBy:** `createdAt` | `priceInPaise` | `title`"
+          }
+        },
+        {
+          "name": "Get package detail by slug",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/packages/{{packageSlug}}", "host": ["{{baseUrl}}"], "path": ["packages", "{{packageSlug}}"] },
+            "description": "SEO-friendly URL — slug is auto-generated from title (e.g., `kashmir`, `kashmir-2` on collision).\n\nReturns 404 if the slug doesn't exist, is deleted, or is not APPROVED."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Vendor — Packages",
+      "description": "Vendor package CRUD + lifecycle. VENDOR role.\n\n**Workflow:** DRAFT → SUBMITTED → APPROVED (or REJECTED → back to DRAFT). Approved packages can be self-PAUSED/resumed by the vendor without re-review.\n\n**Image upload:** Frontend uploads each image to `/uploads/image` first (`purpose: 'package-main'` or `'package-gallery'`), receives Cloudinary URL back, then sends URLs in the package create/update body — either as a plain string OR as the wrapper object the upload endpoint returns.",
+      "item": [
+        {
+          "name": "Create package (draft)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.id) {",
+                  "  pm.environment.set('packageId', res.data.id);",
+                  "  pm.environment.set('packageSlug', res.data.slug);",
+                  "  console.log('Auto-saved packageId:', res.data.id, '| slug:', res.data.slug);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw", 
+              "raw": "{\n  \"title\": \"Kashmir 4N/2D Family Package\",\n  \"destination\": \"Kashmir\",\n \"packageRegion\": \"NATIONAL\",\n  \"packageType\": \"FAMILY\",\n  \"validityType\": \"EVERGREEN\",\n  \"route\": \"Delhi → Srinagar → Gulmarg → Delhi\",\n  \"duration\": \"4N/2D\",\n  \"overview\": \"Explore the beauty of Kashmir with a hand-picked family itinerary.\",\n  \"price\": \"12000\",\n  \"oldPrice\": \"18000\",\n  \"discount\": \"33\",\n  \"hotelCategory\": \"4 star\",\n  \"transfers\": \"cab\",\n  \"meals\": \"breakfast + dinner included\",\n  \"sightseeing\": \"Gulmarg, Dal Lake, Shalimar Bagh\",\n  \"mainImage\": {\n    \"uploadedUrl\": \"https://res.cloudinary.com/tripz/package-main/vendor-1/kashmir-cover.jpg\"\n  },\n  \"galleryImages\": [\n    { \"uploadedUrl\": \"https://res.cloudinary.com/tripz/package-gallery/vendor-1/gulmarg.jpg\" },\n    { \"uploadedUrl\": \"https://res.cloudinary.com/tripz/package-gallery/vendor-1/dal-lake.jpg\" }\n  ],\n  \"highlights\": [\"Snow-capped mountains\", \"Shikara ride\", \"Local cuisine\"],\n  \"inclusions\": [\"Hotel stay\", \"Meals as per plan\", \"Airport transfers\"],\n  \"exclusions\": [\"Airfare\", \"Personal expenses\"],\n  \"itinerary\": [\n    { \"day\": \"Day 1\", \"title\": \"Arrival in Srinagar\", \"text\": \"Check-in, Shikara ride at Dal Lake, evening free\" },\n    { \"day\": \"Day 2\", \"title\": \"Gulmarg day trip\", \"text\": \"Gondola ride, snow activities, return to Srinagar\" }\n  ],\n  \"offerTitle\": \"Early Bird Discount\",\n  \"offerDescription\": \"Book 30 days in advance and save 10% more\",\n  \"cancellationPolicy\": \"Free cancellation up to 7 days before departure.\",\n  \"otherDetails\": \"Please carry warm clothing.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/vendor/packages?draft=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["vendor", "packages"],
+              "query": [
+                { "key": "draft", "value": "true", "description": "true (default) → status DRAFT. false → straight to SUBMITTED (admin queue)." }
+              ]
+            },
+            "description": "Creates a new package.\n\n**`?draft` query flag controls the initial status:**\n- `draft=true` (default) — created as DRAFT. Vendor can iterate freely; needs a separate `/submit` call later.\n- `draft=false` — created as SUBMITTED. `submittedAt` is stamped, admin queue picks it up immediately. **Vendor cannot edit until admin approves or rejects.**\n\nBoth flavours count against `plan.maxPackages`.\n\n**Key notes:**\n- `price`, `oldPrice`, `discount` accept strings or numbers — backend converts rupees → paise.\n- `mainImage` and `galleryImages` accept plain URL strings OR the wrapper object returned by `/uploads/image` — both work.\n- `SEASONAL` validityType requires both `startDate` and `endDate` (ISO date strings).\n- Client can safely include extra fields (`agent`, `status`) — they're silently ignored.\n- `slug` is auto-generated from `title`.\n\n**Subscription gate — creation is blocked when:**\n- 403 `NO_ACTIVE_SUBSCRIPTION` — vendor has no active plan or the current one has expired. UI should route to the pricing page.\n- 403 `PACKAGE_LIMIT_REACHED` — vendor is at `plan.maxPackages`. Response payload includes `currentPackages`, `maxPackages`, `planName` so the UI can prompt an upgrade. `maxPackages: -1` means unlimited (Premium Gold).\n\nActive-package count is `DRAFT + SUBMITTED + APPROVED + PAUSED` (REJECTED and soft-deleted packages don't count).\n\n**Side effect:** Auto-saves `packageId` and `packageSlug` for follow-up calls."
+          }
+        },
+        {
+          "name": "Create SEASONAL package (with date window)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Diwali Goa Special 2026\",\n  \"destination\": \"Goa\",\n \"packageRegion\": \"NATIONAL\",\n  \"packageType\": \"GROUP\",\n  \"validityType\": \"SEASONAL\",\n  \"startDate\": \"2026-10-15\",\n  \"endDate\": \"2026-11-05\",\n  \"duration\": \"3N/4D\",\n  \"overview\": \"Limited-time Diwali special for group bookings.\",\n  \"price\": \"8000\",\n  \"oldPrice\": \"12000\",\n  \"mainImage\": \"https://res.cloudinary.com/tripz/package-main/goa-diwali.jpg\",\n  \"highlights\": [\"Beach bonfire\", \"Diwali celebrations\"],\n  \"inclusions\": [\"Hotel\", \"Meals\"],\n  \"exclusions\": [\"Airfare\"],\n  \"itinerary\": [\n    { \"day\": \"Day 1\", \"title\": \"Arrival\", \"text\": \"Beach welcome\" }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/vendor/packages?draft=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["vendor", "packages"],
+              "query": [
+                { "key": "draft", "value": "false", "description": "Submit directly — skip DRAFT, go straight to admin queue." }
+              ]
+            },
+            "description": "SEASONAL packages MUST have startDate + endDate. Once endDate passes, the package auto-hides from public marketplace (query-level filter).\n\n**This request uses `?draft=false`** — package is created directly in SUBMITTED status (admin queue). Change to `?draft=true` (or omit) to keep it as a draft.\n\n**Validation errors:**\n- 400 — SEASONAL missing startDate/endDate\n- 400 — endDate before startDate"
+          }
+        },
+        {
+          "name": "List my packages",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/vendor/packages?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["vendor", "packages"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "status", "value": "DRAFT", "disabled": true, "description": "DRAFT / SUBMITTED / APPROVED / REJECTED / PAUSED" },
+                { "key": "sortBy", "value": "createdAt", "disabled": true },
+                { "key": "order", "value": "desc", "disabled": true }
+              ]
+            },
+            "description": "Vendor's own packages (all statuses except soft-deleted)."
+          }
+        },
+        {
+          "name": "Get my package detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/vendor/packages/{{packageId}}", "host": ["{{baseUrl}}"], "path": ["vendor", "packages", "{{packageId}}"] },
+            "description": "Full detail of a vendor's own package. Returns 403 if the package belongs to another vendor."
+          }
+        },
+        {
+          "name": "Update package (draft or approved)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"price\": \"11000\",\n  \"discount\": \"38\",\n  \"highlights\": [\"Snow adventure\", \"Shikara ride\", \"Local cuisine\", \"Free wifi\"]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/vendor/packages/{{packageId}}", "host": ["{{baseUrl}}"], "path": ["vendor", "packages", "{{packageId}}"] },
+            "description": "Partial update.\n\n**Behaviour by current status:**\n- **DRAFT / REJECTED:** silent update, no side effects.\n- **APPROVED / PAUSED:** update is live immediately BUT `hasPendingReview` is flagged — admins see it in the queue with a filter.\n- **SUBMITTED:** blocked with 409 `PACKAGE_UNDER_REVIEW` — wait for admin decision first.\n\nTitle change auto-regenerates the slug."
+          }
+        },
+        {
+          "name": "Submit for admin review",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/vendor/packages/{{packageId}}/submit", "host": ["{{baseUrl}}"], "path": ["vendor", "packages", "{{packageId}}", "submit"] },
+            "description": "DRAFT or REJECTED → SUBMITTED. Clears prior review notes.\n\n**Errors:**\n- 409 `INVALID_TRANSITION` — package is already SUBMITTED / APPROVED / PAUSED"
+          }
+        },
+        {
+          "name": "Pause package (?paused=true)",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/vendor/packages/{{packageId}}/pause?paused=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["vendor", "packages", "{{packageId}}", "pause"],
+              "query": [
+                { "key": "paused", "value": "true", "description": "true (default) → pause. false → resume." }
+              ]
+            },
+            "description": "APPROVED → PAUSED. Hides from public marketplace but preserves the package + admin approval.\n\n**Errors:**\n- 409 `INVALID_TRANSITION` — only APPROVED packages can be paused (current status returned in `currentStatus`)"
+          }
+        },
+        {
+          "name": "Resume package (?paused=false)",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/vendor/packages/{{packageId}}/pause?paused=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["vendor", "packages", "{{packageId}}", "pause"],
+              "query": [
+                { "key": "paused", "value": "false", "description": "false → resume (PAUSED → APPROVED, no re-review)." }
+              ]
+            },
+            "description": "PAUSED → APPROVED. No re-review required. Same endpoint as **Pause package**, just with `paused=false`.\n\n**Errors:**\n- 409 `INVALID_TRANSITION` — only PAUSED packages can be resumed"
+          }
+        },
+        {
+          "name": "Delete package (soft delete)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/vendor/packages/{{packageId}}", "host": ["{{baseUrl}}"], "path": ["vendor", "packages", "{{packageId}}"] },
+            "description": "Soft delete — stamps `deletedAt`. The package disappears from all listings (public, vendor, admin) but the row stays for referential integrity with any leads that pointed at it.\n\n**Errors:**\n- 409 `ALREADY_DELETED` — package is already soft-deleted"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin — Packages",
+      "description": "Vendor package moderation. ADMIN + SUPER_ADMIN.\n\nAdmin sees SUBMITTED packages in the queue, plus a `hasPendingReview` flag on APPROVED packages that were edited after approval — great signal for re-review triage.",
+      "item": [
+        {
+          "name": "List packages queue",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.items?.[0]?.id) {",
+                  "  pm.environment.set('packageId', res.data.items[0].id);",
+                  "  console.log('Auto-saved packageId:', res.data.items[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/packages?status=SUBMITTED&page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "packages"],
+              "query": [
+                { "key": "status", "value": "SUBMITTED" },
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "destination", "value": "Kashmir", "disabled": true },
+                { "key": "vendorUserId", "value": "{{vendorId}}", "disabled": true },
+                { "key": "hasPendingReview", "value": "true", "disabled": true, "description": "APPROVED packages that were edited" },
+                { "key": "sortBy", "value": "submittedAt", "disabled": true },
+                { "key": "order", "value": "asc", "disabled": true }
+              ]
+            },
+            "description": "**status values:** DRAFT / SUBMITTED / APPROVED / REJECTED / PAUSED\n\n**sortBy:** `createdAt` | `updatedAt` | `submittedAt` | `reviewedAt` | `title`\n\nResponse includes each package's owning vendor's user info."
+          }
+        },
+        {
+          "name": "Get package detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/admin/packages/{{packageId}}", "host": ["{{baseUrl}}"], "path": ["admin", "packages", "{{packageId}}"] },
+            "description": "Full package detail + vendor user info (name, email, phone)."
+          }
+        },
+        {
+          "name": "Approve package",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/admin/packages/{{packageId}}/approve", "host": ["{{baseUrl}}"], "path": ["admin", "packages", "{{packageId}}", "approve"] },
+            "description": "SUBMITTED → APPROVED. Also clears `hasPendingReview` if it was set (re-review case).\n\n**Errors:**\n- 409 `INVALID_TRANSITION` — package is not SUBMITTED"
+          }
+        },
+        {
+          "name": "Reject package",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Missing gallery images. Please add at least 3 gallery images before resubmitting.\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/admin/packages/{{packageId}}/reject", "host": ["{{baseUrl}}"], "path": ["admin", "packages", "{{packageId}}", "reject"] },
+            "description": "SUBMITTED → REJECTED with reason (5-1000 chars, REQUIRED for vendor to know what to fix).\n\nVendor can edit + resubmit — REJECTED → SUBMITTED transition allowed via `/vendor/packages/:id/submit`.\n\n**Errors:**\n- 400 — reason too short/long\n- 409 `INVALID_TRANSITION` — package is not SUBMITTED"
+          }
+        }
+      ]
+    },
+    {
       "name": "Auth — Public",
       "description": "Endpoints that do NOT require an access token. Use these to register, log in, and reset passwords.",
       "item": [
@@ -276,20 +562,48 @@
     },
     {
       "name": "Leads — Public (anonymous form)",
-      "description": "The travel inquiry form. Works with OR without auth: if a bearer token is present, the lead is linked to that customer; otherwise it's anonymous and auto-linked at registration via email match.",
+      "description": "The travel inquiry form. Works with OR without auth: if a bearer token is present, the lead is linked to that customer; otherwise it's anonymous and auto-linked at registration via email match.\n\n**One endpoint serves three lead flavours** — the request payload decides which flow the backend picks. See individual requests for each variant.\n\n**Rate limit:** 5 inquiries per hour per email (falls back to IP if email is missing). Returns 429 `LEAD_RATE_LIMIT` with `Retry-After` header once exceeded.",
       "item": [
         {
-          "name": "Submit lead (anonymous OR logged-in)",
+          "name": "Submit lead — Global marketplace (default)",
           "request": {
             "auth": { "type": "noauth" },
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"lead\": {\n    \"destination\": \"Goa\",\n    \"email\": \"{{testClientEmail}}\",\n    \"phone\": \"{{testPhone}}\",\n    \"budget\": 75000,\n    \"departureCity\": \"Delhi\",\n    \"travelDate\": \"2026-12-15\",\n    \"duration\": \"5 Days\",\n    \"adults\": \"2\",\n    \"children\": \"1\",\n    \"infants\": \"0\",\n    \"hotelCategory\": \"4-star\",\n    \"flightRequired\": \"YES\",\n    \"cabRequired\": \"YES\",\n    \"packageType\": \"family\",\n    \"preferredCallTime\": \"evening\",\n    \"whatsappUpdates\": true,\n    \"tourType\": \"family\",\n    \"bookingTimeline\": \"within 1 month\"\n  },\n  \"targetVendorId\": null\n}"
+              "raw": "{\n  \"lead\": {\n    \"destination\": \"Goa\",\n    \"email\": \"{{testClientEmail}}\",\n    \"phone\": \"{{testPhone}}\",\n    \"budget\": 75000,\n    \"departureCity\": \"Delhi\",\n    \"travelDate\": \"2026-12-15\",\n    \"duration\": \"5 Days\",\n    \"adults\": \"2\",\n    \"children\": \"1\",\n    \"infants\": \"0\",\n    \"hotelCategory\": \"4-star\",\n    \"flightRequired\": \"YES\",\n    \"cabRequired\": \"YES\",\n    \"packageType\": \"family\",\n    \"preferredCallTime\": \"evening\",\n    \"whatsappUpdates\": true,\n    \"tourType\": \"family\",\n    \"bookingTimeline\": \"within 1 month\"\n  }\n}"
             },
             "url": { "raw": "{{baseUrl}}/leads", "host": ["{{baseUrl}}"], "path": ["leads"] },
-            "description": "Submits a travel inquiry. Lead is created with `status: PENDING_REVIEW`, `priceInCredits: 10` (defaults).\n\n**Body shape:** `{ lead: { ...flat fields... }, targetVendorId?: 'VEND-...' }`\n- `lead` — wizard fields are FLAT inside `lead`, NOT nested in `requirements`. Backend extracts `destination/email/phone/budget/departureCity/travelDate` to top-level columns and bundles everything else into the `requirements` JSONB column.\n- `targetVendorId` (optional) — if set, creates a **Direct lead** (visible only to that vendor, `maxUnlocks=1` forced). If null/omitted, creates a **Global lead** (`maxUnlocks=3` default, all approved vendors can see).\n\n**Direct-lead validation:** target vendor must be `role=VENDOR`, `isActive=true`, and `kycStatus=APPROVED`. Otherwise 400 with code `TARGET_VENDOR_NOT_FOUND` / `TARGET_VENDOR_INACTIVE` / `TARGET_VENDOR_KYC_PENDING`.\n\n**Auth behaviour (optional):** if a bearer token is sent and valid → `customerUserId` = user id. If missing or invalid → anonymous lead. The lead is later auto-linked when a customer registers with the same email.\n\n**Type coercion:**\n- `adults/children/infants` — accepts `\"2\"` or `2` (string or int)\n- `flightRequired/cabRequired/otherDestinations` — accepts `\"YES\"`/`\"NO\"`/boolean\n- `budget` — empty string → null"
+            "description": "**Flavour: Global marketplace lead** (no `targetVendorId`, no `packageId`).\n\nLead is created with `status: PENDING_REVIEW`, `priceInCredits: 10`, `maxUnlocks: 3`. Admin must approve before it appears on the marketplace feed; then any KYC-approved vendor can unlock.\n\n**Body shape:** `{ lead: { ...flat fields... } }`\n- `lead` — wizard fields are FLAT inside `lead`, NOT nested in `requirements`. Backend extracts `destination/email/phone/budget/departureCity/travelDate` to top-level columns and bundles everything else into the `requirements` JSONB column.\n\n**Auth behaviour (optional):** if a valid bearer token is sent → `customerUserId` = user id. If missing/invalid → anonymous lead. Anonymous leads are later auto-linked when a customer registers with the same email.\n\n**Type coercion:**\n- `adults/children/infants` — accepts `\"2\"` or `2` (string or int)\n- `flightRequired/cabRequired/otherDestinations` — accepts `\"YES\"`/`\"NO\"`/boolean\n- `budget` — empty string → null"
+          }
+        },
+        {
+          "name": "Submit lead — Admin-assigned direct (via targetVendorId)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"targetVendorId\": \"{{vendorId}}\",\n  \"lead\": {\n    \"destination\": \"Goa\",\n    \"email\": \"{{testClientEmail}}\",\n    \"phone\": \"{{testPhone}}\",\n    \"budget\": 75000,\n    \"departureCity\": \"Delhi\",\n    \"travelDate\": \"2026-12-15\",\n    \"adults\": \"2\",\n    \"children\": \"1\"\n  }\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/leads", "host": ["{{baseUrl}}"], "path": ["leads"] },
+            "description": "**Flavour: Admin-assigned direct lead** (`targetVendorId` set, no `packageId`).\n\nLead is created with `status: PENDING_REVIEW`, `maxUnlocks: 1`. Admin still reviews; on approval, ONLY that vendor sees it in `/vendor/leads/direct`.\n\n**Direct-lead vendor validation:** target vendor must be `role=VENDOR`, `isActive=true`, and `kycStatus=APPROVED`. Otherwise 400 with one of these codes:\n- `TARGET_VENDOR_NOT_FOUND`\n- `TARGET_VENDOR_INACTIVE`\n- `TARGET_VENDOR_KYC_PENDING`"
+          }
+        },
+        {
+          "name": "Submit lead — Package inquiry (auto-approved direct)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"packageId\": \"{{packageId}}\",\n  \"lead\": {\n    \"destination\": \"IGNORED — backend uses package.destination\",\n    \"email\": \"{{testClientEmail}}\",\n    \"phone\": \"{{testPhone}}\",\n    \"budget\": 60000,\n    \"adults\": \"2\",\n    \"children\": \"1\",\n    \"preferredCallTime\": \"evening\"\n  }\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/leads", "host": ["{{baseUrl}}"], "path": ["leads"] },
+            "description": "**Flavour: Package inquiry lead** (`packageId` set — customer inquired from a package detail page).\n\n**Backend behaviour:**\n- Loads the package; must be `APPROVED` and non-deleted, otherwise 400 `PACKAGE_NOT_AVAILABLE`.\n- Sets `targetVendorId` = `package.vendorUserId` (any client-sent `targetVendorId` is ignored to prevent spoofing).\n- Sets `destination` = `package.destination` (client's value is overridden for consistency).\n- Sets `status: 'ACTIVE'` — **no admin review needed** (vendor is already trusted: KYC-approved + subscription + package admin-approved).\n- Sets `maxUnlocks: 1` — only the target vendor can ever unlock.\n- Sets `priceInCredits` = `plan.directLeadPriceCredits` from vendor's active subscription (fallback: 5 credits if vendor has no active sub).\n\n**Vendor sees the lead immediately** in `/vendor/leads/direct` with the linked `package` summary — no waiting on admin.\n\n**Response includes:** `fromPackage: true`, `isDirect: true`."
           }
         }
       ]

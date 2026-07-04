@@ -17,8 +17,14 @@ model Lead {
   // ---- Routing (Phase 2: dual-lead) ----
   // null         → Global lead (visible on the marketplace to any approved vendor)
   // set          → Direct lead (visible only to this vendor; maxUnlocks forced to 1)
-  // sourcePackageId will be added when the Package model lands.
   targetVendorId String?
+
+  // Non-null when the customer submitted the inquiry from a package detail
+  // page. The lead is then routed as a direct lead to `package.vendorUserId`
+  // (backend ignores whatever `targetVendorId` the client may have sent).
+  // onDelete: SetNull so vendors keep their lead history even if the package
+  // is later retired.
+  packageId String?
 
   // ---- Dynamic requirements (JSONB) ----
   // Bundles non-hot wizard fields: duration, ticketsBooked, hotelCategory,
@@ -43,6 +49,7 @@ model Lead {
 
   customer     User?            @relation("CustomerLeads", fields: [customerUserId], references: [id], onDelete: SetNull)
   targetVendor User?            @relation("VendorDirectLeads", fields: [targetVendorId], references: [id], onDelete: SetNull)
+  package      Package?         @relation(fields: [packageId], references: [id], onDelete: SetNull)
   assignments  LeadAssignment[]
 
   @@index([status])
@@ -52,5 +59,6 @@ model Lead {
   @@index([createdAt])
   @@index([email]) // fast auto-link of anonymous leads at customer registration
   @@index([targetVendorId, status]) // fast "my direct leads" lookup for vendors
+  @@index([packageId]) // fast "leads for this package" lookup
   @@map("leads")
 }

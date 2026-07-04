@@ -1,0 +1,91 @@
+// Vendor-created travel packages surfaced on the public marketplace.
+//
+// Two visibility gates:
+//   1. Vendor must have an ACTIVE subscription and current package count
+//      must be under plan.maxPackages (enforced in Phase 2B).
+//   2. Admin must approve — DRAFT → SUBMITTED → APPROVED.
+//
+// SEASONAL packages carry a startDate + endDate window; once endDate passes
+// they auto-hide from public listings (via query filter; cron flips status
+// to PAUSED in Phase 2B).
+//
+// Pricing is in paise (INR × 100) to stay consistent with SubscriptionPlan
+// and Razorpay's future integration.
+model Package {
+  id           String @id @default(uuid())
+  vendorUserId String
+  slug         String @unique // URL-friendly; auto-generated from title
+
+  // ---- Content ----
+  title              String
+  destination        String // "Kashmir", "Goa" — indexed for filter
+  route              String? // Descriptive route text, e.g., "2N and 2D"
+  duration           String? // Descriptive duration, e.g., "4N/2D"
+  overview           String // long marketing copy
+  otherDetails       String?
+  cancellationPolicy String? // rich text — HTML allowed
+
+  // ---- Categorization ----
+  packageRegion PackageRegion       @default(NATIONAL)
+  packageType   PackageType
+  validityType  PackageValidityType @default(EVERGREEN)
+
+  // ---- Availability window (REQUIRED when validityType = SEASONAL) ----
+  startDate DateTime?
+  endDate   DateTime?
+
+  // ---- Pricing (INR × 100) ----
+  priceInPaise    Int // Offer price the customer sees
+  oldPriceInPaise Int? // MRP shown crossed out; nullable if no discount
+  discountPercent Int? // For explicit "10% off" badge
+
+  // ---- Amenities (free-form strings) ----
+  hotelCategory String? // e.g., "3 star", "4 star"
+  transfers     String? // e.g., "cab", "flight+cab"
+  meals         String? // e.g., "breakfast included"
+  sightseeing   String?
+
+  // ---- Media ----
+  mainImageUrl     String // Cover image (Cloudinary)
+  galleryImageUrls String[] // Additional gallery images
+
+  // ---- Structured lists ----
+  highlights String[] // free bullets
+  inclusions String[]
+  exclusions String[]
+  itinerary  Json // Array of { day, title, text }
+
+  // ---- Offer highlight ----
+  offerTitle       String?
+  offerDescription String?
+
+  // ---- Lifecycle ----
+  status           PackageStatus @default(DRAFT)
+  // True when an APPROVED package has been edited — flags it for optional
+  // re-review. MVP behaviour: edits go live immediately, admin can filter
+  // by hasPendingReview to catch changes worth re-reviewing.
+  hasPendingReview Boolean       @default(false)
+
+  // ---- Admin workflow ----
+  submittedAt       DateTime? // When vendor moved to SUBMITTED
+  reviewedAt        DateTime? // When admin approved/rejected
+  reviewedByAdminId String?
+  rejectionReason   String?
+
+  // ---- Soft delete ----
+  deletedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  vendor VendorProfile @relation(fields: [vendorUserId], references: [userId], onDelete: Cascade)
+  leads  Lead[] // customer inquiries linked back via Lead.packageId (SetNull on delete)
+
+  @@index([status, validityType])
+  @@index([destination])
+  @@index([packageType])
+  @@index([vendorUserId, status])
+  @@index([validityType, endDate]) // fast lookup for expiring SEASONAL packages
+  @@index([deletedAt])
+  @@map("packages")
+}

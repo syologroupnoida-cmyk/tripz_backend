@@ -2,6 +2,14 @@ import { ApiError } from '../../utils/ApiError.js';
 import * as leadRepo from '../../repositories/lead.repository.js';
 import * as userRepo from '../../repositories/user.repository.js';
 import * as kycRepo from '../../repositories/vendorKyc.repository.js';
+import * as packageRepo from '../../repositories/package.repository.js';
+import * as subscriptionRepo from '../../repositories/subscription.repository.js';
+
+// Fallback when the package's owning vendor has no active subscription at
+// inquiry time. Should be rare (Phase 2B cron will pause packages whose
+// owners' subs have lapsed), but we still charge SOMETHING so a mis-configured
+// vendor doesn't get free direct leads.
+const FALLBACK_DIRECT_LEAD_PRICE = 5;
 
 /**
  * Validate that a `targetVendorId` (when supplied) points to a real, eligible
@@ -74,12 +82,63 @@ const splitLeadPayload = (form) => {
   };
 };
 
+/**
+ * Resolve the direct-lead-cost this package's owner charges. Reads the vendor's
+ * active subscription; falls back to a constant if the owner is between subs.
+ */
+const resolveDirectLeadPrice = async (vendorUserId) => {
+  const sub = await subscriptionRepo.findActiveSubscriptionForVendor(vendorUserId);
+  const isExpired = sub && new Date(sub.expiresAt) < new Date();
+  if (!sub || isExpired) return FALLBACK_DIRECT_LEAD_PRICE;
+  const price = sub.plan?.directLeadPriceCredits;
+  return Number.isFinite(price) && price >= 0 ? price : FALLBACK_DIRECT_LEAD_PRICE;
+};
+
 export const submitLead = async ({ payload, customerUserId = null }) => {
   if (!payload?.lead) {
     throw ApiError.badRequest('Missing `lead` payload.');
   }
 
   const { top, requirements } = splitLeadPayload(payload.lead);
+
+  // ----- Phase 2C — package inquiry flow (highest priority) -----
+  // If `packageId` is set, this is a customer inquiring from a package detail
+  // page. Auto-APPROVED. Backend derives targetVendorId + destination from
+  // the package itself; any client-sent values are overridden to prevent
+  // spoofing.
+  if (payload.packageId) {
+    const pkg = await packageRepo.getPackageById(payload.packageId);
+    if (!pkg || pkg.status !== 'APPROVED') {
+      throw ApiError.badRequest('This package is not available for inquiry.', {
+        code: 'PACKAGE_NOT_AVAILABLE',
+      });
+    }
+
+    const priceInCredits = await resolveDirectLeadPrice(pkg.vendorUserId);
+
+    const lead = await leadRepo.createLead({
+      ...top,
+      destination: pkg.destination, // authoritative — don't trust client
+      customerUserId,
+      requirements,
+      packageId: pkg.id,
+      targetVendorId: pkg.vendorUserId,
+      status: 'ACTIVE', // auto-approve; no admin review for package inquiries
+      priceInCredits,
+      maxUnlocks: 1, // direct lead = only the target vendor can unlock
+    });
+
+    return {
+      leadId: lead.id,
+      status: lead.status,
+      isDirect: true,
+      fromPackage: true,
+      createdAt: lead.createdAt,
+      message: 'Inquiry sent to the vendor. They will contact you shortly.',
+    };
+  }
+
+  // ----- Admin-assigned direct lead (existing flow) -----
   const targetVendorId = payload.targetVendorId ?? null;
   const isDirect = Boolean(targetVendorId);
 
@@ -101,6 +160,7 @@ export const submitLead = async ({ payload, customerUserId = null }) => {
     leadId: lead.id,
     status: lead.status,
     isDirect,
+    fromPackage: false,
     createdAt: lead.createdAt,
     message: isDirect
       ? 'Thanks! Your inquiry has been received and is being reviewed. The vendor will reach out once it is approved.'
