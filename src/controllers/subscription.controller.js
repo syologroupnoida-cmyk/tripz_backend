@@ -60,7 +60,14 @@ export const getPlanDetail = asyncHandler(async (req, res) => {
 // -----------------------------------------------------------------------------
 
 export const listActivePlansForVendor = asyncHandler(async (req, res) => {
-  const data = await subscriptionService.listActivePlansForVendor();
+  // `req.user` exists only on the authenticated `/vendor/subscription-plans`
+  // route — the public `/subscription-plans` route runs without the auth
+  // middleware, so `req.user` is undefined there. When present, the service
+  // enriches each plan with `action`/`isCurrentPlan` + a top-level
+  // `currentSubscription`. Anonymous callers get plain `action: 'BUY'` rows.
+  const data = await subscriptionService.listActivePlansForVendor({
+    vendorUserId: req.user?.id ?? null,
+  });
   return sendSuccess(res, {
     statusCode: 200,
     message: 'Available subscription plans retrieved.',

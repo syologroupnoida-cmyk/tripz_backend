@@ -42,7 +42,7 @@
             "method": "GET",
             "header": [],
             "url": { "raw": "{{baseUrl}}/subscription-plans", "host": ["{{baseUrl}}"], "path": ["subscription-plans"] },
-            "description": "Returns the live plan catalog for the marketing/pricing page.\n\n**Filter rules (server-side, automatic):**\n- `isActive = true`\n- `deletedAt IS NULL`\n- Ordered by `displayOrder ASC`, then `offerPriceInPaise ASC`\n\n**Response shape:** same as `GET /vendor/subscription-plans`. See the frontend contract for the full field-by-field breakdown."
+            "description": "Returns the live plan catalog for the marketing/pricing page.\n\n**Filter rules (server-side, automatic):**\n- `isActive = true`\n- `deletedAt IS NULL`\n- Ordered by `displayOrder ASC`, then `offerPriceInPaise ASC`\n\n**Response shape:** same as `GET /vendor/subscription-plans` — every plan carries `action: \"BUY\"` and `currentSubscription` is `null` because there is no vendor context on the public route. See the frontend contract for the full field-by-field breakdown."
           }
         }
       ]
@@ -138,10 +138,46 @@
               "host": ["{{baseUrl}}"],
               "path": ["vendor", "packages"],
               "query": [
-                { "key": "draft", "value": "true", "description": "true (default) → status DRAFT. false → straight to SUBMITTED (admin queue)." }
+                { "key": "draft", "value": "true", "description": "true (default) → DRAFT with lenient validation. false → SUBMITTED with strict validation." }
               ]
             },
-            "description": "Creates a new package.\n\n**`?draft` query flag controls the initial status:**\n- `draft=true` (default) — created as DRAFT. Vendor can iterate freely; needs a separate `/submit` call later.\n- `draft=false` — created as SUBMITTED. `submittedAt` is stamped, admin queue picks it up immediately. **Vendor cannot edit until admin approves or rejects.**\n\nBoth flavours count against `plan.maxPackages`.\n\n**Key notes:**\n- `price`, `oldPrice`, `discount` accept strings or numbers — backend converts rupees → paise.\n- `mainImage` and `galleryImages` accept plain URL strings OR the wrapper object returned by `/uploads/image` — both work.\n- `SEASONAL` validityType requires both `startDate` and `endDate` (ISO date strings).\n- Client can safely include extra fields (`agent`, `status`) — they're silently ignored.\n- `slug` is auto-generated from `title`.\n\n**Subscription gate — creation is blocked when:**\n- 403 `NO_ACTIVE_SUBSCRIPTION` — vendor has no active plan or the current one has expired. UI should route to the pricing page.\n- 403 `PACKAGE_LIMIT_REACHED` — vendor is at `plan.maxPackages`. Response payload includes `currentPackages`, `maxPackages`, `planName` so the UI can prompt an upgrade. `maxPackages: -1` means unlimited (Premium Gold).\n\nActive-package count is `DRAFT + SUBMITTED + APPROVED + PAUSED` (REJECTED and soft-deleted packages don't count).\n\n**Side effect:** Auto-saves `packageId` and `packageSlug` for follow-up calls."
+            "description": "Creates a new package.\n\n**`?draft` query flag drives BOTH validation and initial status:**\n\n| `?draft` | Validator | Required fields | Initial status |\n| --- | --- | --- | --- |\n| `true` (default) | **Lenient** | only `title` | DRAFT |\n| `false` | **Strict** | title, destination, overview, packageType, packageRegion, mainImage, price | SUBMITTED |\n\nDraft-mode: vendor can save with just `{ \"title\": \"Kashmir\" }` and iterate later via PATCH. Completeness is enforced later when they call `POST /:id/submit`.\n\nBoth flavours count against `plan.maxPackages`.\n\n**Key notes:**\n- `price`, `oldPrice`, `discount` accept strings or numbers — backend converts rupees → paise.\n- `mainImage` and `galleryImages` accept plain URL strings OR the wrapper object returned by `/uploads/image`.\n- `SEASONAL` validityType requires both `startDate` and `endDate` (enforced in strict mode; in draft mode, must both be present or both absent).\n- Client can safely include extra fields (`agent`, `status`) — they're silently ignored.\n- `slug` is auto-generated from `title`.\n\n**Subscription gate — creation is blocked when:**\n- 403 `NO_ACTIVE_SUBSCRIPTION` — vendor has no active plan or the current one has expired.\n- 403 `PACKAGE_LIMIT_REACHED` — vendor is at `plan.maxPackages`. Payload includes `currentPackages`, `maxPackages`, `planName`. `maxPackages: -1` means unlimited.\n\nActive-package count is `DRAFT + SUBMITTED + APPROVED + PAUSED` (REJECTED and soft-deleted packages don't count).\n\n**Side effect:** Auto-saves `packageId` and `packageSlug` for follow-up calls."
+          }
+        },
+        {
+          "name": "Create MINIMAL draft (only title)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.id) {",
+                  "  pm.environment.set('packageId', res.data.id);",
+                  "  pm.environment.set('packageSlug', res.data.slug);",
+                  "  console.log('Auto-saved minimal draft:', res.data.id, '| slug:', res.data.slug);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Kashmir — Work in progress\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/vendor/packages?draft=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["vendor", "packages"],
+              "query": [
+                { "key": "draft", "value": "true" }
+              ]
+            },
+            "description": "Demonstrates the lenient draft path — vendor saves progress with only a title, then fills the rest later.\n\n**Response:** `status: DRAFT`. The row is fully valid at the schema level but the completeness check will catch missing required fields on `/submit`.\n\n**Follow-up flow:**\n1. PATCH `/vendor/packages/:id` — add more fields over time.\n2. POST `/vendor/packages/:id/submit` — service runs `getMissingRequiredFields`; if anything's missing, returns 400 `PACKAGE_INCOMPLETE` with a `missingFields` list."
           }
         },
         {
@@ -212,7 +248,7 @@
             "method": "POST",
             "header": [],
             "url": { "raw": "{{baseUrl}}/vendor/packages/{{packageId}}/submit", "host": ["{{baseUrl}}"], "path": ["vendor", "packages", "{{packageId}}", "submit"] },
-            "description": "DRAFT or REJECTED → SUBMITTED. Clears prior review notes.\n\n**Errors:**\n- 409 `INVALID_TRANSITION` — package is already SUBMITTED / APPROVED / PAUSED"
+            "description": "DRAFT or REJECTED → SUBMITTED. Clears prior review notes.\n\n**Completeness gate — checked before the status flip:**\n\nRequired fields on the row: `title`, `destination`, `overview`, `packageType`, `packageRegion`, `mainImageUrl`, `priceInPaise`. `SEASONAL` packages additionally need `startDate` + `endDate`.\n\nMissing any of these → **400 `PACKAGE_INCOMPLETE`** with a `missingFields` array so the frontend can highlight the offending inputs:\n```\n{\n  \"success\": false,\n  \"message\": \"Package is missing required fields to submit for review.\",\n  \"details\": {\n    \"code\": \"PACKAGE_INCOMPLETE\",\n    \"missingFields\": [\"destination\", \"overview\", \"priceInPaise\", \"mainImageUrl\"]\n  }\n}\n```\n\n**Other errors:**\n- 403 — package belongs to another vendor\n- 404 — package not found\n- 409 `INVALID_TRANSITION` — package is already SUBMITTED / APPROVED / PAUSED"
           }
         },
         {
@@ -1421,7 +1457,7 @@
             "method": "GET",
             "header": [],
             "url": { "raw": "{{baseUrl}}/vendor/subscription-plans", "host": ["{{baseUrl}}"], "path": ["vendor", "subscription-plans"] },
-            "description": "Only `isActive = true` plans. Ordered cheapest → priciest so the UI naturally renders Basic → Pro → Ultra."
+            "description": "Only `isActive = true` plans. Ordered by `displayOrder`.\n\n**Vendor-context enrichment** — because this endpoint is authenticated, the backend also overlays each plan with the CTA the frontend should render for **this specific vendor**:\n\n| `action` | Meaning | Suggested CTA |\n| --- | --- | --- |\n| `BUY` | Vendor has no active sub | \"Choose {plan}\" |\n| `CURRENT` | This IS the vendor's current plan | \"Your current plan\" (disabled) |\n| `UPGRADE_TO` | Plan is pricier than vendor's current one | \"Upgrade to {plan}\" |\n| `DOWNGRADE_BLOCKED` | Plan is cheaper than or equal to the current one — blocked by the upgrade endpoint's downgrade guard | \"Downgrades not supported\" (disabled) |\n\nAlso surfaces a top-level `currentSubscription` object (or `null` if the vendor is between subscriptions) so the frontend can render an expiry countdown / status pill without a second call.\n\n**Sample response shape:**\n```\n{\n  \"data\": {\n    \"items\": [\n      { \"id\": \"basic\", ..., \"isCurrentPlan\": false, \"action\": \"DOWNGRADE_BLOCKED\" },\n      { \"id\": \"silver\", ..., \"isCurrentPlan\": true, \"action\": \"CURRENT\" },\n      { \"id\": \"gold\", ..., \"isCurrentPlan\": false, \"action\": \"UPGRADE_TO\" }\n    ],\n    \"currentSubscription\": {\n      \"id\": \"sub-uuid\", \"planId\": \"silver\", \"expiresAt\": \"...\", \"effectiveStatus\": \"ACTIVE\"\n    },\n    \"total\": 3\n  }\n}\n```\n\nThe public `/subscription-plans` endpoint returns the same shape but with `action: \"BUY\"` on every plan and `currentSubscription: null`."
           }
         },
         {

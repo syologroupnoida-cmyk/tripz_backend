@@ -21,6 +21,7 @@
 import { ApiError } from '../../utils/ApiError.js';
 import * as packageRepo from '../../repositories/package.repository.js';
 import * as subscriptionRepo from '../../repositories/subscription.repository.js';
+import { getMissingRequiredFields } from '../../validators/package.validator.js';
 
 // -----------------------------------------------------------------------------
 //   Slug helpers
@@ -193,7 +194,32 @@ export const updatePackage = async ({ vendorUserId, packageId, data }) => {
 // -----------------------------------------------------------------------------
 //   Vendor — submit for review
 // -----------------------------------------------------------------------------
+/**
+ * Move a DRAFT (or REJECTED) package to SUBMITTED. Before flipping status we
+ * verify all required fields are actually filled — draft rows are allowed to
+ * be partial, but SUBMITTED rows must be complete so the admin queue never
+ * sees a half-baked package.
+ *
+ * Missing fields come back as a 400 with `code: PACKAGE_INCOMPLETE` and a
+ * `missingFields` list the frontend can use to highlight inputs.
+ */
 export const submitPackageForReview = async ({ vendorUserId, packageId }) => {
+  // Load first to run completeness + ownership checks with clean errors.
+  const existing = await packageRepo.getPackageById(packageId);
+  if (!existing) throw ApiError.notFound('Package not found.');
+  if (existing.vendorUserId !== vendorUserId) {
+    throw new ApiError(403, 'You can only submit your own packages.');
+  }
+
+  const missingFields = getMissingRequiredFields(existing);
+  if (missingFields.length > 0) {
+    throw new ApiError(
+      400,
+      'Package is missing required fields to submit for review.',
+      { code: 'PACKAGE_INCOMPLETE', missingFields },
+    );
+  }
+
   const result = await packageRepo.submitPackage({ id: packageId, vendorUserId });
 
   if (!result.updated) {

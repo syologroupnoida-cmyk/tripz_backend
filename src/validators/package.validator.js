@@ -169,12 +169,155 @@ export const createPackageQuerySchema = z
   .transform((q) => ({ asDraft: q.draft !== 'false' }));
 
 // -----------------------------------------------------------------------------
-//   POST /vendor/packages — create draft
+//   Submit-time completeness check
 // -----------------------------------------------------------------------------
-// All display + amenity fields are permissive at draft-create time so vendors
-// can save progress. Stricter checks (title, mainImageUrl, priceInPaise,
-// packageType, validityType constraint) still apply so DRAFT rows never
-// land in a broken state.
+// The fields a package MUST carry before it can move from DRAFT/REJECTED to
+// SUBMITTED (or be created directly with ?draft=false). Used by the service
+// layer to produce a friendly `missingFields` list for the frontend so it
+// can highlight the offending inputs.
+export const REQUIRED_FIELDS_FOR_SUBMIT = [
+  'title',
+  'destination',
+  'overview',
+  'packageType',
+  'packageRegion',
+  'mainImageUrl',
+  'priceInPaise',
+];
+
+/**
+ * Return the list of required fields that are missing/empty on the given
+ * package row. Also enforces the SEASONAL cross-field rule (needs date window).
+ * Empty strings, nulls and undefined all count as missing.
+ */
+export const getMissingRequiredFields = (pkg) => {
+  const missing = [];
+  for (const field of REQUIRED_FIELDS_FOR_SUBMIT) {
+    const v = pkg?.[field];
+    if (v === null || v === undefined || v === '') missing.push(field);
+  }
+  if (pkg?.validityType === 'SEASONAL') {
+    if (!pkg.startDate) missing.push('startDate');
+    if (!pkg.endDate) missing.push('endDate');
+  }
+  return missing;
+};
+
+// -----------------------------------------------------------------------------
+//   POST /vendor/packages?draft=true — create DRAFT (lenient)
+// -----------------------------------------------------------------------------
+// Draft-time schema: only `title` is required. Every other field can be blank
+// or omitted so vendors can save progress in stages. Cross-field constraints
+// (SEASONAL date window, endDate ≥ startDate, oldPrice ≥ price) only fire
+// when the relevant pair is actually supplied together — a half-filled
+// draft never trips them.
+//
+// Completeness of the "real" required fields (destination, overview, price,
+// packageType, packageRegion, mainImage) is deferred to the /submit path.
+export const createDraftPackageSchema = z
+  .object({
+    title: trimmedRequired(2, 200, 'title'),
+    destination: trimmedOptional(120, 'destination'),
+    route: trimmedOptional(120, 'route'),
+    duration: trimmedOptional(60, 'duration'),
+    overview: trimmedOptional(5000, 'overview'),
+    otherDetails: trimmedOptional(5000, 'otherDetails'),
+    cancellationPolicy: trimmedOptional(10000, 'cancellationPolicy'),
+    packageRegion: packageRegionEnum.optional(),
+    packageType: packageTypeEnum.optional(),
+    validityType: validityTypeEnum.optional().default('EVERGREEN'),
+
+    startDate: dateField,
+    endDate: dateField,
+
+    price: rupeeStringToPaise,
+    oldPrice: rupeeStringToPaise,
+    discount: percentField,
+
+    hotelCategory: trimmedOptional(40, 'hotelCategory'),
+    transfers: trimmedOptional(120, 'transfers'),
+    meals: trimmedOptional(120, 'meals'),
+    sightseeing: trimmedOptional(500, 'sightseeing'),
+
+    mainImage: optionalImageUrl,
+    images: imageArrayField.optional(),
+    galleryImages: imageArrayField.optional(),
+
+    highlights: stringArrayField(200, 30, 'highlights').optional().default([]),
+    inclusions: stringArrayField(200, 30, 'inclusions').optional().default([]),
+    exclusions: stringArrayField(200, 30, 'exclusions').optional().default([]),
+    itinerary: z.array(itineraryItemSchema).max(60).optional().default([]),
+
+    offerTitle: trimmedOptional(120, 'offerTitle'),
+    offerDescription: trimmedOptional(2000, 'offerDescription'),
+  })
+  .passthrough()
+  .transform((raw) => {
+    const galleryImageUrls = raw.galleryImages ?? raw.images ?? [];
+    return {
+      title: raw.title,
+      destination: raw.destination,
+      route: raw.route,
+      duration: raw.duration,
+      overview: raw.overview,
+      otherDetails: raw.otherDetails,
+      cancellationPolicy: raw.cancellationPolicy,
+      packageRegion: raw.packageRegion,
+      packageType: raw.packageType,
+      validityType: raw.validityType,
+      startDate: raw.startDate,
+      endDate: raw.endDate,
+      priceInPaise: raw.price,
+      oldPriceInPaise: raw.oldPrice,
+      discountPercent: raw.discount,
+      hotelCategory: raw.hotelCategory,
+      transfers: raw.transfers,
+      meals: raw.meals,
+      sightseeing: raw.sightseeing,
+      mainImageUrl: raw.mainImage,
+      galleryImageUrls,
+      highlights: raw.highlights,
+      inclusions: raw.inclusions,
+      exclusions: raw.exclusions,
+      itinerary: raw.itinerary,
+      offerTitle: raw.offerTitle,
+      offerDescription: raw.offerDescription,
+    };
+  })
+  // Cross-field constraints only fire when the relevant pair is supplied.
+  .refine(
+    (data) => {
+      if (data.validityType !== 'SEASONAL') return true;
+      // For DRAFT, allow one or both to be missing — completeness check at
+      // /submit is where the real gate lives.
+      if (!data.startDate && !data.endDate) return true;
+      if (data.startDate && data.endDate) return true;
+      return false;
+    },
+    { message: 'For SEASONAL, provide both startDate and endDate together', path: ['startDate'] },
+  )
+  .refine(
+    (data) => {
+      if (!data.startDate || !data.endDate) return true;
+      return data.endDate.getTime() >= data.startDate.getTime();
+    },
+    { message: 'endDate must be on or after startDate', path: ['endDate'] },
+  )
+  .refine(
+    (data) => {
+      if (data.oldPriceInPaise === undefined || data.priceInPaise === undefined) return true;
+      return data.oldPriceInPaise >= data.priceInPaise;
+    },
+    { message: 'oldPrice must be greater than or equal to price', path: ['oldPrice'] },
+  );
+
+// -----------------------------------------------------------------------------
+//   POST /vendor/packages?draft=false — create + submit direct (strict)
+// -----------------------------------------------------------------------------
+// Strict schema — all fields required for a valid marketplace-ready package.
+// Used only when the vendor explicitly opts into ?draft=false. The service
+// layer additionally runs getMissingRequiredFields() before flipping to
+// SUBMITTED so the vendor sees the same friendly error either way.
 export const createPackageSchema = z
   .object({
     title: trimmedRequired(2, 200, 'title'),

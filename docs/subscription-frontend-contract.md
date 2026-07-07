@@ -114,17 +114,61 @@ GET /subscription-plans
         },
         "rules": {
           "marketplaceLeadUnlockPrice": 10
-        }
+        },
+        "isCurrentPlan": false,
+        "action": "DOWNGRADE_BLOCKED"
       },
-      { "...silver": "..." },
-      { "...gold": "..." }
+      { "...silver": "...", "isCurrentPlan": true, "action": "CURRENT" },
+      { "...gold": "...", "isCurrentPlan": false, "action": "UPGRADE_TO" }
     ],
+    "currentSubscription": {
+      "id": "sub-uuid",
+      "planId": "uuid-silver",
+      "expiresAt": "2026-08-15T10:30:00.000Z",
+      "effectiveStatus": "ACTIVE"
+    },
     "total": 3
   }
 }
 ```
 
 Items are ordered by `displayOrder` (1, 2, 3…) — render in the order received.
+
+### Vendor-context CTA (`action` + `currentSubscription`)
+
+Every plan carries an `action` string so the frontend can render the right CTA
+without doing its own comparison against the current subscription. Values:
+
+| `action` | Meaning | Suggested CTA |
+| --- | --- | --- |
+| `BUY` | Vendor has no active sub | `"Choose {plan.name}"` (from `displayContent.ctaButtonText`) |
+| `CURRENT` | This IS the vendor's current plan | `"Your current plan"` (disabled + green tick) |
+| `UPGRADE_TO` | Plan is priced above the current one | `"Upgrade to {plan.name}"` |
+| `DOWNGRADE_BLOCKED` | Plan is priced at or below the current one | `"Downgrades not supported"` (disabled) |
+
+Each plan also carries a boolean `isCurrentPlan` — handy for a highlighted
+border/badge on the vendor's active card.
+
+The top-level `currentSubscription` object mirrors the shape returned by
+`GET /vendor/subscriptions/current` (see Section 5). Use it to render the
+"expires in X days" pill without a second network call. It's `null` when
+the vendor is between subscriptions (and on the public endpoint).
+
+**Public endpoint (`GET /subscription-plans`, no auth):** every plan gets
+`action: "BUY"` and `currentSubscription` is `null`.
+
+**Rendering example:**
+
+```tsx
+const cta = ({
+  BUY: `Choose ${plan.name}`,
+  CURRENT: 'Your current plan',
+  UPGRADE_TO: `Upgrade to ${plan.name}`,
+  DOWNGRADE_BLOCKED: 'Downgrades not supported',
+})[plan.action];
+
+const isDisabled = plan.action === 'CURRENT' || plan.action === 'DOWNGRADE_BLOCKED';
+```
 
 ### Rendering the pricing card — field by field
 

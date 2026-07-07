@@ -17,17 +17,21 @@ model Package {
   slug         String @unique // URL-friendly; auto-generated from title
 
   // ---- Content ----
+  // Only `title` is required — it's the row's human identifier while it's a
+  // DRAFT. Every other content field is nullable so vendors can save partial
+  // progress. Completeness is enforced by the service before a package
+  // transitions out of DRAFT into SUBMITTED (see submitPackageForReview).
   title              String
-  destination        String // "Kashmir", "Goa" — indexed for filter
+  destination        String? // "Kashmir", "Goa" — indexed for filter
   route              String? // Descriptive route text, e.g., "2N and 2D"
   duration           String? // Descriptive duration, e.g., "4N/2D"
-  overview           String // long marketing copy
+  overview           String? // long marketing copy
   otherDetails       String?
   cancellationPolicy String? // rich text — HTML allowed
 
   // ---- Categorization ----
   packageRegion PackageRegion       @default(NATIONAL)
-  packageType   PackageType
+  packageType   PackageType?
   validityType  PackageValidityType @default(EVERGREEN)
 
   // ---- Availability window (REQUIRED when validityType = SEASONAL) ----
@@ -35,8 +39,8 @@ model Package {
   endDate   DateTime?
 
   // ---- Pricing (INR × 100) ----
-  priceInPaise    Int // Offer price the customer sees
-  oldPriceInPaise Int? // MRP shown crossed out; nullable if no discount
+  priceInPaise    Int? // Offer price the customer sees; nullable in DRAFT
+  oldPriceInPaise Int? // MRP shown crossed out
   discountPercent Int? // For explicit "10% off" badge
 
   // ---- Amenities (free-form strings) ----
@@ -46,7 +50,7 @@ model Package {
   sightseeing   String?
 
   // ---- Media ----
-  mainImageUrl     String // Cover image (Cloudinary)
+  mainImageUrl     String? // Cover image (Cloudinary); nullable in DRAFT
   galleryImageUrls String[] // Additional gallery images
 
   // ---- Structured lists ----

@@ -1,0 +1,6 @@
+-- AlterTable
+ALTER TABLE "packages" ALTER COLUMN "destination" DROP NOT NULL,
+ALTER COLUMN "overview" DROP NOT NULL,
+ALTER COLUMN "packageType" DROP NOT NULL,
+ALTER COLUMN "priceInPaise" DROP NOT NULL,
+ALTER COLUMN "mainImageUrl" DROP NOT NULL;

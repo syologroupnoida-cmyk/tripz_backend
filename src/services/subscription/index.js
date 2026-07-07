@@ -190,9 +190,65 @@ export const listPlansForAdmin = async (query) => {
   return { items, total, take: query.take, skip: query.skip };
 };
 
-export const listActivePlansForVendor = async () => {
+/**
+ * Vendor-facing plan catalog. When `vendorUserId` is supplied (authenticated
+ * `/vendor/subscription-plans` route), each plan is enriched with a
+ * per-vendor `action` field so the frontend can render the right CTA:
+ *
+ *   • BUY               — no active sub, fresh purchase
+ *   • CURRENT           — the vendor is on this plan right now
+ *   • UPGRADE_TO        — this plan is priced above the current one
+ *   • DOWNGRADE_BLOCKED — this plan is priced below current (blocked by the
+ *                          upgrade endpoint's downgrade guard)
+ *
+ * When `vendorUserId` is null (public `/subscription-plans` route), every plan
+ * gets `action: 'BUY'` and `currentSubscription` is null so the marketing
+ * page can render "Choose <plan>" for anyone.
+ */
+export const listActivePlansForVendor = async ({ vendorUserId = null } = {}) => {
   const items = await subscriptionRepo.listActivePlansForVendor();
-  return { items, total: items.length };
+
+  // Public / anonymous — no vendor context to overlay.
+  if (!vendorUserId) {
+    return {
+      items: items.map((plan) => ({ ...plan, isCurrentPlan: false, action: 'BUY' })),
+      total: items.length,
+      currentSubscription: null,
+    };
+  }
+
+  // Vendor-scoped — resolve their current subscription and label each plan.
+  const currentSub = await subscriptionRepo.findActiveSubscriptionForVendor(vendorUserId);
+  const isSubLive = currentSub && effectiveStatusFor(currentSub) === 'ACTIVE';
+  const currentPlanPrice = isSubLive ? (currentSub.plan?.offerPriceInPaise ?? 0) : null;
+  const currentPlanId = isSubLive ? currentSub.planId : null;
+
+  const enriched = items.map((plan) => {
+    let action;
+    let isCurrentPlan = false;
+
+    if (!isSubLive) {
+      // No active sub → any plan is a fresh buy.
+      action = 'BUY';
+    } else if (plan.id === currentPlanId) {
+      action = 'CURRENT';
+      isCurrentPlan = true;
+    } else if (plan.offerPriceInPaise > currentPlanPrice) {
+      action = 'UPGRADE_TO';
+    } else {
+      // Cheaper than or equal to the current plan — blocked by the same rule
+      // that guards POST /vendor/subscriptions/upgrade.
+      action = 'DOWNGRADE_BLOCKED';
+    }
+
+    return { ...plan, isCurrentPlan, action };
+  });
+
+  return {
+    items: enriched,
+    total: enriched.length,
+    currentSubscription: isSubLive ? decorate(currentSub) : null,
+  };
 };
 
 export const getPlanDetail = async (planId) => {

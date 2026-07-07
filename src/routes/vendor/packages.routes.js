@@ -3,11 +3,23 @@ import { validateRequest } from '../../middlewares/validation.middleware.js';
 import * as packageController from '../../controllers/package.controller.js';
 import {
   createPackageSchema,
+  createDraftPackageSchema,
   createPackageQuerySchema,
   updatePackageSchema,
   listVendorPackagesQuerySchema,
   togglePausePackageQuerySchema,
 } from '../../validators/package.validator.js';
+
+// Route middleware that picks the create-schema based on the `?draft` flag.
+// Must run AFTER `validateRequest(createPackageQuerySchema, 'query')` so that
+// `req.query.asDraft` is already normalised.
+//
+//   asDraft === true  → lenient createDraftPackageSchema (only title required)
+//   asDraft === false → strict createPackageSchema (all required fields)
+const validateCreateBody = (req, res, next) => {
+  const schema = req.query.asDraft === false ? createPackageSchema : createDraftPackageSchema;
+  return validateRequest(schema)(req, res, next);
+};
 
 // Vendor package management. VENDOR role. Role gate at routes/vendor/index.js.
 // Mounted under /packages.
@@ -18,13 +30,14 @@ import {
 const router = Router();
 
 // POST /api/v1/vendor/packages?draft=true|false
-// Create a package. Default `?draft=true` → status DRAFT. Pass `?draft=false`
-// to publish straight to admin review (status SUBMITTED + submittedAt stamped).
-// Image URLs must already be uploaded via /uploads/image.
+// Create a package. Default `?draft=true` → status DRAFT (only `title` required
+// in the body, everything else can be filled later). Pass `?draft=false` to
+// publish straight to admin review — the strict schema fires, so all required
+// fields must be present. Image URLs must already be uploaded via /uploads/image.
 router.post(
   '/',
   validateRequest(createPackageQuerySchema, 'query'),
-  validateRequest(createPackageSchema),
+  validateCreateBody,
   packageController.createPackage,
 );
 
