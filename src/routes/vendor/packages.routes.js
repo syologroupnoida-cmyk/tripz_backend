@@ -6,6 +6,7 @@ import {
   createDraftPackageSchema,
   createPackageQuerySchema,
   updatePackageSchema,
+  updatePackageQuerySchema,
   listVendorPackagesQuerySchema,
   togglePausePackageQuerySchema,
 } from '../../validators/package.validator.js';
@@ -52,18 +53,21 @@ router.get(
 // GET /api/v1/vendor/packages/:id
 router.get('/:id', packageController.getMyPackageDetail);
 
-// PATCH /api/v1/vendor/packages/:id
-// Update fields. Blocked while status is SUBMITTED (409 PACKAGE_UNDER_REVIEW).
-// Editing an APPROVED/PAUSED package flags hasPendingReview.
+// PATCH /api/v1/vendor/packages/:id?draft=true|false
+// Symmetric with POST /vendor/packages?draft=true|false:
+//   ?draft=true  (default) → just save fields. DRAFT stays DRAFT, APPROVED
+//                             stays APPROVED (with hasPendingReview flagged).
+//   ?draft=false           → save fields + run completeness check + flip
+//                             DRAFT/REJECTED → SUBMITTED. Empty body is
+//                             allowed — the vendor may have filled everything
+//                             via earlier PATCHes.
+// Blocked while status is SUBMITTED (409 PACKAGE_UNDER_REVIEW).
 router.patch(
   '/:id',
+  validateRequest(updatePackageQuerySchema, 'query'),
   validateRequest(updatePackageSchema),
   packageController.updatePackage,
 );
-
-// POST /api/v1/vendor/packages/:id/submit
-// DRAFT or REJECTED → SUBMITTED. Clears prior review notes.
-router.post('/:id/submit', packageController.submitPackage);
 
 // PATCH /api/v1/vendor/packages/:id/pause?paused=true|false
 // Unified visibility toggle:

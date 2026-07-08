@@ -230,25 +230,43 @@
           }
         },
         {
-          "name": "Update package (draft or approved)",
+          "name": "Update package — keep as draft (?draft=true)",
           "request": {
             "method": "PATCH",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"price\": \"11000\",\n  \"discount\": \"38\",\n  \"highlights\": [\"Snow adventure\", \"Shikara ride\", \"Local cuisine\", \"Free wifi\"]\n}"
+              "raw": "{\n  \"destination\": \"Kashmir\",\n  \"overview\": \"Explore Kashmir with a family itinerary — still adding details.\"\n}"
             },
-            "url": { "raw": "{{baseUrl}}/vendor/packages/{{packageId}}", "host": ["{{baseUrl}}"], "path": ["vendor", "packages", "{{packageId}}"] },
-            "description": "Partial update.\n\n**Behaviour by current status:**\n- **DRAFT / REJECTED:** silent update, no side effects.\n- **APPROVED / PAUSED:** update is live immediately BUT `hasPendingReview` is flagged — admins see it in the queue with a filter.\n- **SUBMITTED:** blocked with 409 `PACKAGE_UNDER_REVIEW` — wait for admin decision first.\n\nTitle change auto-regenerates the slug."
+            "url": {
+              "raw": "{{baseUrl}}/vendor/packages/{{packageId}}?draft=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["vendor", "packages", "{{packageId}}"],
+              "query": [
+                { "key": "draft", "value": "true", "description": "true (default) → save only. false → save + transition to SUBMITTED." }
+              ]
+            },
+            "description": "Partial update — status is untouched. Use this while the vendor is still iterating on a DRAFT (or editing an APPROVED / PAUSED package).\n\n**Symmetric with POST `/vendor/packages?draft=true|false`:**\n- CREATE `?draft=true` → new row is a DRAFT.\n- UPDATE `?draft=true` → existing row stays in its current status.\n\n**Behaviour by current status:**\n- **DRAFT / REJECTED:** silent update, stays in the same status.\n- **APPROVED / PAUSED:** update is live immediately BUT `hasPendingReview` is flagged — admins see it in the queue with a filter.\n- **SUBMITTED:** blocked with 409 `PACKAGE_UNDER_REVIEW` — wait for admin decision first.\n\nTitle change auto-regenerates the slug. Empty body is allowed (no-op)."
           }
         },
         {
-          "name": "Submit for admin review",
+          "name": "Update + submit — final publish (?draft=false)",
           "request": {
-            "method": "POST",
-            "header": [],
-            "url": { "raw": "{{baseUrl}}/vendor/packages/{{packageId}}/submit", "host": ["{{baseUrl}}"], "path": ["vendor", "packages", "{{packageId}}", "submit"] },
-            "description": "DRAFT or REJECTED → SUBMITTED. Clears prior review notes.\n\n**Completeness gate — checked before the status flip:**\n\nRequired fields on the row: `title`, `destination`, `overview`, `packageType`, `packageRegion`, `mainImageUrl`, `priceInPaise`. `SEASONAL` packages additionally need `startDate` + `endDate`.\n\nMissing any of these → **400 `PACKAGE_INCOMPLETE`** with a `missingFields` array so the frontend can highlight the offending inputs:\n```\n{\n  \"success\": false,\n  \"message\": \"Package is missing required fields to submit for review.\",\n  \"details\": {\n    \"code\": \"PACKAGE_INCOMPLETE\",\n    \"missingFields\": [\"destination\", \"overview\", \"priceInPaise\", \"mainImageUrl\"]\n  }\n}\n```\n\n**Other errors:**\n- 403 — package belongs to another vendor\n- 404 — package not found\n- 409 `INVALID_TRANSITION` — package is already SUBMITTED / APPROVED / PAUSED"
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"destination\": \"Kashmir\",\n  \"overview\": \"Final polished overview.\",\n  \"packageType\": \"FAMILY\",\n  \"packageRegion\": \"NATIONAL\",\n  \"mainImage\": \"https://res.cloudinary.com/tripz/package-main/kashmir-cover.jpg\",\n  \"price\": \"12000\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/vendor/packages/{{packageId}}?draft=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["vendor", "packages", "{{packageId}}"],
+              "query": [
+                { "key": "draft", "value": "false", "description": "Save the fields AND flip DRAFT/REJECTED → SUBMITTED in one call." }
+              ]
+            },
+            "description": "One-shot **save + submit** — the vendor's \"Publish\" button.\n\n**Symmetric with POST `/vendor/packages?draft=false`:** both endpoints treat `draft=false` as \"this is no longer a draft — send it to admin review.\"\n\n**Backend flow:**\n1. Apply the update (may be empty if the vendor already saved everything in prior PATCH calls).\n2. Run the completeness check on the resulting row.\n3. If every required field is present → transition DRAFT/REJECTED → SUBMITTED (stamps `submittedAt`, clears prior review notes).\n\n**Completeness gate — required fields:** `title`, `destination`, `overview`, `packageType`, `packageRegion`, `mainImageUrl`, `priceInPaise`. `SEASONAL` packages additionally need `startDate` + `endDate`.\n\nMissing any → **400 `PACKAGE_INCOMPLETE`** with the missing fields list. IMPORTANT: fields you sent in this same call **are still saved** — the frontend can highlight the remaining gaps and try again without re-typing.\n```\n{\n  \"success\": false,\n  \"message\": \"Package is missing required fields to submit for review.\",\n  \"details\": {\n    \"code\": \"PACKAGE_INCOMPLETE\",\n    \"missingFields\": [\"packageType\", \"mainImageUrl\"]\n  }\n}\n```\n\n**Empty body is valid** if the vendor already filled every field via earlier PATCHes — this call just triggers the completeness check + transition.\n\n**Other errors:**\n- 403 — package belongs to another vendor\n- 404 — package not found\n- 409 `PACKAGE_UNDER_REVIEW` — package is already SUBMITTED\n- 409 `INVALID_TRANSITION` — package is APPROVED/PAUSED (no re-submit needed; the update just flags `hasPendingReview`)"
           }
         },
         {

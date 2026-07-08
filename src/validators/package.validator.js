@@ -420,11 +420,31 @@ export const createPackageSchema = z
   );
 
 // -----------------------------------------------------------------------------
+//   PATCH /vendor/packages/:id ?draft=true|false — edit + optional transition
+// -----------------------------------------------------------------------------
+// `?draft=true`   (default) → just save the fields; status stays put.
+// `?draft=false`            → after applying updates, run the completeness
+//                              check and transition DRAFT/REJECTED → SUBMITTED
+//                              in the same call.
+//
+// Symmetric with `POST /vendor/packages?draft=true|false`:
+//   • On CREATE: draft=true → new row in DRAFT status. draft=false → SUBMITTED.
+//   • On UPDATE: draft=true → keep in current draft-y status. draft=false →
+//                             transition to SUBMITTED.
+export const updatePackageQuerySchema = z
+  .object({
+    draft: z.enum(['true', 'false']).optional().default('true'),
+  })
+  .strict()
+  .transform((q) => ({ asDraft: q.draft !== 'false' }));
+
+// -----------------------------------------------------------------------------
 //   PATCH /vendor/packages/:id — update draft or approved package
 // -----------------------------------------------------------------------------
-// Same fields as create, but everything is optional. Cross-field constraints
-// (SEASONAL requires dates, endDate ≥ startDate, oldPrice ≥ price) are only
-// enforced when the relevant pair is supplied together.
+// Same fields as create, but everything is optional. Empty body is allowed
+// (useful when only the `?submit=true` transition is needed). Cross-field
+// constraints (SEASONAL requires dates, endDate ≥ startDate, oldPrice ≥ price)
+// are only enforced when the relevant pair is supplied together.
 export const updatePackageSchema = z
   .object({
     title: trimmedOptional(200, 'title'),
@@ -506,9 +526,9 @@ export const updatePackageSchema = z
 
     return out;
   })
-  .refine((data) => Object.keys(data).length > 0, {
-    message: 'At least one field must be provided to update',
-  })
+  // Empty body is intentionally allowed — a `PATCH ?submit=true` with no body
+  // is a valid "just transition to SUBMITTED" call when the record already
+  // has every required field.
   .refine(
     (data) => {
       if (data.startDate === undefined || data.endDate === undefined) return true;

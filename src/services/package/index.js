@@ -139,22 +139,28 @@ export const createDraftPackage = async ({ vendorUserId, data, asDraft = true })
 };
 
 // -----------------------------------------------------------------------------
-//   Vendor — update package
+//   Vendor — update package (+ optional submit-in-same-call)
 // -----------------------------------------------------------------------------
 /**
- * Updates fields on a vendor's package. Allowed for DRAFT / REJECTED /
- * APPROVED / PAUSED (SUBMITTED is locked while admin reviews).
+ * Updates fields on a vendor's package. `asDraft` mirrors the create handler:
  *
- * Behaviour by state:
+ *   • asDraft: true  (default) → just save fields; keep current status.
+ *   • asDraft: false           → save fields, run the completeness check,
+ *                                 and transition DRAFT/REJECTED → SUBMITTED
+ *                                 in the same call.
+ *
+ * Editable states: DRAFT / REJECTED / APPROVED / PAUSED. SUBMITTED is locked
+ * while admin reviews. Behaviour by state:
+ *
  *   • DRAFT / REJECTED — edits are silent; nothing else changes.
- *   • APPROVED         — edits go live BUT hasPendingReview is flagged so
- *                        admins can spot changes worth re-reviewing.
- *   • PAUSED           — same as APPROVED (paused packages are still admin-
- *                        approved content).
+ *   • APPROVED         — edits go live BUT `hasPendingReview` is flagged so
+ *                        admins can spot changes worth re-reviewing. `asDraft`
+ *                        is ignored here (already approved).
+ *   • PAUSED           — same as APPROVED.
  *
- * Title change triggers a slug regen (fresh unique slug).
+ * Title changes trigger a slug regen (fresh unique slug).
  */
-export const updatePackage = async ({ vendorUserId, packageId, data }) => {
+export const updatePackage = async ({ vendorUserId, packageId, data, asDraft = true }) => {
   const existing = await packageRepo.getPackageById(packageId);
   if (!existing) throw ApiError.notFound('Package not found.');
   if (existing.vendorUserId !== vendorUserId) {
@@ -181,37 +187,34 @@ export const updatePackage = async ({ vendorUserId, packageId, data }) => {
     patch.hasPendingReview = true;
   }
 
-  const updated = await packageRepo.updatePackage(packageId, patch);
-  return {
-    package: updated,
-    message:
-      existing.status === 'APPROVED' || existing.status === 'PAUSED'
-        ? 'Package updated. Changes are live and flagged for re-review.'
-        : 'Package updated.',
-  };
-};
+  // Apply the patch (skip the write when the body was empty — a bare
+  // `PATCH ?submit=true` with no fields is a valid "just transition" call).
+  const updated = Object.keys(patch).length > 0
+    ? await packageRepo.updatePackage(packageId, patch)
+    : existing;
 
-// -----------------------------------------------------------------------------
-//   Vendor — submit for review
-// -----------------------------------------------------------------------------
-/**
- * Move a DRAFT (or REJECTED) package to SUBMITTED. Before flipping status we
- * verify all required fields are actually filled — draft rows are allowed to
- * be partial, but SUBMITTED rows must be complete so the admin queue never
- * sees a half-baked package.
- *
- * Missing fields come back as a 400 with `code: PACKAGE_INCOMPLETE` and a
- * `missingFields` list the frontend can use to highlight inputs.
- */
-export const submitPackageForReview = async ({ vendorUserId, packageId }) => {
-  // Load first to run completeness + ownership checks with clean errors.
-  const existing = await packageRepo.getPackageById(packageId);
-  if (!existing) throw ApiError.notFound('Package not found.');
-  if (existing.vendorUserId !== vendorUserId) {
-    throw new ApiError(403, 'You can only submit your own packages.');
+  // asDraft (default) → save-only path. Return the update result and we're done.
+  if (asDraft) {
+    return {
+      package: updated,
+      message:
+        existing.status === 'APPROVED' || existing.status === 'PAUSED'
+          ? 'Package updated. Changes are live and flagged for re-review.'
+          : 'Package updated.',
+    };
   }
 
-  const missingFields = getMissingRequiredFields(existing);
+  // asDraft: false → transition requested. APPROVED and PAUSED are already
+  // past the review gate, so we just ignore the flag and return the update
+  // result. Only DRAFT / REJECTED can be flipped to SUBMITTED.
+  if (existing.status === 'APPROVED' || existing.status === 'PAUSED') {
+    return {
+      package: updated,
+      message: 'Package updated. Changes are live and flagged for re-review.',
+    };
+  }
+
+  const missingFields = getMissingRequiredFields(updated);
   if (missingFields.length > 0) {
     throw new ApiError(
       400,
@@ -221,7 +224,6 @@ export const submitPackageForReview = async ({ vendorUserId, packageId }) => {
   }
 
   const result = await packageRepo.submitPackage({ id: packageId, vendorUserId });
-
   if (!result.updated) {
     if (result.notFound) throw ApiError.notFound('Package not found.');
     throw new ApiError(
@@ -231,8 +233,15 @@ export const submitPackageForReview = async ({ vendorUserId, packageId }) => {
     );
   }
 
-  return { package: result.package, message: 'Package submitted for admin review.' };
+  return {
+    package: result.package,
+    message: 'Package updated and submitted for admin review.',
+  };
 };
+
+// The old `submitPackageForReview` service was consolidated into `updatePackage`
+// above — a vendor now submits by calling `PATCH ?submit=true` (with or without
+// a body). Keeping the completeness + slug logic in one place avoids drift.
 
 // -----------------------------------------------------------------------------
 //   Vendor — pause / resume (unified toggle)

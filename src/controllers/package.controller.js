@@ -23,22 +23,15 @@ export const createPackage = asyncHandler(async (req, res) => {
 });
 
 export const updatePackage = asyncHandler(async (req, res) => {
+  // `?draft` mirrors the create handler: draft=true (default) → save only;
+  // draft=false → save + completeness check + transition DRAFT/REJECTED →
+  // SUBMITTED. Normalised by updatePackageQuerySchema.
+  const asDraft = req.query.asDraft !== false;
   const data = await packageService.updatePackage({
     vendorUserId: req.user.id,
     packageId: req.params.id,
     data: req.body,
-  });
-  return sendSuccess(res, {
-    statusCode: 200,
-    message: data.message,
-    data: data.package,
-  });
-});
-
-export const submitPackage = asyncHandler(async (req, res) => {
-  const data = await packageService.submitPackageForReview({
-    vendorUserId: req.user.id,
-    packageId: req.params.id,
+    asDraft,
   });
   return sendSuccess(res, {
     statusCode: 200,
