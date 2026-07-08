@@ -83,13 +83,15 @@
                 { "key": "packageRegion", "value": "NATIONAL", "disabled": true, "description": "NATIONAL or INTERNATIONAL" },
                 { "key": "packageType", "value": "GROUP", "disabled": true },
                 { "key": "validityType", "value": "EVERGREEN", "disabled": true },
+                { "key": "duration", "value": "4N", "disabled": true, "description": "Case-insensitive contains. \"4N\" matches \"4N/2D\", \"4N/3D\", etc." },
+                { "key": "hotelCategory", "value": "4 star", "disabled": true, "description": "Case-insensitive contains. \"4 star\" matches \"4 star\", \"4 Star\", \"4-star deluxe\"." },
                 { "key": "minPrice", "value": "100", "disabled": true, "description": "In rupees" },
                 { "key": "maxPrice", "value": "50000", "disabled": true, "description": "In rupees" },
                 { "key": "sortBy", "value": "createdAt", "disabled": true },
                 { "key": "order", "value": "desc", "disabled": true }
               ]
             },
-            "description": "Enable the query params to filter.\n\n**packageRegion values:** NATIONAL / INTERNATIONAL\n\n**packageType values:** HONEYMOON / FAMILY / HOLIDAY / COUPLE / SOLO / GROUP / ADVENTURE / RELIGIOUS / BEACH / HILL_STATION / WILDLIFE / CULTURAL / CORPORATE / OTHER\n\n**validityType values:** EVERGREEN / SEASONAL\n\n**sortBy:** `createdAt` | `priceInPaise` | `title`"
+            "description": "Enable the query params to filter.\n\n**packageRegion values:** NATIONAL / INTERNATIONAL\n\n**packageType values:** HONEYMOON / FAMILY / HOLIDAY / COUPLE / SOLO / GROUP / ADVENTURE / RELIGIOUS / BEACH / HILL_STATION / WILDLIFE / CULTURAL / CORPORATE / OTHER\n\n**validityType values:** EVERGREEN / SEASONAL\n\n**duration & hotelCategory** are case-insensitive substring matches — vendors store free-form strings like `\"4N/2D\"` or `\"4 star deluxe\"`, so partial keywords work (`?duration=4N` matches everything starting with `4N`).\n\n**sortBy:** `createdAt` | `priceInPaise` | `title`"
           }
         },
         {
@@ -131,7 +133,7 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw", 
-              "raw": "{\n  \"title\": \"Kashmir 4N/2D Family Package\",\n  \"destination\": \"Kashmir\",\n \"packageRegion\": \"NATIONAL\",\n  \"packageType\": \"FAMILY\",\n  \"validityType\": \"EVERGREEN\",\n  \"route\": \"Delhi → Srinagar → Gulmarg → Delhi\",\n  \"duration\": \"4N/2D\",\n  \"overview\": \"Explore the beauty of Kashmir with a hand-picked family itinerary.\",\n  \"price\": \"12000\",\n  \"oldPrice\": \"18000\",\n  \"discount\": \"33\",\n  \"hotelCategory\": \"4 star\",\n  \"transfers\": \"cab\",\n  \"meals\": \"breakfast + dinner included\",\n  \"sightseeing\": \"Gulmarg, Dal Lake, Shalimar Bagh\",\n  \"mainImage\": {\n    \"uploadedUrl\": \"https://res.cloudinary.com/tripz/package-main/vendor-1/kashmir-cover.jpg\"\n  },\n  \"galleryImages\": [\n    { \"uploadedUrl\": \"https://res.cloudinary.com/tripz/package-gallery/vendor-1/gulmarg.jpg\" },\n    { \"uploadedUrl\": \"https://res.cloudinary.com/tripz/package-gallery/vendor-1/dal-lake.jpg\" }\n  ],\n  \"highlights\": [\"Snow-capped mountains\", \"Shikara ride\", \"Local cuisine\"],\n  \"inclusions\": [\"Hotel stay\", \"Meals as per plan\", \"Airport transfers\"],\n  \"exclusions\": [\"Airfare\", \"Personal expenses\"],\n  \"itinerary\": [\n    { \"day\": \"Day 1\", \"title\": \"Arrival in Srinagar\", \"text\": \"Check-in, Shikara ride at Dal Lake, evening free\" },\n    { \"day\": \"Day 2\", \"title\": \"Gulmarg day trip\", \"text\": \"Gondola ride, snow activities, return to Srinagar\" }\n  ],\n  \"offerTitle\": \"Early Bird Discount\",\n  \"offerDescription\": \"Book 30 days in advance and save 10% more\",\n  \"cancellationPolicy\": \"Free cancellation up to 7 days before departure.\",\n  \"otherDetails\": \"Please carry warm clothing.\"\n}"
+              "raw": "{\n  \"title\": \"Kashmir 4N/2D Family Package\",\n  \"agencyName\": \"Wanderlust Holidays\",\n  \"destination\": \"Kashmir\",\n \"packageRegion\": \"NATIONAL\",\n  \"packageType\": \"FAMILY\",\n  \"validityType\": \"EVERGREEN\",\n  \"route\": \"Delhi → Srinagar → Gulmarg → Delhi\",\n  \"duration\": \"4N/2D\",\n  \"overview\": \"Explore the beauty of Kashmir with a hand-picked family itinerary.\",\n  \"price\": \"12000\",\n  \"oldPrice\": \"18000\",\n  \"discount\": \"33\",\n  \"hotelCategory\": \"4 star\",\n  \"transfers\": \"cab\",\n  \"meals\": \"breakfast + dinner included\",\n  \"sightseeing\": \"Gulmarg, Dal Lake, Shalimar Bagh\",\n  \"mainImage\": {\n    \"uploadedUrl\": \"https://res.cloudinary.com/tripz/package-main/vendor-1/kashmir-cover.jpg\"\n  },\n  \"galleryImages\": [\n    { \"uploadedUrl\": \"https://res.cloudinary.com/tripz/package-gallery/vendor-1/gulmarg.jpg\" },\n    { \"uploadedUrl\": \"https://res.cloudinary.com/tripz/package-gallery/vendor-1/dal-lake.jpg\" }\n  ],\n  \"highlights\": [\"Snow-capped mountains\", \"Shikara ride\", \"Local cuisine\"],\n  \"inclusions\": [\"Hotel stay\", \"Meals as per plan\", \"Airport transfers\"],\n  \"exclusions\": [\"Airfare\", \"Personal expenses\"],\n  \"itinerary\": [\n    { \"day\": \"Day 1\", \"title\": \"Arrival in Srinagar\", \"text\": \"Check-in, Shikara ride at Dal Lake, evening free\" },\n    { \"day\": \"Day 2\", \"title\": \"Gulmarg day trip\", \"text\": \"Gondola ride, snow activities, return to Srinagar\" }\n  ],\n  \"offerTitle\": \"Early Bird Discount\",\n  \"offerDescription\": \"Book 30 days in advance and save 10% more\",\n  \"cancellationPolicy\": \"Free cancellation up to 7 days before departure.\",\n  \"otherDetails\": \"Please carry warm clothing.\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/vendor/packages?draft=true",
@@ -373,7 +375,7 @@
           }
         },
         {
-          "name": "Reject package",
+          "name": "Reject / take-down package",
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
@@ -382,7 +384,7 @@
               "raw": "{\n  \"reason\": \"Missing gallery images. Please add at least 3 gallery images before resubmitting.\"\n}"
             },
             "url": { "raw": "{{baseUrl}}/admin/packages/{{packageId}}/reject", "host": ["{{baseUrl}}"], "path": ["admin", "packages", "{{packageId}}", "reject"] },
-            "description": "SUBMITTED → REJECTED with reason (5-1000 chars, REQUIRED for vendor to know what to fix).\n\nVendor can edit + resubmit — REJECTED → SUBMITTED transition allowed via `/vendor/packages/:id/submit`.\n\n**Errors:**\n- 400 — reason too short/long\n- 409 `INVALID_TRANSITION` — package is not SUBMITTED"
+            "description": "Reject a package with a reason (5-1000 chars, REQUIRED). Works on two entry states:\n\n**Pre-approval reject — `SUBMITTED → REJECTED`**\nAdmin didn't accept the submission. Vendor sees `rejectionReason`, edits, and can `PATCH ?draft=false` to resubmit.\n\n**Post-approval take-down — `APPROVED → REJECTED`**\nLive package pulled from the marketplace. Use for:\n- Misleading content discovered after approval\n- User complaints / compliance issues\n- Vendor's KYC revoked → their live packages need to come down\n- Post-approval pricing fraud\n\nSame flow either way — vendor gets the reason, can edit + resubmit if allowed.\n\n**Sample reasons:**\n- Pre-approval: `\"Missing gallery images. Please add at least 3 gallery images before resubmitting.\"`\n- Take-down: `\"Live package taken down: reported by 3 customers for misleading hotel photos. Please update the images to match the actual stay before resubmitting.\"`\n\n**Errors:**\n- 400 — reason too short/long\n- 409 `INVALID_TRANSITION` — package is not SUBMITTED or APPROVED (e.g., already REJECTED / PAUSED / DRAFT)"
           }
         }
       ]

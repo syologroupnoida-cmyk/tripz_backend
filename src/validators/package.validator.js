@@ -217,6 +217,7 @@ export const getMissingRequiredFields = (pkg) => {
 export const createDraftPackageSchema = z
   .object({
     title: trimmedRequired(2, 200, 'title'),
+    agencyName: trimmedOptional(200, 'agencyName'),
     destination: trimmedOptional(120, 'destination'),
     route: trimmedOptional(120, 'route'),
     duration: trimmedOptional(60, 'duration'),
@@ -256,6 +257,7 @@ export const createDraftPackageSchema = z
     const galleryImageUrls = raw.galleryImages ?? raw.images ?? [];
     return {
       title: raw.title,
+      agencyName: raw.agencyName,
       destination: raw.destination,
       route: raw.route,
       duration: raw.duration,
@@ -321,6 +323,7 @@ export const createDraftPackageSchema = z
 export const createPackageSchema = z
   .object({
     title: trimmedRequired(2, 200, 'title'),
+    agencyName: trimmedOptional(200, 'agencyName'),
     destination: trimmedRequired(2, 120, 'destination'),
     route: trimmedOptional(120, 'route'),
     duration: trimmedOptional(60, 'duration'),
@@ -368,6 +371,7 @@ export const createPackageSchema = z
     // Rename to schema field names (raw.price → priceInPaise, etc.).
     return {
       title: raw.title,
+      agencyName: raw.agencyName,
       destination: raw.destination,
       route: raw.route,
       duration: raw.duration,
@@ -448,6 +452,7 @@ export const updatePackageQuerySchema = z
 export const updatePackageSchema = z
   .object({
     title: trimmedOptional(200, 'title'),
+    agencyName: trimmedOptional(200, 'agencyName'),
     destination: trimmedOptional(120, 'destination'),
     route: trimmedOptional(120, 'route'),
     duration: trimmedOptional(60, 'duration'),
@@ -487,6 +492,7 @@ export const updatePackageSchema = z
     const out = {};
 
     if (raw.title !== undefined) out.title = raw.title;
+    if (raw.agencyName !== undefined) out.agencyName = raw.agencyName;
     if (raw.destination !== undefined) out.destination = raw.destination;
     if (raw.route !== undefined) out.route = raw.route;
     if (raw.duration !== undefined) out.duration = raw.duration;
@@ -630,6 +636,10 @@ export const publicPackagesQuerySchema = z
     packageRegion: packageRegionEnum.optional(),
     packageType: packageTypeEnum.optional(),
     validityType: validityTypeEnum.optional(),
+    // Free-form fields — matched with case-insensitive `contains` so vendors
+    // don't need to hit exact strings ("4N" matches "4N/2D", "4N/3D" etc.).
+    duration: z.string().trim().max(60).optional(),
+    hotelCategory: z.string().trim().max(40).optional(),
     // Rupee-range filters — transformed to paise.
     minPrice: z
       .union([z.string(), z.number()])
@@ -658,6 +668,8 @@ export const publicPackagesQuerySchema = z
     packageRegion: q.packageRegion,
     packageType: q.packageType,
     validityType: q.validityType,
+    duration: q.duration,
+    hotelCategory: q.hotelCategory,
     minPriceInPaise: q.minPrice,
     maxPriceInPaise: q.maxPrice,
     sortBy: q.sortBy,

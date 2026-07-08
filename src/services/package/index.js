@@ -349,6 +349,13 @@ export const approvePackageAsAdmin = async ({ packageId, adminId }) => {
   return { package: result.package, message: 'Package approved.' };
 };
 
+/**
+ * Reject a package. Works on two states:
+ *   • SUBMITTED — pre-approval reject; vendor edits + resubmits.
+ *   • APPROVED  — post-approval take-down; live package pulled from the
+ *                  marketplace. Vendor still gets the reason in
+ *                  `rejectionReason` and can edit + resubmit if allowed.
+ */
 export const rejectPackageAsAdmin = async ({ packageId, adminId, reason }) => {
   const result = await packageRepo.rejectPackage({ id: packageId, adminId, reason });
 
@@ -356,11 +363,15 @@ export const rejectPackageAsAdmin = async ({ packageId, adminId, reason }) => {
     if (result.notFound) throw ApiError.notFound('Package not found.');
     throw new ApiError(
       409,
-      `Only SUBMITTED packages can be rejected (current: ${result.currentStatus}).`,
+      `Only SUBMITTED or APPROVED packages can be rejected (current: ${result.currentStatus}).`,
       { code: 'INVALID_TRANSITION', currentStatus: result.currentStatus },
     );
   }
 
+  // Distinguish pre-approval reject vs post-approval take-down in the audit
+  // trail. `result.package` already carries the new REJECTED status, so we
+  // rely on the fact that `hasPendingReview` was only set on APPROVED rows
+  // to infer the prior state — good enough for MVP-level logging.
   console.log(
     `[admin-audit] REJECT_PACKAGE pkg=${packageId} by admin=${adminId} reason="${reason}"`,
   );

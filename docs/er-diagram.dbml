@@ -491,6 +491,7 @@ Table packages {
 
   // -- Content
   title              varchar             [not null, note: 'e.g., "Kashmir 4N/2D Family Package"']
+  agencyName         varchar             [note: 'Displayed as "Package by <agency>"; nullable — individual vendors leave it blank']
   destination        varchar             [not null, note: 'e.g., "Kashmir", "Goa" — indexed for filter']
   route              varchar             [note: 'Descriptive route text, e.g., "2N and 2D"']
   duration           varchar             [note: 'Descriptive duration, e.g., "4N/2D"']

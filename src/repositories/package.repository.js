@@ -9,6 +9,7 @@ const PACKAGE_SELECT = {
   slug: true,
 
   title: true,
+  agencyName: true,
   destination: true,
   route: true,
   duration: true,
@@ -217,6 +218,8 @@ export const listPackagesPublic = async ({
   packageRegion,
   packageType,
   validityType,
+  duration,
+  hotelCategory,
   minPriceInPaise,
   maxPriceInPaise,
   sortBy,
@@ -245,6 +248,8 @@ export const listPackagesPublic = async ({
   if (packageRegion) where.packageRegion = packageRegion;
   if (packageType) where.packageType = packageType;
   if (validityType) where.validityType = validityType;
+  if (duration) where.duration = { contains: duration, mode: 'insensitive' };
+  if (hotelCategory) where.hotelCategory = { contains: hotelCategory, mode: 'insensitive' };
   if (minPriceInPaise !== undefined || maxPriceInPaise !== undefined) {
     where.priceInPaise = {};
     if (minPriceInPaise !== undefined) where.priceInPaise.gte = minPriceInPaise;
@@ -343,7 +348,16 @@ export const approvePackage = async ({ id, adminId }) => {
 };
 
 /**
- * SUBMITTED → REJECTED with reason. Vendor can then edit + resubmit.
+ * Reject a package with a reason. Two entry points:
+ *
+ *   • SUBMITTED → REJECTED  — pre-approval reject ("your submission was not
+ *                              accepted, please fix and resubmit").
+ *   • APPROVED  → REJECTED  — post-approval take-down ("this live package has
+ *                              been removed from the marketplace for X reason").
+ *
+ * In both cases the vendor sees the same rejectionReason field and can edit
+ * + resubmit if they want. The catch-all "REJECTED" status keeps the state
+ * machine small; the reason field carries the semantic distinction.
  */
 export const rejectPackage = async ({ id, adminId, reason }) => {
   const now = new Date();
@@ -351,7 +365,7 @@ export const rejectPackage = async ({ id, adminId, reason }) => {
     where: {
       id,
       deletedAt: null,
-      status: 'SUBMITTED',
+      status: { in: ['SUBMITTED', 'APPROVED'] },
     },
     data: {
       status: 'REJECTED',
