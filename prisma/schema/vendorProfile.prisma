@@ -11,6 +11,7 @@ model VendorProfile {
   leadAssignments LeadAssignment[]
   subscriptions   VendorSubscription[]
   packages        Package[]
+  travelGuides    TravelGuide[]
 
   @@index([kycStatus])
   @@map("vendor_profiles")

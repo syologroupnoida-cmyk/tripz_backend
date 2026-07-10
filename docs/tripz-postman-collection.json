@@ -390,6 +390,149 @@
       ]
     },
     {
+      "name": "Public — Travel Guides",
+      "description": "Public-facing travel guide catalog. No authentication — anyone can browse without signing up.\n\n**Server-side filters (automatic):**\n- `deletedAt IS NULL`\n\nNo status/approval workflow — guides go live the moment a vendor creates them.",
+      "item": [
+        {
+          "name": "Browse travel guides (with filters)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.items?.[0]?.slug) {",
+                  "  pm.environment.set('travelGuideSlug', res.data.items[0].slug);",
+                  "  console.log('Auto-saved travelGuideSlug:', res.data.items[0].slug);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/travel-guide?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["travel-guide"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "destination", "value": "Kashmir", "disabled": true, "description": "Case-insensitive contains." },
+                { "key": "country", "value": "India", "disabled": true, "description": "Case-insensitive contains." },
+                { "key": "continent", "value": "Asia", "disabled": true, "description": "Case-insensitive contains." },
+                { "key": "category", "value": "Adventure", "disabled": true, "description": "Case-insensitive contains." },
+                { "key": "minBudget", "value": "5000", "disabled": true },
+                { "key": "maxBudget", "value": "50000", "disabled": true },
+                { "key": "minRating", "value": "4", "disabled": true, "description": "0-5" },
+                { "key": "sortBy", "value": "createdAt", "disabled": true, "description": "createdAt | rating | budget" },
+                { "key": "order", "value": "desc", "disabled": true }
+              ]
+            },
+            "description": "Enable the query params to filter.\n\nAll text filters (`destination`, `country`, `continent`, `category`) do case-insensitive substring match so partial keywords work.\n\n**Side effect:** Auto-saves the first result's slug into `travelGuideSlug` for the next request."
+          }
+        },
+        {
+          "name": "Get travel guide detail by slug",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/travel-guide/{{travelGuideSlug}}", "host": ["{{baseUrl}}"], "path": ["travel-guide", "{{travelGuideSlug}}"] },
+            "description": "**Public detail page** — no auth needed. Returns every column of one guide (title, description, gallery, highlights, activities, tips, etc.) so the frontend can render the full detail page in a single request.\n\n**Where the slug comes from:**\n1. Frontend calls `GET /travel-guide` (browse) → gets an array of guides; each item has a `slug` field.\n2. User clicks a card → frontend routes to `/travel-guides/<slug>` and calls this endpoint.\n\n**In Postman:** the `Browse travel guides` request's test script auto-saves `res.data.items[0].slug` into `{{travelGuideSlug}}`, so this request works out of the box after Browse.\n\nYou can also paste any known slug directly into the URL (or set `travelGuideSlug` in the environment manually) to fetch a specific guide.\n\n**Slug format:** auto-generated from `title` — lowercased, non-alphanumeric → `-`, e.g. `\"Kashmir Adventure Guide\"` → `kashmir-adventure-guide`. On collision the service appends `-2`, `-3` (e.g. `kashmir-adventure-guide-2`).\n\n**Errors:**\n- 404 — slug not found\n- 404 — guide is soft-deleted (`deletedAt` is set)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Vendor — Travel Guides",
+      "description": "Vendor travel guide CRUD. VENDOR role.\n\n**No approval workflow** — guides publish directly. No status field, no admin queue. Vendor edits are live immediately.\n\n**Image upload:** Frontend uploads each image to `/uploads/image` first, receives Cloudinary URL back, then sends URLs in the create/update body — plain URL strings (no wrapper needed for travel guides).",
+      "item": [
+        {
+          "name": "Create travel guide",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.id) {",
+                  "  pm.environment.set('travelGuideId', res.data.id);",
+                  "  pm.environment.set('travelGuideSlug', res.data.slug);",
+                  "  console.log('Auto-saved travelGuideId:', res.data.id, '| slug:', res.data.slug);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Kashmir Adventure Guide\",\n  \"destination\": \"Kashmir\",\n  \"country\": \"India\",\n  \"continent\": \"Asia\",\n  \"category\": \"Adventure\",\n  \"shortDescription\": \"A comprehensive guide to exploring the paradise on Earth — Kashmir.\",\n  \"description\": \"Kashmir is a paradise for adventure seekers. Nestled in the Himalayas, it offers everything from skiing in Gulmarg to shikara rides on Dal Lake. This guide walks you through the best time to visit, must-see spots, local cuisine, and practical safety tips.\",\n  \"bestTimeToVisit\": \"April to October\",\n  \"duration\": \"7-10 days\",\n  \"budget\": 25000,\n  \"currency\": \"INR\",\n  \"rating\": 4.8,\n  \"weather\": \"Cool\",\n  \"language\": \"Kashmiri, Hindi, English\",\n  \"visaRequired\": \"No\",\n  \"transportation\": \"Flight to Srinagar, then local cabs\",\n  \"accommodation\": \"Houseboats, hotels, guest houses\",\n  \"cuisine\": \"Wazwan, Rogan Josh, Kahwa\",\n  \"safetyRating\": 4.5,\n  \"mainImage\": \"https://res.cloudinary.com/tripz/travel-guide-main/kashmir.jpg\",\n  \"galleryImages\": [\n    \"https://res.cloudinary.com/tripz/travel-guide-gallery/kashmir-1.jpg\",\n    \"https://res.cloudinary.com/tripz/travel-guide-gallery/kashmir-2.jpg\"\n  ],\n  \"highlights\": [\"Dal Lake\", \"Gulmarg Gondola\", \"Pahalgam\"],\n  \"activities\": [\"Skiing\", \"Trekking\", \"Shikara Ride\"],\n  \"tips\": [\"Carry warm clothing\", \"Book houseboats in advance\", \"Try local Kahwa tea\"]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/vendor/travel-guide", "host": ["{{baseUrl}}"], "path": ["vendor", "travel-guide"] },
+            "description": "Creates a new travel guide. Publishes immediately (no admin review).\n\n**Key notes:**\n- Only `title` and `mainImage` are strictly required — every other field is optional.\n- `budget`, `rating`, `safetyRating` accept strings or numbers.\n- `visaRequired` accepts booleans or `\"Yes\"`/`\"No\"` strings — backend normalises to boolean.\n- `slug` is auto-generated from `title`.\n- Client can safely include extra fields — they're silently ignored.\n\n**Side effect:** Auto-saves `travelGuideId` and `travelGuideSlug` for follow-up calls."
+          }
+        },
+        {
+          "name": "List my travel guides",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/vendor/travel-guide?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["vendor", "travel-guide"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "sortBy", "value": "createdAt", "disabled": true, "description": "createdAt | updatedAt | title" },
+                { "key": "order", "value": "desc", "disabled": true }
+              ]
+            },
+            "description": "Vendor's own travel guides (soft-deleted rows excluded)."
+          }
+        },
+        {
+          "name": "Get my travel guide detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/vendor/travel-guide/{{travelGuideId}}", "host": ["{{baseUrl}}"], "path": ["vendor", "travel-guide", "{{travelGuideId}}"] },
+            "description": "Full detail of a vendor's own travel guide. Returns 403 if the guide belongs to another vendor."
+          }
+        },
+        {
+          "name": "Update travel guide",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"shortDescription\": \"Updated: Explore Kashmir with our refreshed adventure guide.\",\n  \"budget\": 28000,\n  \"tips\": [\"Carry warm clothing\", \"Book houseboats in advance\", \"Try local Kahwa tea\", \"Keep ID proof handy\"]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/vendor/travel-guide/{{travelGuideId}}", "host": ["{{baseUrl}}"], "path": ["vendor", "travel-guide", "{{travelGuideId}}"] },
+            "description": "Partial update — send only the fields you want to change. Changes are live immediately (no re-approval).\n\n**Notes:**\n- Title change auto-regenerates the slug.\n- Empty body is rejected (400) — at least one field must be provided.\n\n**Errors:**\n- 403 — guide belongs to another vendor\n- 404 — guide not found"
+          }
+        },
+        {
+          "name": "Delete travel guide (soft delete)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/vendor/travel-guide/{{travelGuideId}}", "host": ["{{baseUrl}}"], "path": ["vendor", "travel-guide", "{{travelGuideId}}"] },
+            "description": "Soft delete — stamps `deletedAt`. Guide disappears from all listings (public + vendor) but the row stays for referential integrity.\n\n**Errors:**\n- 403 — guide belongs to another vendor\n- 404 — guide not found or already deleted"
+          }
+        }
+      ]
+    },
+    {
       "name": "Auth — Public",
       "description": "Endpoints that do NOT require an access token. Use these to register, log in, and reset passwords.",
       "item": [

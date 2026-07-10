@@ -6,6 +6,7 @@ import leadsRoutes from './leads.routes.js';
 import subscriptionPlansRoutes from './subscriptionPlans.routes.js';
 import subscriptionsRoutes from './subscriptions.routes.js';
 import packagesRoutes from './packages.routes.js';
+import travelGuideRoutes from './travelGuide.routes.js';
 
 const router = Router();
 
@@ -17,5 +18,5 @@ router.use('/leads', leadsRoutes);
 router.use('/subscription-plans', subscriptionPlansRoutes);
 router.use('/subscriptions', subscriptionsRoutes);
 router.use('/packages', packagesRoutes);
-
+router.use('/travel-guide', travelGuideRoutes);
 export default router;
