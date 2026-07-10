@@ -11,6 +11,10 @@ export const UPLOAD_PURPOSES = [
   'header_logo',
   'package-main', // Package cover image
   'package-gallery', // Package gallery images (multiple per package)
+  'destination-guide', 
+  'destination-gallery',
+  'story-image',
+  'story-gallery',
   'other',
 ];
 

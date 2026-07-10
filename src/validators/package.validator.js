@@ -138,6 +138,8 @@ const packageTypeEnum = z.enum([
   'CULTURAL',
   'CORPORATE',
   'OTHER',
+  'NATURE',
+  'WATERACTIVITY'
 ]);
 
 const validityTypeEnum = z.enum(['EVERGREEN', 'SEASONAL']);
