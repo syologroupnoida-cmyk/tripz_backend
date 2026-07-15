@@ -1,0 +1,42 @@
+model Story {
+  id           String @id @default(uuid())
+  authorUserId String // JWT se aayega — kaunsa user create kar raha hai
+  slug         String @unique // SEO URL: /stories/journey-to-himalayas
+
+  // ---- Content (form fields) ----
+  title             String
+  storyType         StoryType
+  authorName        String
+  authorDesignation String?
+  quote             String?     @db.Text
+  shortDescription  String      @db.Text
+  fullStory         String      @db.Text
+  year              String?
+  location          String?
+
+  // ---- Media ----
+  mainImage     String
+  galleryImages String[]
+
+  // ---- Structured lists (Postgres text[]) ----
+  keyPoints    String[]
+  achievements String[]
+
+  // ---- Moderation ----
+  status       StoryStatus @default(PUBLISHED)
+  hiddenReason String?
+
+  // ---- Soft delete + timestamps ----
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // Cascade: user delete hoga toh stories bhi delete
+  author User @relation(fields: [authorUserId], references: [id], onDelete: Cascade)
+
+  @@index([authorUserId])
+  @@index([storyType])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("stories")
+}

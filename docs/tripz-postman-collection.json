@@ -533,6 +533,220 @@
       ]
     },
     {
+      "name": "Public — Stories",
+      "description": "Public-facing story catalog. No authentication.\n\n**Server-side filters (automatic):**\n- `status = 'PUBLISHED'` only (HIDDEN stories excluded)\n- `deletedAt IS NULL`",
+      "item": [
+        {
+          "name": "Browse stories (with filters)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.items?.[0]?.slug) {",
+                  "  pm.environment.set('storySlug', res.data.items[0].slug);",
+                  "  console.log('Auto-saved storySlug:', res.data.items[0].slug);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/stories?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["stories"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "storyType", "value": "FOUNDER_STORY", "disabled": true, "description": "FOUNDER_STORY | CUSTOMER_STORY | VENDOR_STORY | JOURNEY | INSPIRATION | SUCCESS_STORY" },
+                { "key": "location", "value": "Noida", "disabled": true, "description": "Case-insensitive contains" },
+                { "key": "year", "value": "2020", "disabled": true },
+                { "key": "search", "value": "journey", "disabled": true, "description": "Case-insensitive contains on title" },
+                { "key": "sortBy", "value": "createdAt", "disabled": true, "description": "createdAt | title" },
+                { "key": "order", "value": "desc", "disabled": true }
+              ]
+            },
+            "description": "Enable query params to filter.\n\n**Side effect:** Auto-saves the first result's slug into `storySlug` for the detail request."
+          }
+        },
+        {
+          "name": "Get story detail by slug",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/stories/{{storySlug}}", "host": ["{{baseUrl}}"], "path": ["stories", "{{storySlug}}"] },
+            "description": "**Public detail page** — no auth. Returns every field of one story plus author info (role + name).\n\n**Where the slug comes from:**\n1. Frontend calls `GET /stories` → gets array of stories, each with `slug` field.\n2. User clicks a card → frontend routes to `/stories/<slug>` and calls this endpoint.\n\n**In Postman:** the Browse request auto-saves `res.data.items[0].slug` into `{{storySlug}}`.\n\n**Slug format:** auto-generated from `title` — lowercased, non-alphanumeric → `-`, e.g. `\"My Journey to Himalayas\"` → `my-journey-to-himalayas`. Collision → `-2`, `-3`.\n\n**Errors:**\n- 404 — slug not found, guide is soft-deleted, or admin has hidden it (status = HIDDEN)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Authenticated — Stories",
+      "description": "Story CRUD for any authenticated user (CLIENT + VENDOR + ADMIN + SUPER_ADMIN can all create/edit/delete their OWN stories).\n\n**Publishing model:** create → live immediately (no admin approval). Admin can hide/delete any story from the moderation panel.\n\n**Image upload:** Frontend uploads each image to `/uploads/image` first, receives Cloudinary URL back, then sends URLs in the create/update body as plain strings.",
+      "item": [
+        {
+          "name": "Create story",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.id) {",
+                  "  pm.environment.set('storyId', res.data.id);",
+                  "  pm.environment.set('storySlug', res.data.slug);",
+                  "  console.log('Auto-saved storyId:', res.data.id, '| slug:', res.data.slug);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Journey\",\n  \"storyType\": \"FOUNDER_STORY\",\n  \"authorName\": \"Prashant\",\n  \"authorDesignation\": \"dev\",\n  \"quote\": \"Test Story\",\n  \"shortDescription\": \"Description\",\n  \"fullStory\": \"Full Story..\",\n  \"year\": \"2020\",\n  \"location\": \"Noida\",\n  \"mainImage\": \"https://res.cloudinary.com/tripz/story-main/journey.jpg\",\n  \"galleryImages\": [\n    \"https://res.cloudinary.com/tripz/story-gallery/journey-1.jpg\",\n    \"https://res.cloudinary.com/tripz/story-gallery/journey-2.jpg\"\n  ],\n  \"keyPoints\": [\n    \"Kashmir\",\n    \"6 Months\",\n    \"Choose Basic Brown\"\n  ],\n  \"achievements\": [\n    \"Platinum Pro\",\n    \"3 Days\",\n    \"Tracking\"\n  ]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/stories", "host": ["{{baseUrl}}"], "path": ["stories"] },
+            "description": "Creates a new story. Publishes immediately (status = PUBLISHED).\n\n**Required fields:** `title`, `storyType`, `authorName`, `shortDescription`, `fullStory`, `mainImage`.\n\n**storyType values:** FOUNDER_STORY | CUSTOMER_STORY | VENDOR_STORY | JOURNEY | INSPIRATION | SUCCESS_STORY\n\n**Notes:**\n- `slug` auto-generated from `title`\n- `authorUserId` set from JWT — client cannot send it\n- Client can safely include extra fields — silently ignored\n\n**Side effect:** Auto-saves `storyId` and `storySlug`."
+          }
+        },
+        {
+          "name": "List my stories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/stories/mine?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["stories", "mine"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "sortBy", "value": "createdAt", "disabled": true, "description": "createdAt | updatedAt | title" },
+                { "key": "order", "value": "desc", "disabled": true }
+              ]
+            },
+            "description": "Logged-in user's own stories. Includes both PUBLISHED and HIDDEN (so user knows if admin hid something)."
+          }
+        },
+        {
+          "name": "Get my story detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/stories/mine/{{storyId}}", "host": ["{{baseUrl}}"], "path": ["stories", "mine", "{{storyId}}"] },
+            "description": "Own story detail. Returns 403 if the story belongs to another user."
+          }
+        },
+        {
+          "name": "Update story",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"shortDescription\": \"Updated short description\",\n  \"achievements\": [\n    \"Platinum Pro\",\n    \"3 Days\",\n    \"Tracking\",\n    \"New milestone\"\n  ]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/stories/{{storyId}}", "host": ["{{baseUrl}}"], "path": ["stories", "{{storyId}}"] },
+            "description": "Partial update — send only fields to change. Changes are live immediately (no re-approval).\n\n**Notes:**\n- Title change auto-regenerates the slug\n- Empty body rejected (400)\n\n**Errors:**\n- 403 — story belongs to another user\n- 404 — story not found"
+          }
+        },
+        {
+          "name": "Delete my story (soft delete)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/stories/{{storyId}}", "host": ["{{baseUrl}}"], "path": ["stories", "{{storyId}}"] },
+            "description": "Soft delete own story — stamps `deletedAt`. Row preserved for audit.\n\n**Errors:**\n- 403 — story belongs to another user\n- 404 — story not found or already deleted"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin — Stories",
+      "description": "Story moderation. ADMIN + SUPER_ADMIN.\n\nAdmin can:\n- List ALL stories (including HIDDEN)\n- Hide / unhide any story\n- Delete any story (regardless of author)",
+      "item": [
+        {
+          "name": "List stories queue",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/stories?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "stories"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "status", "value": "PUBLISHED", "disabled": true, "description": "PUBLISHED | HIDDEN" },
+                { "key": "storyType", "value": "FOUNDER_STORY", "disabled": true },
+                { "key": "authorUserId", "value": "", "disabled": true, "description": "Filter by specific user's stories" },
+                { "key": "search", "value": "", "disabled": true, "description": "Case-insensitive contains on title" },
+                { "key": "sortBy", "value": "createdAt", "disabled": true },
+                { "key": "order", "value": "desc", "disabled": true }
+              ]
+            },
+            "description": "All stories — moderation view. Includes HIDDEN stories that the public list excludes."
+          }
+        },
+        {
+          "name": "Hide a story (?hidden=true)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Inappropriate content flagged by users\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/stories/{{storyId}}/hide?hidden=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "stories", "{{storyId}}", "hide"],
+              "query": [
+                { "key": "hidden", "value": "true", "description": "true (default) → hide. false → unhide." }
+              ]
+            },
+            "description": "PUBLISHED → HIDDEN. Story disappears from public list + detail (404). Author still sees it in `/stories/mine`.\n\n**Body:** `reason` optional (5-500 chars). Stored in `hiddenReason` — visible to admin only.\n\n**Same endpoint used for unhide** — flip `?hidden=false`.\n\n**Errors:**\n- 409 — story already hidden"
+          }
+        },
+        {
+          "name": "Unhide a story (?hidden=false)",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/stories/{{storyId}}/hide?hidden=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "stories", "{{storyId}}", "hide"],
+              "query": [
+                { "key": "hidden", "value": "false", "description": "false → unhide (HIDDEN → PUBLISHED)." }
+              ]
+            },
+            "description": "HIDDEN → PUBLISHED. Story reappears on public list. Clears `hiddenReason`. Same endpoint as **Hide a story**, just with `hidden=false`.\n\n**Errors:**\n- 409 — story already published"
+          }
+        },
+        {
+          "name": "Delete any story (admin power)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/admin/stories/{{storyId}}", "host": ["{{baseUrl}}"], "path": ["admin", "stories", "{{storyId}}"] },
+            "description": "Soft delete ANY story — regardless of author. Stamps `deletedAt`.\n\n**Errors:**\n- 404 — story not found or already deleted"
+          }
+        }
+      ]
+    },
+    {
       "name": "Auth — Public",
       "description": "Endpoints that do NOT require an access token. Use these to register, log in, and reset passwords.",
       "item": [

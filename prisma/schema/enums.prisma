@@ -121,3 +121,17 @@ enum PackageValidityType {
   EVERGREEN // Always available; startDate/endDate optional
   SEASONAL // Time-boxed (festival, event); startDate + endDate REQUIRED
 }
+
+enum StoryType {
+  FOUNDER_STORY // Company origin / founder's journey
+  CUSTOMER_STORY // Client's travel experience
+  VENDOR_STORY // Vendor's business journey
+  JOURNEY // General travel journey / trip story
+  INSPIRATION // Motivational / inspirational content
+  SUCCESS_STORY // Achievements / milestones
+}
+
+enum StoryStatus {
+  PUBLISHED // Live on public site (default on create)
+  HIDDEN // Admin hid it — invisible on public list but preserved for audit
+}

@@ -22,6 +22,7 @@ model User {
   customerProfile CustomerProfile?
   leadsSubmitted  Lead[]                @relation("CustomerLeads")
   directLeads     Lead[]                @relation("VendorDirectLeads")
+  stories         Story[]
 
   @@index([role])
   @@map("users")
