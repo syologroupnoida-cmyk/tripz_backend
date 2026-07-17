@@ -6,6 +6,10 @@ export const USER_ROLES = ['SUPER_ADMIN', 'ADMIN', 'VENDOR', 'CLIENT'];
 // created via the SuperAdmin endpoint, never via the public auth API.
 export const SELF_SIGNUP_ROLES = ['CLIENT', 'VENDOR'];
 
+// Business type a VENDOR can register as. Grows as new modules ship.
+// Not applicable to CLIENT — a traveller has no vendor type.
+export const VENDOR_TYPES = ['TRAVEL_AGENT', 'PROPERTY_OWNER'];
+
 const passwordSchema = z
   .string({ required_error: 'Password is required' })
   .min(8, 'Password must be at least 8 characters long')
@@ -41,8 +45,22 @@ export const registerSchema = z
     role: z.enum(['CLIENT', 'VENDOR'], {
       errorMap: () => ({ message: 'Role must be either "CLIENT" or "VENDOR"' }),
     }),
+    // Only meaningful when role === 'VENDOR'. Defaults to TRAVEL_AGENT in the
+    // service layer if omitted, preserving backward compatibility with old
+    // frontends that only send `role`.
+    vendorType: z.enum(VENDOR_TYPES, {
+      errorMap: () => ({
+        message: `vendorType must be one of: ${VENDOR_TYPES.join(', ')}`,
+      }),
+    }).optional(),
   })
-  .strict();
+  .strict()
+  // Guard: vendorType only makes sense for VENDOR signups. If CLIENT accidentally
+  // sends it, reject clearly instead of silently ignoring.
+  .refine(
+    (data) => data.role === 'VENDOR' || data.vendorType === undefined,
+    { message: 'vendorType can only be set when role is VENDOR', path: ['vendorType'] },
+  );
 
 export const loginSchema = z
   .object({
@@ -114,14 +132,17 @@ export const resetPasswordSchema = z
   .strict();
 
 // ---- Google OAuth login ----
-// `role` is only required when creating a brand-new account; existing users
-// just send the token. Server enforces the "role required for new signup" rule.
+// `role` + `vendorType` are only used when creating a brand-new account.
+// Existing users just send the token. Server enforces the "role required for
+// new signup" rule (and vendorType is optional even then — defaults to
+// TRAVEL_AGENT in the repo layer).
 export const googleLoginSchema = z
   .object({
     token: z
       .string({ required_error: 'Google ID token is required' })
       .min(20, 'Google token is invalid'),
     role: z.enum(['CLIENT', 'VENDOR']).optional(),
+    vendorType: z.enum(VENDOR_TYPES).optional(),
   })
   // .strict() rejects extra fields — we tolerate extras because frontend may
   // ship email/picture/etc for debugging. We always ignore them server-side.

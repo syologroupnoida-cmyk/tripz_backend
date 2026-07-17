@@ -55,12 +55,12 @@ export const loginUser = async ({ email, password }) => {
     );
   }
 
-  const tokens = await issueTokenPair(user);
-
-  // Vendors need their KYC status in the response so the frontend can decide
-  // whether to land them on /vendor/kyc or /vendor/dashboard.
+  // Vendors need vendorType + KYC status BEFORE issuing tokens — vendorType
+  // gets embedded in the JWT so middleware can gate routes without a DB hit.
   const vendorProfile =
     user.role === 'VENDOR' ? await kycRepo.findVendorKycStatus(user.id) : null;
+
+  const tokens = await issueTokenPair(user, { vendorProfile });
 
   return {
     user: sanitizeUser(user, { vendorProfile }),

@@ -23,6 +23,8 @@ export const authenticateUser = asyncHandler(async (req, _res, next) => {
       id: payload.sub,
       email: payload.email,
       role: payload.role,
+      // Present only for VENDOR users — undefined for CLIENT/ADMIN/SUPER_ADMIN.
+      vendorType: payload.vendorType,
     };
     return next();
   } catch (error) {
@@ -50,6 +52,7 @@ export const optionalAuthenticateUser = asyncHandler(async (req, _res, next) => 
       id: payload.sub,
       email: payload.email,
       role: payload.role,
+      vendorType: payload.vendorType,
     };
   } catch {
     // Invalid / expired token on a public route → treat as anonymous.
@@ -68,6 +71,43 @@ export const authorizeRoles = (allowedRoles = []) => {
     if (!allowedRoles.includes(req.user.role)) {
       return next(
         ApiError.forbidden(`Access denied. Required role(s): ${allowedRoles.join(', ')}.`),
+      );
+    }
+    return next();
+  };
+};
+
+// Gate a route on the VENDOR's business type (TRAVEL_AGENT / PROPERTY_OWNER / ...).
+// Use AFTER authenticateUser + authorizeRoles(['VENDOR']).
+//
+// Reads vendorType from the JWT payload (set by authenticateUser), so no DB
+// hit per request. If a vendor upgrades their vendorType, they'll need to
+// re-login for the new token to reflect it.
+//
+// Usage:
+//   router.post('/vendor/packages',
+//     authenticateUser,
+//     authorizeRoles(['VENDOR']),
+//     requireVendorType('TRAVEL_AGENT'),
+//     ...handlers,
+//   );
+export const requireVendorType = (...allowedTypes) => {
+  if (allowedTypes.length === 0) {
+    throw new Error('requireVendorType: at least one vendor type is required.');
+  }
+  return (req, _res, next) => {
+    if (!req.user) {
+      return next(ApiError.unauthorized('Authentication required.'));
+    }
+    if (req.user.role !== 'VENDOR') {
+      return next(ApiError.forbidden('This action is available to vendors only.'));
+    }
+    if (!allowedTypes.includes(req.user.vendorType)) {
+      return next(
+        ApiError.forbidden(
+          `Access denied. This action requires vendor type: ${allowedTypes.join(' or ')}.`,
+          { code: 'VENDOR_TYPE_MISMATCH', required: allowedTypes, current: req.user.vendorType },
+        ),
       );
     }
     return next();

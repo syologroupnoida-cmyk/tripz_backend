@@ -34,7 +34,14 @@ export const createCustomer = async ({ firstName, lastName, email, phone, passwo
   );
 };
 
-export const createAgent = async ({ firstName, lastName, email, phone, password }) => {
+export const createAgent = async ({
+  firstName,
+  lastName,
+  email,
+  phone,
+  password,
+  vendorType = 'TRAVEL_AGENT', // Default keeps existing signup flow working.
+}) => {
   return createUserWithGeneratedId('VENDOR', ({ id }) =>
     prisma.user.create({
       data: {
@@ -46,8 +53,9 @@ export const createAgent = async ({ firstName, lastName, email, phone, password 
         password,
         role: 'VENDOR',
         authProvider: 'LOCAL',
-        // VendorProfile starts with kycStatus = PENDING; vendor submits KYC separately.
-        vendorProfile: { create: {} },
+        // VendorProfile carries the business type (TRAVEL_AGENT / PROPERTY_OWNER / ...)
+        // + kycStatus = PENDING; vendor submits KYC separately.
+        vendorProfile: { create: { vendorType } },
       },
       select: PUBLIC_USER_SELECT,
     }),
@@ -109,6 +117,7 @@ export const createAgentViaGoogle = async ({
   email,
   googleId,
   avatarUrl,
+  vendorType = 'TRAVEL_AGENT',
 }) => {
   return createUserWithGeneratedId('VENDOR', ({ id }) =>
     prisma.user.create({
@@ -123,7 +132,7 @@ export const createAgentViaGoogle = async ({
         authProvider: 'GOOGLE',
         emailVerifiedAt: new Date(),
         // KYC still required — vendorProfile.kycStatus defaults to PENDING.
-        vendorProfile: { create: {} },
+        vendorProfile: { create: { vendorType } },
       },
       select: PUBLIC_USER_SELECT,
     }),

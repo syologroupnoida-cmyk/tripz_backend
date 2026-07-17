@@ -135,3 +135,15 @@ enum StoryStatus {
   PUBLISHED // Live on public site (default on create)
   HIDDEN // Admin hid it — invisible on public list but preserved for audit
 }
+
+// Business type for a VENDOR user. Base `UserRole` stays small (SUPER_ADMIN,
+// ADMIN, VENDOR, CLIENT) — this enum grows over time as we add new vendor
+// business categories (property host, restaurant partner, etc.).
+enum VendorType {
+  TRAVEL_AGENT // Travel agency — sells packages, itineraries, transfers
+  PROPERTY_OWNER // Homestays / villas / rentals — hospitality business
+  // Future values as new modules ship:
+  // RESTAURANT_PARTNER
+  // ACTIVITY_PROVIDER
+  // TRANSPORT_PROVIDER
+}

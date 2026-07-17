@@ -774,10 +774,10 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"firstName\": \"Rahul\",\n  \"lastName\": \"Sharma\",\n  \"email\": \"{{testVendorEmail}}\",\n  \"phone\": \"{{testPhone}}\",\n  \"password\": \"{{testVendorPassword}}\",\n  \"role\": \"VENDOR\"\n}"
+              "raw": "{\n  \"firstName\": \"Rahul\",\n  \"lastName\": \"Sharma\",\n  \"email\": \"{{testVendorEmail}}\",\n  \"phone\": \"{{testPhone}}\",\n  \"password\": \"{{testVendorPassword}}\",\n  \"role\": \"VENDOR\",\n  \"vendorType\": \"TRAVEL_AGENT\"\n}"
             },
             "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth", "register"] },
-            "description": "Self-signup for CLIENT or VENDOR. ADMIN/SUPER_ADMIN can only be created by Super Admin via `/super-admin/admins`.\n\n**Body fields:**\n- `role` — `CLIENT` or `VENDOR`\n- `password` — min 8 chars, must contain upper, lower, digit, special\n- `phone` — 10 digits, unique\n\n**Side effect:** Sends an OTP to the email for verification."
+            "description": "Self-signup for CLIENT or VENDOR. ADMIN/SUPER_ADMIN can only be created by Super Admin via `/super-admin/admins`.\n\n**Body fields:**\n- `role` — `CLIENT` or `VENDOR`\n- `vendorType` — required when role=VENDOR. `TRAVEL_AGENT` (sells packages / tours) or `PROPERTY_OWNER` (lists homestays / rentals). Defaults to `TRAVEL_AGENT` if omitted (backward compat).\n- `password` — min 8 chars, must contain upper, lower, digit, special\n- `phone` — 10 digits, unique\n\n**vendorType usage:**\n- `role: VENDOR, vendorType: TRAVEL_AGENT` → tour vendor dashboard (packages, travel guides, subscriptions)\n- `role: VENDOR, vendorType: PROPERTY_OWNER` → property owner dashboard (properties, bookings)\n- `role: CLIENT` → traveller (do NOT send vendorType — will 400 with `vendorType can only be set when role is VENDOR`)\n\n**Response (vendor)** includes `user.vendorType` at the top level plus inside `user.vendorProfile` so frontend can route based on it.\n\n**Side effect:** Sends an OTP to the email for verification."
           }
         },
         {

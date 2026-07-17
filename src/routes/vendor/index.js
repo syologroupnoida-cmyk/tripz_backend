@@ -1,5 +1,9 @@
 import { Router } from 'express';
-import { authenticateUser, authorizeRoles } from '../../middlewares/auth.middleware.js';
+import {
+  authenticateUser,
+  authorizeRoles,
+  requireVendorType,
+} from '../../middlewares/auth.middleware.js';
 import vendorRoutes from './vendor.routes.js';
 import walletRoutes from './wallet.routes.js';
 import leadsRoutes from './leads.routes.js';
@@ -12,11 +16,16 @@ const router = Router();
 
 router.use(authenticateUser, authorizeRoles(['VENDOR']));
 
+// Shared across all vendor types (travel agents + property owners + future).
 router.use('/', vendorRoutes);
 router.use('/wallet', walletRoutes);
 router.use('/leads', leadsRoutes);
 router.use('/subscription-plans', subscriptionPlansRoutes);
 router.use('/subscriptions', subscriptionsRoutes);
-router.use('/packages', packagesRoutes);
-router.use('/travel-guide', travelGuideRoutes);
+
+// TRAVEL_AGENT-only features — packages + travel guides. Property owners get
+// a clear 403 with { code: 'VENDOR_TYPE_MISMATCH' } if they try to access.
+router.use('/packages', requireVendorType('TRAVEL_AGENT'), packagesRoutes);
+router.use('/travel-guide', requireVendorType('TRAVEL_AGENT'), travelGuideRoutes);
+
 export default router;

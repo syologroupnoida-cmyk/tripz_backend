@@ -13,12 +13,12 @@ import {
 } from '../utils/cookies.js';
 
 export const register = asyncHandler(async (req, res) => {
-  const { firstName, lastName, email, phone, password, role } = req.body;
+  const { firstName, lastName, email, phone, password, role, vendorType } = req.body;
   const args = { firstName, lastName, email, phone, password };
 
   const result =
     role === 'VENDOR'
-      ? await authService.registerAgent(args)
+      ? await authService.registerAgent({ ...args, vendorType })
       : await authService.registerCustomer(args);
 
   return sendSuccess(res, {
@@ -44,11 +44,12 @@ export const login = asyncHandler(async (req, res) => {
 });
 
 export const googleLogin = asyncHandler(async (req, res) => {
-  // Only `token` and `role` are read — any other fields the frontend ships
-  // (email, name, googleId, picture) are intentionally ignored because they're
-  // unverified. Identity is sourced from the verified token payload only.
-  const { token, role } = req.body;
-  const result = await authService.loginWithGoogle({ token, role });
+  // Only `token`, `role`, and `vendorType` are read — any other fields the
+  // frontend ships (email, name, googleId, picture) are intentionally ignored
+  // because they're unverified. Identity comes from the verified token only.
+  // `vendorType` is only used when creating a brand-new VENDOR account.
+  const { token, role, vendorType } = req.body;
+  const result = await authService.loginWithGoogle({ token, role, vendorType });
 
   setRefreshCookie(res, result.refreshToken, result.refreshExpiresAt);
 
@@ -165,12 +166,15 @@ export const me = asyncHandler(async (req, res) => {
     throw ApiError.notFound('User profile not found.');
   }
 
-  // For vendors, attach KYC status + nextStep so the frontend can mirror
-  // the same redirect logic it uses post-login when the user refreshes the page.
+  // For vendors, attach vendorType + KYC status + nextStep so the frontend can
+  // mirror the same routing logic post-login when the user refreshes the page.
   if (user.role === 'VENDOR') {
     const vendorProfile = await findVendorKycStatus(user.id);
     const kycStatus = vendorProfile?.kycStatus ?? 'NOT_SUBMITTED';
+    const vendorType = vendorProfile?.vendorType ?? 'TRAVEL_AGENT';
+    user.vendorType = vendorType;
     user.vendorProfile = {
+      vendorType,
       kycStatus,
       nextStep: deriveVendorNextStep(kycStatus),
     };

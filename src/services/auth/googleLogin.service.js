@@ -11,9 +11,9 @@ const buildLoginResult = (user, isNewAccount, vendorProfile) => ({
   isNewAccount,
 });
 
-const createUserForRole = async ({ role, identity }) => {
+const createUserForRole = async ({ role, vendorType, identity }) => {
   if (role === 'VENDOR') {
-    return userRepo.createAgentViaGoogle(identity);
+    return userRepo.createAgentViaGoogle({ ...identity, vendorType });
   }
   return userRepo.createCustomerViaGoogle(identity);
 };
@@ -28,7 +28,7 @@ const createUserForRole = async ({ role, identity }) => {
  *
  * Mirrors the shape of loginUser so the controller treats both flows identically.
  */
-export const loginWithGoogle = async ({ token, role }) => {
+export const loginWithGoogle = async ({ token, role, vendorType }) => {
   const identity = await verifyGoogleIdToken(token);
 
   // 1) Returning Google user
@@ -65,6 +65,7 @@ export const loginWithGoogle = async ({ token, role }) => {
 
     user = await createUserForRole({
       role,
+      vendorType, // Optional — defaults to TRAVEL_AGENT inside the repo layer.
       identity: {
         firstName: identity.firstName,
         lastName: identity.lastName,
@@ -89,10 +90,11 @@ export const loginWithGoogle = async ({ token, role }) => {
     throw ApiError.forbidden('This account has been deactivated.');
   }
 
-  const tokens = await issueTokenPair(user);
-
+  // Fetch vendorProfile BEFORE issuing tokens so vendorType lands in the JWT.
   const vendorProfile =
     user.role === 'VENDOR' ? await kycRepo.findVendorKycStatus(user.id) : null;
+
+  const tokens = await issueTokenPair(user, { vendorProfile });
 
   return {
     ...buildLoginResult(user, isNewAccount, vendorProfile),

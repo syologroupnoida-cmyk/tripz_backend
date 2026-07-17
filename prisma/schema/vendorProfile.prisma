@@ -1,8 +1,9 @@
 model VendorProfile {
-  userId    String    @id
-  kycStatus KycStatus @default(PENDING)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  userId     String     @id
+  vendorType VendorType @default(TRAVEL_AGENT)
+  kycStatus  KycStatus  @default(PENDING)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
 
   user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   kyc             VendorKyc?
@@ -14,5 +15,6 @@ model VendorProfile {
   travelGuides    TravelGuide[]
 
   @@index([kycStatus])
+  @@index([vendorType])
   @@map("vendor_profiles")
 }

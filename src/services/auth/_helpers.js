@@ -84,7 +84,11 @@ export const sanitizeUser = (user, { vendorProfile } = {}) => {
 
   if (user.role === 'VENDOR') {
     const kycStatus = vendorProfile?.kycStatus ?? 'NOT_SUBMITTED';
+    const vendorType = vendorProfile?.vendorType ?? 'TRAVEL_AGENT';
+    // Top-level convenience for the frontend router (avoids nested lookup).
+    base.vendorType = vendorType;
     base.vendorProfile = {
+      vendorType,
       kycStatus,
       nextStep: deriveVendorNextStep(kycStatus),
     };
@@ -93,10 +97,14 @@ export const sanitizeUser = (user, { vendorProfile } = {}) => {
   return base;
 };
 
+// vendorType embedded in the access token so middleware can gate routes
+// (requireVendorType) without hitting the DB on every request. Passed as `user`
+// with a resolved `vendorType` field — callers must resolve it before signing.
 export const buildAccessPayload = (user) => ({
   sub: user.id,
   email: user.email,
   role: user.role,
+  ...(user.role === 'VENDOR' ? { vendorType: user.vendorType } : {}),
 });
 
 export const buildRefreshPayload = (user) => ({
@@ -104,9 +112,15 @@ export const buildRefreshPayload = (user) => ({
   role: user.role,
 });
 
-export const issueTokenPair = async (user) => {
-  const accessToken = signAccessToken(buildAccessPayload(user));
-  const { token: refreshToken } = signRefreshToken(buildRefreshPayload(user));
+export const issueTokenPair = async (user, { vendorProfile } = {}) => {
+  // For vendors, merge vendorType into the payload user so the JWT carries it.
+  const payloadUser =
+    user.role === 'VENDOR'
+      ? { ...user, vendorType: vendorProfile?.vendorType ?? 'TRAVEL_AGENT' }
+      : user;
+
+  const accessToken = signAccessToken(buildAccessPayload(payloadUser));
+  const { token: refreshToken } = signRefreshToken(buildRefreshPayload(payloadUser));
 
   const decoded = jwt.decode(refreshToken);
   const expiresAt = new Date(decoded.exp * 1000);

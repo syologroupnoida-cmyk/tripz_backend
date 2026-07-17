@@ -57,11 +57,12 @@ export const findVendorProfile = async (userId) => {
 };
 
 // Lightweight lookup used by login / /auth/me to drive the frontend's
-// post-login redirect (KYC page vs dashboard).
+// post-login redirect (KYC page vs dashboard) AND the correct vendor dashboard
+// (travel agent vs property owner) based on vendorType.
 export const findVendorKycStatus = async (userId) => {
   return prisma.vendorProfile.findUnique({
     where: { userId },
-    select: { kycStatus: true },
+    select: { kycStatus: true, vendorType: true },
   });
 };
 

@@ -36,7 +36,14 @@ export const registerCustomer = async ({ firstName, lastName, email, phone, pass
   };
 };
 
-export const registerAgent = async ({ firstName, lastName, email, phone, password }) => {
+export const registerAgent = async ({
+  firstName,
+  lastName,
+  email,
+  phone,
+  password,
+  vendorType = 'TRAVEL_AGENT',
+}) => {
   await assertEmailAndPhoneAvailable({ email, phone });
   const passwordHash = await hashPassword(password);
 
@@ -46,12 +53,17 @@ export const registerAgent = async ({ firstName, lastName, email, phone, passwor
     email,
     phone,
     password: passwordHash,
+    vendorType,
   });
 
   const otp = await issueAndSendVerificationOtp(user);
 
+  // sanitizeUser needs the vendorProfile fields (vendorType + kycStatus) to
+  // include them in the response — pass them here since we just created it.
   return {
-    user: sanitizeUser(user),
+    user: sanitizeUser(user, {
+      vendorProfile: { vendorType, kycStatus: 'PENDING' },
+    }),
     emailVerificationRequired: true,
     otp,
   };
