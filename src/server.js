@@ -7,7 +7,7 @@ import { verifyMailTransport } from './services/mail/index.js';
 import { logKycVerificationMode } from './services/vendorKyc/documentVerification.service.js';
 
 const server = http.createServer(app);
-console.log('this is token', env.SUREPASS_TOKEN);
+
 const start = async () => {
   await connectDatabase();
   await verifyMailTransport();
