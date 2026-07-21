@@ -42,8 +42,14 @@ const surepassFetch = async (path, body, method = 'POST') => {
     const fetchOptions = {
       method,
       headers: {
-        Authorization: `Bearer ${env.SUREPASS_TOKEN}`,
-        Accept: 'application/json',
+        'Authorization': `Bearer ${env.SUREPASS_TOKEN}`,
+        'Content-Type': 'application/json', // ADDED THIS
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*', // KEPT ONLY ONE ACCEPT
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Connection': 'keep-alive',
+        'Origin': `https://api.trip-z.in/`, // CHANGE THIS TO YOUR REAL DOMAIN
+        'Referer': 'https://api.trip-z.in/' // CHANGE THIS TO YOUR REAL DOMAIN
       },
       signal: controller.signal,
     };
