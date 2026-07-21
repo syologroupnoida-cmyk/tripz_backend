@@ -55,7 +55,19 @@ const surepassFetch = async (path, body, method = 'POST') => {
     const res = await fetch(url, fetchOptions);
 
     const data = await res.json().catch(() => ({}));
-    console.log('this is the data', data)
+    console.log('this is the data', data);
+    console.log('this is the response', res);
+
+    if(res.status === 401){
+    console.log('this is the response error status 401', res);
+
+    }
+
+      if(res.status === 403){
+    console.log('this is the response error status 403', res);
+
+    }
+
     // Auth / config errors — surface loudly. A wrong token MUST NOT silently
     // degrade into "every verification fails."
     if (res.status === 401 || res.status === 403) {
