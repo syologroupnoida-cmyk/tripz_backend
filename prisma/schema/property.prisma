@@ -4,23 +4,25 @@ model Property {
   slug         String @unique // SEO URL: /properties/kashmir-riverside-villa
 
   // ---- Basic info (marketplace card + detail) ----
+  // Nullable at DB level for draft flow — completeness check at submit-time
+  // enforces required fields via getMissingFieldsForSubmit() in the service.
   title            String
   propertyType     PropertyType
-  shortDescription String       @db.Text
-  fullDescription  String       @db.Text
+  shortDescription String?      @db.Text
+  fullDescription  String?      @db.Text
 
   // ---- Location ----
-  city        String
-  state       String
+  city        String?
+  state       String?
   country     String  @default("India")
-  address     String  @db.Text
+  address     String? @db.Text
   landmark    String?
   pincode     String?
   latitude    Float?
   longitude   Float?
 
   // ---- Media ----
-  mainImage     String
+  mainImage     String?
   galleryImages String[] // Min 3 recommended for marketplace credibility
 
   // ---- Facilities (marketplace filters + display) ----

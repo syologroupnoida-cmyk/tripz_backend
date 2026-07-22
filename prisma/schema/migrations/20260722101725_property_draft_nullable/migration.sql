@@ -1,0 +1,7 @@
+-- AlterTable
+ALTER TABLE "properties" ALTER COLUMN "shortDescription" DROP NOT NULL,
+ALTER COLUMN "fullDescription" DROP NOT NULL,
+ALTER COLUMN "city" DROP NOT NULL,
+ALTER COLUMN "state" DROP NOT NULL,
+ALTER COLUMN "address" DROP NOT NULL,
+ALTER COLUMN "mainImage" DROP NOT NULL;
