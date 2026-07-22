@@ -533,6 +533,630 @@
       ]
     },
     {
+      "name": "Public — Properties (marketplace browse)",
+      "description": "Public-facing property catalog. No authentication — guests browse without signing up.\n\n**Server-side filters (automatic):**\n- Only `status = 'APPROVED'` properties\n- `deletedAt IS NULL`\n- Rooms filtered to `isActive = true`\n\nOptional date filter (`checkIn` + `checkOut`) hides properties with zero available rooms for that window.\n\nPrices are in **paise** (INR × 100). Frontend divides by 100 for display.",
+      "item": [
+        {
+          "name": "Browse properties (with filters)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.items?.[0]?.slug) {",
+                  "  pm.environment.set('propertySlug', res.data.items[0].slug);",
+                  "  console.log('Auto-saved propertySlug:', res.data.items[0].slug);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/properties?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["properties"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "city", "value": "Srinagar", "disabled": true, "description": "Case-insensitive contains" },
+                { "key": "state", "value": "Kashmir", "disabled": true },
+                { "key": "country", "value": "India", "disabled": true },
+                { "key": "propertyType", "value": "VILLA", "disabled": true, "description": "HOTEL | VILLA | HOMESTAY | STUDIO | RESORT | GUEST_HOUSE" },
+                { "key": "minPrice", "value": "1000", "disabled": true, "description": "In rupees (backend converts to paise)" },
+                { "key": "maxPrice", "value": "20000", "disabled": true, "description": "In rupees" },
+                { "key": "guests", "value": "4", "disabled": true, "description": "Property must have at least one room with maxGuests >= this" },
+                { "key": "starRating", "value": "3", "disabled": true, "description": "Minimum star rating (1-5)" },
+                { "key": "amenities", "value": "WiFi,Pool", "disabled": true, "description": "Comma-separated — property must have ALL listed" },
+                { "key": "checkIn", "value": "2026-12-25", "disabled": true, "description": "YYYY-MM-DD — filters out fully-booked properties" },
+                { "key": "checkOut", "value": "2026-12-28", "disabled": true, "description": "YYYY-MM-DD — must be after checkIn" },
+                { "key": "search", "value": "riverside", "disabled": true, "description": "Case-insensitive contains on title + shortDescription" },
+                { "key": "sortBy", "value": "createdAt", "disabled": true, "description": "createdAt | price | starRating" },
+                { "key": "order", "value": "desc", "disabled": true }
+              ]
+            },
+            "description": "Enable filters as needed. All filters are optional.\n\n**Date filter behaviour:**\n- If BOTH `checkIn` and `checkOut` provided → properties with 0 available rooms are excluded\n- If NEITHER provided → all APPROVED properties returned\n- Providing only one → validation error\n\n**Amenities filter:** property must have ALL amenities specified (AND logic).\n\n**Side effect:** Auto-saves the first result's slug into `propertySlug` for the next request."
+          }
+        },
+        {
+          "name": "Get property detail by slug (no dates)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/properties/{{propertySlug}}", "host": ["{{baseUrl}}"], "path": ["properties", "{{propertySlug}}"] },
+            "description": "Public detail — SEO-friendly slug URL. Returns full property info + all active rooms with base pricing.\n\n**Without dates:** rooms shown with pricing but NO availability info.\n\nUse the availability endpoint for real-time available units before showing booking form.\n\nReturns 404 if slug not found, deleted, or property is not APPROVED."
+          }
+        },
+        {
+          "name": "Get property detail — WITH dates (embedded availability)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/properties/{{propertySlug}}?checkIn=2026-12-25&checkOut=2026-12-28&guests=2",
+              "host": ["{{baseUrl}}"],
+              "path": ["properties", "{{propertySlug}}"],
+              "query": [
+                { "key": "checkIn", "value": "2026-12-25", "description": "YYYY-MM-DD" },
+                { "key": "checkOut", "value": "2026-12-28", "description": "YYYY-MM-DD" },
+                { "key": "guests", "value": "2", "description": "Optional — filters rooms with maxGuests >= this" }
+              ]
+            },
+            "description": "Same as base detail BUT each room gets extra fields: `availableUnits`, `isAvailable`, `totalPriceInPaise`.\n\nUsed by frontend to render the detail page with 'Book Now' buttons already knowing what's available.\n\n**Response shape difference:**\n```json\n{\n  \"...propertyFields\": ...,\n  \"rooms\": [\n    {\n      \"...roomFields\": ...,\n      \"availableUnits\": 3,\n      \"isAvailable\": true,\n      \"totalPriceInPaise\": 4500000  // pricePerNight × nights\n    }\n  ],\n  \"stayContext\": { \"checkIn\": \"...\", \"checkOut\": \"...\", \"nights\": 3, \"guests\": 2 }\n}\n```"
+          }
+        },
+        {
+          "name": "Check availability (dedicated endpoint)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/properties/{{propertySlug}}/availability?checkIn=2026-12-25&checkOut=2026-12-28&guests=2",
+              "host": ["{{baseUrl}}"],
+              "path": ["properties", "{{propertySlug}}", "availability"],
+              "query": [
+                { "key": "checkIn", "value": "2026-12-25", "description": "YYYY-MM-DD, required" },
+                { "key": "checkOut", "value": "2026-12-28", "description": "YYYY-MM-DD, required, must be after checkIn" },
+                { "key": "guests", "value": "2", "description": "Optional — filters rooms with maxGuests >= this" }
+              ]
+            },
+            "description": "Lightweight availability check — returns per-room availability without full property fields.\n\n**Use case:** date picker on detail page — user changes dates → hit this to refresh available rooms without re-fetching whole property.\n\n**Response:**\n```json\n{\n  \"propertyId\": \"...\",\n  \"slug\": \"...\",\n  \"checkIn\": \"2026-12-25T00:00:00.000Z\",\n  \"checkOut\": \"2026-12-28T00:00:00.000Z\",\n  \"nights\": 3,\n  \"guests\": 2,\n  \"hasAvailability\": true,\n  \"rooms\": [\n    {\n      \"id\": \"...\",\n      \"name\": \"AC Standard\",\n      \"totalUnits\": 20,\n      \"bookedUnits\": 15,\n      \"availableUnits\": 5,\n      \"isAvailable\": true,\n      \"pricePerNightInPaise\": 350000,\n      \"totalPriceInPaise\": 1050000\n    }\n  ]\n}\n```\n\n**Errors:**\n- 400 — dates missing/invalid, checkOut before checkIn\n- 404 — property not found or not APPROVED"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Vendor — Properties (PROPERTY_OWNER only)",
+      "description": "Property listing CRUD + rooms management. Only vendors with `vendorType = PROPERTY_OWNER` can use these endpoints (others get 403 `VENDOR_TYPE_MISMATCH`).\n\n**Property lifecycle:** DRAFT → SUBMITTED → APPROVED (or REJECTED → back to DRAFT). Approved properties can be self-PAUSED/resumed.\n\n**Rooms:** Each property has 1+ rooms (units). Villa/Homestay/Studio = 1 room with `totalUnits: 1`. Hotel/Resort = multiple rooms (AC/Non-AC/Deluxe) each with own quantity.\n\n**Image upload:** Frontend uploads to `/uploads/image` first (`purpose: 'other'` for now), then sends Cloudinary URLs in the property body.",
+      "item": [
+        {
+          "name": "Create property — DRAFT (only title + propertyType)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.id) {",
+                  "  pm.environment.set('propertyId', res.data.id);",
+                  "  pm.environment.set('propertySlug', res.data.slug);",
+                  "  console.log('Auto-saved propertyId:', res.data.id, '| slug:', res.data.slug);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Kashmir Riverside Villa (draft)\",\n  \"propertyType\": \"VILLA\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/vendor/properties?draft=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["vendor", "properties"],
+              "query": [
+                { "key": "draft", "value": "true", "description": "true (default) = save as DRAFT. false = submit for admin review immediately." }
+              ]
+            },
+            "description": "Minimal draft — only `title` + `propertyType` required. Vendor can iterate via PATCH, add rooms via `/rooms` endpoint, then submit via PATCH `?draft=false`.\n\n**Response:** Property row created with `status: DRAFT`."
+          }
+        },
+        {
+          "name": "Create property — VILLA (full data + 1 room, submit)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.id) {",
+                  "  pm.environment.set('propertyId', res.data.id);",
+                  "  pm.environment.set('propertySlug', res.data.slug);",
+                  "  if (res.data.rooms?.[0]?.id) pm.environment.set('roomId', res.data.rooms[0].id);",
+                  "  console.log('Auto-saved propertyId:', res.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Kashmir Riverside Villa\",\n  \"propertyType\": \"VILLA\",\n  \"shortDescription\": \"Charming 3BHK villa on the banks of Jhelum, private garden & terrace.\",\n  \"fullDescription\": \"Wake up to river views and mountain silhouettes. This villa offers three spacious bedrooms, a fully-equipped kitchen, private garden, and terrace with mountain views. Perfect for family getaways, group retreats, or peaceful workations.\",\n  \"city\": \"Srinagar\",\n  \"state\": \"Jammu & Kashmir\",\n  \"country\": \"India\",\n  \"address\": \"Rainawari Road, Near Dal Lake\",\n  \"landmark\": \"Behind Dal Lake Boulevard\",\n  \"pincode\": \"190003\",\n  \"latitude\": 34.0837,\n  \"longitude\": 74.7973,\n  \"mainImage\": \"https://res.cloudinary.com/tripz/property-main/kashmir-villa.jpg\",\n  \"galleryImages\": [\n    \"https://res.cloudinary.com/tripz/property-gallery/villa-1.jpg\",\n    \"https://res.cloudinary.com/tripz/property-gallery/villa-2.jpg\",\n    \"https://res.cloudinary.com/tripz/property-gallery/villa-3.jpg\"\n  ],\n  \"amenities\": [\"WiFi\", \"AC\", \"Kitchen\", \"Parking\", \"Garden\", \"River View\", \"Heater\"],\n  \"houseRules\": [\"No smoking indoors\", \"No pets\", \"Quiet hours after 10 PM\"],\n  \"nearbyPlaces\": [\"Dal Lake - 500m\", \"Airport - 12km\", \"Local market - 200m\"],\n  \"highlights\": [\"River-view terrace\", \"3 bedrooms\", \"Private garden\"],\n  \"totalBedrooms\": 3,\n  \"totalBathrooms\": 2,\n  \"checkInTime\": \"14:00\",\n  \"checkOutTime\": \"11:00\",\n  \"minStayNights\": 2,\n  \"contactPhone\": \"9876543210\",\n  \"contactEmail\": \"owner@example.com\",\n  \"rooms\": [\n    {\n      \"name\": \"Whole Villa\",\n      \"description\": \"Full villa — 3 bedrooms, 2 bathrooms, kitchen, terrace\",\n      \"category\": \"WHOLE_VILLA\",\n      \"pricePerNight\": 15000,\n      \"maxGuests\": 8,\n      \"totalUnits\": 1,\n      \"bedrooms\": 3,\n      \"bathrooms\": 2,\n      \"bedType\": \"2 King + 1 Queen\",\n      \"roomSizeSqft\": 1800,\n      \"amenities\": [\"WiFi\", \"AC\", \"Balcony\", \"River View\"],\n      \"images\": [\n        \"https://res.cloudinary.com/tripz/property-room/villa-inside.jpg\"\n      ]\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/vendor/properties?draft=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["vendor", "properties"],
+              "query": [
+                { "key": "draft", "value": "false", "description": "Submit directly for admin review (completeness check runs)." }
+              ]
+            },
+            "description": "Full VILLA payload with 1 embedded room + submitting for admin review.\n\n**`pricePerNight` is in RUPEES** (backend converts to paise). Same for `extraGuestFee`.\n\n**Completeness required for submit:**\n- title, propertyType, shortDescription (20+ chars), fullDescription (50+ chars)\n- city, state, address, mainImage, 2+ galleryImages\n- At least 1 room\n\nIf missing → 400 `PROPERTY_INCOMPLETE` with `missingFields[]` list. Row is still saved as DRAFT — vendor fixes and re-submits."
+          }
+        },
+        {
+          "name": "Create property — HOTEL (multi-room AC + Non-AC)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Sunrise Hotel Manali\",\n  \"propertyType\": \"HOTEL\",\n  \"shortDescription\": \"Family-run hotel with mountain views, walking distance to mall road.\",\n  \"fullDescription\": \"Comfortable stays at the heart of Manali — 20 AC rooms and 12 non-AC rooms. Restaurant on premises, complimentary breakfast, 24-hour reception.\",\n  \"city\": \"Manali\",\n  \"state\": \"Himachal Pradesh\",\n  \"country\": \"India\",\n  \"address\": \"Mall Road, Old Manali\",\n  \"pincode\": \"175131\",\n  \"mainImage\": \"https://res.cloudinary.com/tripz/property-main/sunrise-manali.jpg\",\n  \"galleryImages\": [\n    \"https://res.cloudinary.com/tripz/property-gallery/manali-1.jpg\",\n    \"https://res.cloudinary.com/tripz/property-gallery/manali-2.jpg\"\n  ],\n  \"amenities\": [\"WiFi\", \"Restaurant\", \"Room Service\", \"24hr Reception\", \"Parking\"],\n  \"houseRules\": [\"Check-in with valid ID\", \"No outside food\"],\n  \"highlights\": [\"Mountain View\", \"Central location\", \"Complimentary breakfast\"],\n  \"starRating\": 3,\n  \"totalBedrooms\": 32,\n  \"totalBathrooms\": 32,\n  \"checkInTime\": \"13:00\",\n  \"checkOutTime\": \"11:00\",\n  \"contactPhone\": \"9876500000\",\n  \"rooms\": [\n    {\n      \"name\": \"AC Standard Room\",\n      \"category\": \"AC\",\n      \"pricePerNight\": 3500,\n      \"maxGuests\": 2,\n      \"totalUnits\": 20,\n      \"bedrooms\": 1,\n      \"bathrooms\": 1,\n      \"bedType\": \"Queen\",\n      \"amenities\": [\"AC\", \"TV\", \"Attached bathroom\", \"Hot water\"]\n    },\n    {\n      \"name\": \"Non-AC Standard Room\",\n      \"category\": \"NON_AC\",\n      \"pricePerNight\": 2200,\n      \"maxGuests\": 2,\n      \"totalUnits\": 12,\n      \"bedrooms\": 1,\n      \"bathrooms\": 1,\n      \"bedType\": \"Queen\",\n      \"amenities\": [\"TV\", \"Attached bathroom\"]\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/vendor/properties?draft=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["vendor", "properties"],
+              "query": [
+                { "key": "draft", "value": "true" }
+              ]
+            },
+            "description": "HOTEL type with 2 room types (AC + Non-AC), each with own quantity + pricing.\n\nSame endpoint works for RESORT / GUEST_HOUSE — just change `propertyType` and add relevant room categories."
+          }
+        },
+        {
+          "name": "List my properties",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/vendor/properties?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["vendor", "properties"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "status", "value": "DRAFT", "disabled": true, "description": "DRAFT | SUBMITTED | APPROVED | REJECTED | PAUSED" },
+                { "key": "propertyType", "value": "VILLA", "disabled": true, "description": "HOTEL | VILLA | HOMESTAY | STUDIO | RESORT | GUEST_HOUSE" },
+                { "key": "sortBy", "value": "createdAt", "disabled": true, "description": "createdAt | updatedAt | title" },
+                { "key": "order", "value": "desc", "disabled": true }
+              ]
+            },
+            "description": "Vendor's own properties (all statuses except soft-deleted)."
+          }
+        },
+        {
+          "name": "Get my property detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/vendor/properties/{{propertyId}}", "host": ["{{baseUrl}}"], "path": ["vendor", "properties", "{{propertyId}}"] },
+            "description": "Full detail (with rooms) of a vendor's own property. Returns 403 if the property belongs to another vendor."
+          }
+        },
+        {
+          "name": "Update property — save only (?draft=true)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"shortDescription\": \"Updated description with river view emphasis\",\n  \"amenities\": [\"WiFi\", \"AC\", \"Kitchen\", \"Parking\", \"Garden\", \"River View\", \"Heater\", \"Balcony\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/vendor/properties/{{propertyId}}?draft=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["vendor", "properties", "{{propertyId}}"],
+              "query": [
+                { "key": "draft", "value": "true", "description": "true = save only. false = save + submit for review." }
+              ]
+            },
+            "description": "Partial update. Status untouched by default (`?draft=true`).\n\n**Behaviour by current status:**\n- DRAFT / REJECTED: silent save\n- APPROVED / PAUSED: live update BUT `hasPendingReview` flag set (admin sees for re-review)\n- SUBMITTED: 409 `PROPERTY_UNDER_REVIEW` — wait for decision first\n\nTitle change auto-regenerates slug."
+          }
+        },
+        {
+          "name": "Update + submit — final publish (?draft=false)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/vendor/properties/{{propertyId}}?draft=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["vendor", "properties", "{{propertyId}}"],
+              "query": [
+                { "key": "draft", "value": "false", "description": "Save + transition DRAFT/REJECTED → SUBMITTED with completeness check." }
+              ]
+            },
+            "description": "Save-and-submit — vendor's \"Publish\" button.\n\nEmpty body is valid if all fields already filled in prior PATCHes. Backend runs completeness check on the final row.\n\n**Missing fields → 400 PROPERTY_INCOMPLETE:**\n```\n{\n  \"success\": false,\n  \"message\": \"Property is missing required fields to submit for review.\",\n  \"details\": {\n    \"code\": \"PROPERTY_INCOMPLETE\",\n    \"missingFields\": [\"shortDescription (min 20 chars)\", \"mainImage\"]\n  }\n}\n```"
+          }
+        },
+        {
+          "name": "Pause property (?paused=true)",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/vendor/properties/{{propertyId}}/pause?paused=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["vendor", "properties", "{{propertyId}}", "pause"],
+              "query": [
+                { "key": "paused", "value": "true", "description": "true = pause. false = resume." }
+              ]
+            },
+            "description": "APPROVED → PAUSED. Hides from marketplace search but keeps admin approval intact.\n\n**Errors:**\n- 409 `INVALID_TRANSITION` — only APPROVED properties can be paused"
+          }
+        },
+        {
+          "name": "Resume property (?paused=false)",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/vendor/properties/{{propertyId}}/pause?paused=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["vendor", "properties", "{{propertyId}}", "pause"],
+              "query": [
+                { "key": "paused", "value": "false" }
+              ]
+            },
+            "description": "PAUSED → APPROVED (no re-review needed)."
+          }
+        },
+        {
+          "name": "Delete property (soft delete)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/vendor/properties/{{propertyId}}", "host": ["{{baseUrl}}"], "path": ["vendor", "properties", "{{propertyId}}"] },
+            "description": "Soft delete — stamps `deletedAt`. Property disappears from all listings but row preserved for booking references."
+          }
+        },
+        {
+          "name": "Add room to property",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.id) {",
+                  "  pm.environment.set('roomId', res.data.id);",
+                  "  console.log('Auto-saved roomId:', res.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Deluxe Suite\",\n  \"description\": \"Premium suite with balcony and private living room\",\n  \"category\": \"DELUXE\",\n  \"pricePerNight\": 6500,\n  \"extraGuestFee\": 500,\n  \"maxGuests\": 4,\n  \"totalUnits\": 5,\n  \"bedrooms\": 1,\n  \"bathrooms\": 1,\n  \"bedType\": \"King\",\n  \"roomSizeSqft\": 400,\n  \"amenities\": [\"AC\", \"TV\", \"Balcony\", \"Mini bar\", \"City view\"],\n  \"images\": []\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/vendor/properties/{{propertyId}}/rooms", "host": ["{{baseUrl}}"], "path": ["vendor", "properties", "{{propertyId}}", "rooms"] },
+            "description": "Add a new room type to an existing property. Useful when expanding a hotel or adding categories over time.\n\n**Notes:**\n- Adding room to APPROVED/PAUSED property auto-sets `hasPendingReview = true` on parent\n- `pricePerNight` and `extraGuestFee` in RUPEES (backend → paise)"
+          }
+        },
+        {
+          "name": "Update room",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pricePerNight\": 7000,\n  \"totalUnits\": 8\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/vendor/properties/{{propertyId}}/rooms/{{roomId}}", "host": ["{{baseUrl}}"], "path": ["vendor", "properties", "{{propertyId}}", "rooms", "{{roomId}}"] },
+            "description": "Partial update. Only fields sent are updated. Use `isActive: false` to hide a room without deleting."
+          }
+        },
+        {
+          "name": "Delete room",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/vendor/properties/{{propertyId}}/rooms/{{roomId}}", "host": ["{{baseUrl}}"], "path": ["vendor", "properties", "{{propertyId}}", "rooms", "{{roomId}}"] },
+            "description": "Hard delete a room. **Use with caution** — cascades will delete bookings referencing this room too.\n\nSafer: PATCH with `isActive: false` to hide without deleting."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin — Properties",
+      "description": "Property moderation. ADMIN + SUPER_ADMIN.\n\nAdmin sees SUBMITTED properties in the queue, plus a `hasPendingReview` flag on APPROVED properties that were edited after approval — great signal for re-review triage.\n\n**Reject also works for take-down:** send `POST /:id/reject` on an APPROVED property to pull it from the marketplace (e.g., compliance issues, complaints).",
+      "item": [
+        {
+          "name": "List properties queue",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/properties?status=SUBMITTED&page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "properties"],
+              "query": [
+                { "key": "status", "value": "SUBMITTED", "description": "DRAFT | SUBMITTED | APPROVED | REJECTED | PAUSED" },
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "propertyType", "value": "VILLA", "disabled": true, "description": "HOTEL | VILLA | HOMESTAY | STUDIO | RESORT | GUEST_HOUSE" },
+                { "key": "hasPendingReview", "value": "true", "disabled": true, "description": "Post-approval edits flagged for re-review" },
+                { "key": "ownerUserId", "value": "", "disabled": true, "description": "Filter by specific owner" },
+                { "key": "city", "value": "Srinagar", "disabled": true, "description": "Case-insensitive contains" },
+                { "key": "search", "value": "", "disabled": true, "description": "Case-insensitive contains on title" },
+                { "key": "sortBy", "value": "submittedAt", "disabled": true, "description": "createdAt | updatedAt | submittedAt | title" },
+                { "key": "order", "value": "desc", "disabled": true }
+              ]
+            },
+            "description": "Moderation queue. Includes owner details + KYC status per property.\n\n**Recommended workflow:**\n1. Default filter: `?status=SUBMITTED` (new submissions)\n2. Then: `?status=APPROVED&hasPendingReview=true` (post-approval edits needing re-review)"
+          }
+        },
+        {
+          "name": "Get property detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/admin/properties/{{propertyId}}", "host": ["{{baseUrl}}"], "path": ["admin", "properties", "{{propertyId}}"] },
+            "description": "Full property detail (includes rooms + owner user info + vendor profile KYC status). Admin uses this to review before approve/reject."
+          }
+        },
+        {
+          "name": "Approve property",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/admin/properties/{{propertyId}}/approve", "host": ["{{baseUrl}}"], "path": ["admin", "properties", "{{propertyId}}", "approve"] },
+            "description": "SUBMITTED → APPROVED. Property goes live on marketplace. Clears `hasPendingReview` (if re-review approval).\n\n**Errors:**\n- 409 `INVALID_TRANSITION` — only SUBMITTED properties can be approved"
+          }
+        },
+        {
+          "name": "Reject / take-down property",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Gallery images missing. Please upload at least 5 clear photos of the property including exterior, common areas, and each room type before resubmitting.\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/admin/properties/{{propertyId}}/reject", "host": ["{{baseUrl}}"], "path": ["admin", "properties", "{{propertyId}}", "reject"] },
+            "description": "Reject a property with a reason (5-1000 chars, REQUIRED). Works on two entry states:\n\n**Pre-approval reject — `SUBMITTED → REJECTED`**\nAdmin didn't accept the submission. Vendor sees `rejectionReason`, edits, and can `PATCH ?draft=false` to resubmit.\n\n**Post-approval take-down — `APPROVED/PAUSED → REJECTED`**\nLive property pulled from the marketplace. Use for:\n- Misleading photos discovered after approval\n- Guest complaints / compliance issues\n- Owner's KYC revoked → their live properties need to come down\n- Post-approval pricing fraud\n\nSame flow either way — vendor gets the reason, can edit + resubmit.\n\n**Sample reasons:**\n- Pre-approval: `\"Gallery images missing. Please upload at least 5 clear photos before resubmitting.\"`\n- Take-down: `\"Live property taken down: reported by 3 guests for misleading room photos. Please update photos to match actual condition.\"`\n\n**Errors:**\n- 400 — reason too short/long\n- 409 `INVALID_TRANSITION` — property is not SUBMITTED / APPROVED / PAUSED (e.g., already REJECTED / DRAFT)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Client — Property Bookings",
+      "description": "Guest-facing booking flow. CLIENT role required.\n\n**No payment gateway yet (MVP)** — booking goes directly to `CONFIRMED` status. Inventory is blocked immediately. `paymentStatus` defaults to `PENDING` until Razorpay integrated later.\n\n**Booking lifecycle:**\n`CONFIRMED` → `CHECKED_IN` (owner marks) → `COMPLETED` (owner marks after checkout)\n\nAlternate paths:\n`CONFIRMED` → `CANCELLED` (guest cancels before check-in)\n`CONFIRMED` → `NO_SHOW` (owner marks after check-in date passes)",
+      "item": [
+        {
+          "name": "Create booking",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.id) {",
+                  "  pm.environment.set('bookingId', res.data.id);",
+                  "  console.log('Auto-saved bookingId:', res.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"propertyId\": \"{{propertyId}}\",\n  \"roomId\": \"{{roomId}}\",\n  \"checkIn\": \"2026-12-25\",\n  \"checkOut\": \"2026-12-28\",\n  \"numGuests\": 4,\n  \"unitsBooked\": 1,\n  \"guestName\": \"Aashna Sharma\",\n  \"guestPhone\": \"9876543210\",\n  \"guestEmail\": \"aashna@example.com\",\n  \"specialRequests\": \"Early check-in if possible; family with kids\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/client/property-bookings", "host": ["{{baseUrl}}"], "path": ["client", "property-bookings"] },
+            "description": "**Atomic booking creation** — runs inside DB transaction with overbooking protection.\n\n**Validation rules:**\n- checkIn must be today or future\n- checkOut must be after checkIn\n- numGuests <= room.maxGuests × unitsBooked\n- nights >= property.minStayNights\n- Property must be APPROVED, room must be active\n\n**Total price auto-calculated:** `room.pricePerNightInPaise × nights × unitsBooked` (snapshotted at booking time — later price changes don't affect this booking).\n\n**Status:** CONFIRMED immediately (no payment step in MVP).\n\n**Errors:**\n- 400 `GUEST_COUNT_EXCEEDS_CAPACITY` — too many guests for selected units\n- 400 `MIN_STAY_NOT_MET` — nights < property min stay\n- 404 — property/room not found or inactive\n- 409 `INSUFFICIENT_AVAILABILITY` — not enough rooms available (returns `requested` + `available`)\n\n**Side effect:** Auto-saves `bookingId`."
+          }
+        },
+        {
+          "name": "List my bookings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/client/property-bookings?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["client", "property-bookings"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "status", "value": "CONFIRMED", "disabled": true, "description": "CONFIRMED | CHECKED_IN | CHECKED_OUT | COMPLETED | CANCELLED | NO_SHOW" },
+                { "key": "sortBy", "value": "createdAt", "disabled": true, "description": "createdAt | checkIn | checkOut" },
+                { "key": "order", "value": "desc", "disabled": true }
+              ]
+            },
+            "description": "Guest's own bookings, all statuses."
+          }
+        },
+        {
+          "name": "Get my booking detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/client/property-bookings/{{bookingId}}", "host": ["{{baseUrl}}"], "path": ["client", "property-bookings", "{{bookingId}}"] },
+            "description": "Full booking detail including property + room info. Returns 403 if booking belongs to another user."
+          }
+        },
+        {
+          "name": "Cancel my booking",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Plans changed — traveling later\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/client/property-bookings/{{bookingId}}/cancel", "host": ["{{baseUrl}}"], "path": ["client", "property-bookings", "{{bookingId}}", "cancel"] },
+            "description": "Only CONFIRMED bookings can be cancelled. Inventory auto-releases (query filter excludes CANCELLED).\n\n**MVP:** Free cancellation, no policy tiers, no refund logic (no payment yet).\n\n**Errors:**\n- 403 — booking belongs to another user\n- 409 `INVALID_TRANSITION` — booking is not CONFIRMED (already checked-in/completed/cancelled)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Vendor — Property Bookings (owner dashboard)",
+      "description": "Property owner's booking management. Only vendors with `vendorType = PROPERTY_OWNER`.\n\nOwners see all bookings across their properties. Can mark check-in/check-out/no-show. Cannot cancel guest bookings (guests do that themselves).",
+      "item": [
+        {
+          "name": "List bookings (across my properties)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/vendor/property-bookings?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["vendor", "property-bookings"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "status", "value": "CONFIRMED", "disabled": true, "description": "CONFIRMED | CHECKED_IN | CHECKED_OUT | COMPLETED | CANCELLED | NO_SHOW" },
+                { "key": "propertyId", "value": "{{propertyId}}", "disabled": true, "description": "Filter to one specific property" },
+                { "key": "fromDate", "value": "2026-12-01", "disabled": true, "description": "checkIn >= this date (YYYY-MM-DD)" },
+                { "key": "toDate", "value": "2026-12-31", "disabled": true, "description": "checkIn <= this date" },
+                { "key": "payoutStatus", "value": "PENDING", "disabled": true, "description": "PENDING | PAID | ON_HOLD" },
+                { "key": "sortBy", "value": "checkIn", "disabled": true, "description": "createdAt | checkIn | checkOut" },
+                { "key": "order", "value": "desc", "disabled": true }
+              ]
+            },
+            "description": "Great for dashboard views:\n- `?status=CONFIRMED&fromDate=<today>` → upcoming arrivals\n- `?status=CHECKED_IN` → currently in-stay\n- `?status=COMPLETED&payoutStatus=PENDING` → awaiting my payout"
+          }
+        },
+        {
+          "name": "Get booking detail (owner)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/vendor/property-bookings/{{bookingId}}", "host": ["{{baseUrl}}"], "path": ["vendor", "property-bookings", "{{bookingId}}"] },
+            "description": "Full booking including guest contact details. Returns 403 if the booking is for another owner's property."
+          }
+        },
+        {
+          "name": "Mark check-in",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/vendor/property-bookings/{{bookingId}}/check-in", "host": ["{{baseUrl}}"], "path": ["vendor", "property-bookings", "{{bookingId}}", "check-in"] },
+            "description": "CONFIRMED → CHECKED_IN. Stamps `checkedInAt`. Owner clicks this when guest arrives.\n\n**Errors:**\n- 409 `INVALID_TRANSITION` — only CONFIRMED bookings can be checked in"
+          }
+        },
+        {
+          "name": "Mark check-out",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/vendor/property-bookings/{{bookingId}}/check-out", "host": ["{{baseUrl}}"], "path": ["vendor", "property-bookings", "{{bookingId}}", "check-out"] },
+            "description": "CHECKED_IN → COMPLETED. Stamps `checkedOutAt`. Booking becomes eligible for admin payout.\n\n**Errors:**\n- 409 `INVALID_TRANSITION` — only CHECKED_IN bookings can be checked out"
+          }
+        },
+        {
+          "name": "Mark no-show",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notes\": \"Guest did not arrive by end of check-in date. No response to phone calls.\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/vendor/property-bookings/{{bookingId}}/no-show", "host": ["{{baseUrl}}"], "path": ["vendor", "property-bookings", "{{bookingId}}", "no-show"] },
+            "description": "CONFIRMED → NO_SHOW. Guest didn't arrive. Owner marks this after check-in date passes.\n\nInventory was already consumed for those dates — this is just a record. Payout implications handled offline via admin call.\n\n**Errors:**\n- 409 `INVALID_TRANSITION` — only CONFIRMED bookings can be marked no-show"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin — Property Bookings + Payouts",
+      "description": "Platform-wide booking oversight + manual payout tracking.\n\n**Payout model:** Admin manually enters the commission agreed with the owner over call, then does an offline bank transfer (IMPS/NEFT) and enters the reference number here.\n\n**Automation:** Only COMPLETED bookings are eligible for payout. Idempotent — errors if already paid.",
+      "item": [
+        {
+          "name": "List all bookings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/property-bookings?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "property-bookings"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "status", "value": "COMPLETED", "disabled": true },
+                { "key": "propertyId", "value": "", "disabled": true },
+                { "key": "ownerUserId", "value": "", "disabled": true },
+                { "key": "guestUserId", "value": "", "disabled": true },
+                { "key": "fromDate", "value": "2026-12-01", "disabled": true, "description": "checkIn >= this" },
+                { "key": "toDate", "value": "2026-12-31", "disabled": true },
+                { "key": "payoutStatus", "value": "PENDING", "disabled": true, "description": "Great filter: ?status=COMPLETED&payoutStatus=PENDING = payout queue" },
+                { "key": "search", "value": "", "disabled": true, "description": "Case-insensitive contains on guestName / guestEmail / guestPhone" },
+                { "key": "sortBy", "value": "createdAt", "disabled": true },
+                { "key": "order", "value": "desc", "disabled": true }
+              ]
+            },
+            "description": "**Recommended admin workflow:**\n1. Payout queue: `?status=COMPLETED&payoutStatus=PENDING`\n2. Owner-specific: `?ownerUserId=VEND-XXXXXX`\n3. Guest lookup: `?search=<phone|email|name>`"
+          }
+        },
+        {
+          "name": "Get booking detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/admin/property-bookings/{{bookingId}}", "host": ["{{baseUrl}}"], "path": ["admin", "property-bookings", "{{bookingId}}"] },
+            "description": "Full detail including guest info + property + owner (with KYC status). Everything needed to negotiate payout."
+          }
+        },
+        {
+          "name": "Record payout (after offline settlement)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"commission\": 1500,\n  \"payoutReference\": \"IMPS-N123456789012\",\n  \"payoutNotes\": \"Commission agreed 10% on call with owner (2026-12-30). Transfer via HDFC IMPS.\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/admin/property-bookings/{{bookingId}}/payout", "host": ["{{baseUrl}}"], "path": ["admin", "property-bookings", "{{bookingId}}", "payout"] },
+            "description": "Admin marks payout as done after offline bank transfer.\n\n**Body:**\n- `commission` — amount kept by platform, IN RUPEES (backend → paise)\n- `payoutReference` — bank txn ref (IMPS/NEFT/UTR), REQUIRED, 3-120 chars\n- `payoutNotes` — optional notes from the call\n\n**Auto-calculated:** `payoutAmountInPaise = totalAmountInPaise - commissionInPaise`\n\n**Preconditions:**\n- Booking status must be COMPLETED\n- payoutStatus must be PENDING (not already paid)\n- commission must not exceed booking total\n\n**Errors:**\n- 400 `INVALID_COMMISSION` — commission > total amount\n- 409 `INVALID_PAYOUT_STATE` — booking not COMPLETED\n- 409 `ALREADY_PAID_OUT` — payout already recorded (returns existing reference)"
+          }
+        }
+      ]
+    },
+    {
       "name": "Public — Stories",
       "description": "Public-facing story catalog. No authentication.\n\n**Server-side filters (automatic):**\n- `status = 'PUBLISHED'` only (HIDDEN stories excluded)\n- `deletedAt IS NULL`",
       "item": [

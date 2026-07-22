@@ -13,6 +13,7 @@ model VendorProfile {
   subscriptions   VendorSubscription[]
   packages        Package[]
   travelGuides    TravelGuide[]
+  properties      Property[]
 
   @@index([kycStatus])
   @@index([vendorType])

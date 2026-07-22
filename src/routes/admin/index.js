@@ -7,6 +7,8 @@ import subscriptionPlansRoutes from './subscriptionPlans.routes.js';
 import subscriptionsRoutes from './subscriptions.routes.js';
 import packagesRoutes from './packages.routes.js';
 import storiesRoutes from './stories.routes.js';
+import propertiesRoutes from './properties.routes.js';
+import propertyBookingsRoutes from './propertyBookings.routes.js';
 
 const router = Router();
 
@@ -20,5 +22,7 @@ router.use('/subscription-plans', subscriptionPlansRoutes);
 router.use('/subscriptions', subscriptionsRoutes);
 router.use('/packages', packagesRoutes);
 router.use('/stories', storiesRoutes);
+router.use('/properties', propertiesRoutes);
+router.use('/property-bookings', propertyBookingsRoutes);
 
 export default router;

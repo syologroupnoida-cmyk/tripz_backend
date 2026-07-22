@@ -117,13 +117,29 @@ export const verifyPan = async (number) => {
       holderName: null,
     };
   }
-  const { data } = await surepassFetch('/pan/pan', { id_number: number });
-  const verified = Boolean(data?.success && data?.data?.pan_number);
+
+  // ================================================================
+  //  BYPASS MODE — Surepass PAN verification DISABLED
+  //  To re-enable: uncomment the block below and delete the bypass
+  //  return statement.
+  // ================================================================
+  // const { data } = await surepassFetch('/pan/pan', { id_number: number });
+  // const verified = Boolean(data?.success && data?.data?.pan_number);
+  // return {
+  //   verified,
+  //   reason: verified ? null : data?.message || 'PAN not found in records.',
+  //   rawResponse: data,
+  //   holderName: data?.data?.full_name ?? null,
+  // };
+
+  // BYPASS: format valid → accept the document (pending admin manual review).
+  // No fake holder name — admin will confirm identity offline during KYC review.
+  console.log('[surepass:BYPASS] PAN verification bypassed for', number);
   return {
-    verified,
-    reason: verified ? null : data?.message || 'PAN not found in records.',
-    rawResponse: data,
-    holderName: data?.data?.full_name ?? null,
+    verified: true,
+    reason: 'Auto-accepted in bypass mode. Pending admin manual review.',
+    rawResponse: { bypassed: true, mode: 'MANUAL_BYPASS', panNumber: number },
+    holderName: null,
   };
 };
 
@@ -186,41 +202,62 @@ export const initiateAadhaarVerification = async (number) => {
       rawResponse: null,
     };
   }
-  const { data } = await surepassFetch('/digilocker/initialize', {
-    data: {
-      redirect_url: env.SUREPASS_REDIRECT_URL,
-      expiry_minutes: 10,
-      skip_main_screen: false,
-      signup_flow: false,
-      send_sms: false,
-      send_email: false,
-      verify_phone: false,
-      verify_email: false,
-    },
-  });
 
-  // Sent = Surepass accepted the initiation (we have at minimum a client_id).
-  const providerClientId = data?.data?.client_id ?? null;
-  const sent = Boolean(data?.success && providerClientId);
+  // ================================================================
+  //  BYPASS MODE — Surepass DigiLocker initiation DISABLED
+  //  To re-enable: uncomment the block below and delete the bypass
+  //  return statement.
+  // ================================================================
+  // const { data } = await surepassFetch('/digilocker/initialize', {
+  //   data: {
+  //     redirect_url: env.SUREPASS_REDIRECT_URL,
+  //     expiry_minutes: 10,
+  //     skip_main_screen: false,
+  //     signup_flow: false,
+  //     send_sms: false,
+  //     send_email: false,
+  //     verify_phone: false,
+  //     verify_email: false,
+  //   },
+  // });
+  //
+  // // Sent = Surepass accepted the initiation (we have at minimum a client_id).
+  // const providerClientId = data?.data?.client_id ?? null;
+  // const sent = Boolean(data?.success && providerClientId);
+  //
+  // // Convert expiry_seconds → ISO date for downstream consistency.
+  // const expirySeconds = data?.data?.expiry_seconds;
+  // const expiresAt =
+  //   typeof expirySeconds === 'number'
+  //     ? new Date(Date.now() + expirySeconds * 1000).toISOString()
+  //     : null;
+  //
+  // return {
+  //   sent,
+  //   reason: sent ? null : data?.message || 'Could not initiate Aadhaar validation.',
+  //   providerClientId,
+  //   // Opaque session token Surepass returns — store it so fetch-status / status
+  //   // endpoints can include it if they require it.
+  //   providerToken: data?.data?.token ?? null,
+  //   // DigiLocker SDK URL. Frontend opens this URL (popup / window.location).
+  //   redirectUrl: data?.data?.url ?? null,
+  //   expiresAt,
+  //   rawResponse: data,
+  // };
 
-  // Convert expiry_seconds → ISO date for downstream consistency.
-  const expirySeconds = data?.data?.expiry_seconds;
-  const expiresAt =
-    typeof expirySeconds === 'number'
-      ? new Date(Date.now() + expirySeconds * 1000).toISOString()
-      : null;
-
+  // BYPASS: format valid → return fake client_id / URL so frontend flow continues
+  console.log('[surepass:BYPASS] Aadhaar initiation bypassed for', number);
+  const bypassClientId = `digilocker_BYPASS_${Date.now()}`;
   return {
-    sent,
-    reason: sent ? null : data?.message || 'Could not initiate Aadhaar validation.',
-    providerClientId,
-    // Opaque session token Surepass returns — store it so fetch-status / status
-    // endpoints can include it if they require it.
-    providerToken: data?.data?.token ?? null,
-    // DigiLocker SDK URL. Frontend opens this URL (popup / window.location).
-    redirectUrl: data?.data?.url ?? null,
-    expiresAt,
-    rawResponse: data,
+    sent: true,
+    reason: null,
+    providerClientId: bypassClientId,
+    providerToken: 'BYPASS_TOKEN',
+    // Frontend opens this — points straight at your callback so the flow
+    // completes instantly without a real DigiLocker session.
+    redirectUrl: `${env.SUREPASS_REDIRECT_URL}?bypassed=true&client_id=${bypassClientId}`,
+    expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+    rawResponse: { bypassed: true, mode: 'MANUAL_BYPASS', aadhaarNumber: number },
   };
 };
 
@@ -252,22 +289,39 @@ export const initiateAadhaarVerification = async (number) => {
  *   { success: false, message: "..." }
  */
 export const completeAadhaarVerification = async ({ providerClientId }) => {
-  const { data } = await surepassFetch(
-    `/digilocker/download-aadhaar/${encodeURIComponent(providerClientId)}`,
-    null,
-    'GET',
-  );
+  // ================================================================
+  //  BYPASS MODE — Surepass DigiLocker complete DISABLED
+  //  To re-enable: uncomment the block below and delete the bypass
+  //  return statement.
+  // ================================================================
+  // const { data } = await surepassFetch(
+  //   `/digilocker/download-aadhaar/${encodeURIComponent(providerClientId)}`,
+  //   null,
+  //   'GET',
+  // );
+  //
+  // const metadata = data?.data?.digilocker_metadata ?? null;
+  // const verified = Boolean(data?.data && metadata);
+  //
+  // return {
+  //   verified,
+  //   reason: verified
+  //     ? null
+  //     : data?.message || 'Aadhaar verification not yet complete or session expired.',
+  //   holderName: metadata?.name ?? null,
+  //   metadata, // pass through dob, gender, mobile_number to the caller
+  //   rawResponse: data,
+  // };
 
-  const metadata = data?.data?.digilocker_metadata ?? null;
-  const verified = Boolean(data?.data && metadata);
-
+  // BYPASS: accept the document (pending admin manual review).
+  // No fake name/dob/gender — admin will confirm the vendor's identity
+  // offline against uploaded document image during KYC review.
+  console.log('[surepass:BYPASS] Aadhaar complete bypassed for', providerClientId);
   return {
-    verified,
-    reason: verified
-      ? null
-      : data?.message || 'Aadhaar verification not yet complete or session expired.',
-    holderName: metadata?.name ?? null,
-    metadata, // pass through dob, gender, mobile_number to the caller
-    rawResponse: data,
+    verified: true,
+    reason: 'Auto-accepted in bypass mode. Pending admin manual review.',
+    holderName: null,
+    metadata: null,
+    rawResponse: { bypassed: true, mode: 'MANUAL_BYPASS', providerClientId },
   };
 };

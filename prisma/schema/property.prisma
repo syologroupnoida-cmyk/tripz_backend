@@ -1,0 +1,187 @@
+model Property {
+  id           String @id @default(uuid())
+  ownerUserId  String // JWT se aayega — property owner (VendorProfile.userId)
+  slug         String @unique // SEO URL: /properties/kashmir-riverside-villa
+
+  // ---- Basic info (marketplace card + detail) ----
+  title            String
+  propertyType     PropertyType
+  shortDescription String       @db.Text
+  fullDescription  String       @db.Text
+
+  // ---- Location ----
+  city        String
+  state       String
+  country     String  @default("India")
+  address     String  @db.Text
+  landmark    String?
+  pincode     String?
+  latitude    Float?
+  longitude   Float?
+
+  // ---- Media ----
+  mainImage     String
+  galleryImages String[] // Min 3 recommended for marketplace credibility
+
+  // ---- Facilities (marketplace filters + display) ----
+  amenities        String[] // ["WiFi", "AC", "Pool", "Parking", "Kitchen", "Gym"]
+  houseRules       String[] // ["No smoking", "No pets", "No parties"]
+  nearbyPlaces     String[] // ["Dal Lake - 500m", "Airport - 10km"]
+  highlights       String[] // ["Mountain view", "Private balcony", "24hr checkin"]
+
+  // ---- Property-level metadata ----
+  starRating       Int?    // 1-5 for HOTEL/RESORT (nullable for others)
+  totalBedrooms    Int?    // Aggregate across the property (for filters)
+  totalBathrooms   Int?
+  hostLivesOnsite  Boolean @default(false) // Mainly for HOMESTAY
+
+  // ---- Check-in / check-out ----
+  checkInTime  String @default("14:00") // 24hr format "HH:mm"
+  checkOutTime String @default("11:00")
+  minStayNights Int   @default(1)
+
+  // ---- Contact (shown to guest after booking, not before) ----
+  contactPhone String?
+  contactEmail String?
+
+  // ---- Cancellation policy (JSON for flexibility) ----
+  // Example: { "type": "flexible", "fullRefundHours": 48, "partialRefundHours": 168 }
+  cancellationPolicy Json?
+
+  // ---- Lifecycle ----
+  status               PropertyStatus @default(DRAFT)
+  hasPendingReview     Boolean        @default(false) // Post-approval edit flag
+  submittedAt          DateTime?
+  approvedAt           DateTime?
+  rejectedAt           DateTime?
+  rejectionReason      String?
+  reviewedByAdminId    String?
+
+  // ---- Soft delete + timestamps ----
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // Relations
+  owner    VendorProfile     @relation(fields: [ownerUserId], references: [userId], onDelete: Cascade)
+  rooms    PropertyRoom[]
+  bookings PropertyBooking[]
+
+  // Indexes for common queries
+  @@index([ownerUserId])
+  @@index([status])
+  @@index([propertyType])
+  @@index([city])
+  @@index([deletedAt])
+  @@index([slug])
+  @@map("properties")
+}
+
+// A bookable unit within a property.
+//   VILLA/STUDIO/HOMESTAY = usually 1 PropertyRoom entry (totalUnits=1)
+//   HOTEL/RESORT/GUEST_HOUSE = multiple entries (AC, Non-AC, Deluxe, Suite)
+model PropertyRoom {
+  id         String @id @default(uuid())
+  propertyId String
+
+  // ---- Identity ----
+  name        String // "AC Room" / "Deluxe Suite" / "Whole Villa"
+  description String? @db.Text
+  category    String? // "AC" / "NON_AC" / "STANDARD" / "DELUXE" / "SUITE"
+
+  // ---- Pricing (in paise = INR × 100) ----
+  pricePerNightInPaise Int
+  extraGuestFeeInPaise Int? // Optional charge per additional guest
+
+  // ---- Capacity ----
+  maxGuests  Int @default(2)
+  totalUnits Int @default(1) // Villa=1, Hotel might have 20
+
+  // ---- Physical details ----
+  bedrooms       Int?
+  bathrooms      Int?
+  bedType        String? // "King" / "Queen" / "Twin" / "Sofa"
+  roomSizeSqft   Int?
+
+  // ---- Media + facilities ----
+  amenities String[] // Room-specific ["AC", "TV", "Balcony", "Attached bath"]
+  images    String[]
+
+  // ---- Availability control (owner can disable a room without deleting) ----
+  isActive Boolean @default(true)
+
+  // ---- Timestamps ----
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  property Property           @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  bookings PropertyBooking[]
+
+  @@index([propertyId])
+  @@index([isActive])
+  @@map("property_rooms")
+}
+
+// Booking record — created when guest confirms a stay.
+// For now (no payment gateway), status jumps directly to CONFIRMED.
+// When Razorpay ships, add PENDING_PAYMENT step before CONFIRMED.
+model PropertyBooking {
+  id           String @id @default(uuid())
+  guestUserId  String // Booking guest (CLIENT role)
+  propertyId   String
+  roomId       String
+
+  // ---- Guest info (snapshot at booking time) ----
+  guestName  String
+  guestPhone String
+  guestEmail String
+  numGuests  Int    @default(1)
+
+  // ---- Dates ----
+  checkIn      DateTime @db.Date
+  checkOut     DateTime @db.Date
+  nights       Int // Auto-calculated at creation
+  unitsBooked  Int @default(1) // How many rooms of this type
+
+  // ---- Amount ----
+  pricePerNightInPaise Int // Snapshot from room at booking time
+  totalAmountInPaise   Int // pricePerNight × nights × unitsBooked
+
+  // ---- Status ----
+  status        BookingStatus @default(CONFIRMED)
+  paymentStatus PaymentStatus @default(PENDING)
+
+  // ---- Timestamps for state transitions ----
+  checkedInAt        DateTime?
+  checkedOutAt       DateTime?
+  cancelledAt        DateTime?
+  cancelledByUserId  String?
+  cancellationReason String? @db.Text
+
+  // ---- Payout (admin fills after negotiating commission offline) ----
+  commissionInPaise  Int?
+  payoutAmountInPaise Int?
+  payoutStatus       PayoutStatus @default(PENDING)
+  payoutReference    String? // Bank txn ref (IMPS/NEFT)
+  payoutAt           DateTime?
+  payoutNotes        String? @db.Text
+
+  // ---- Notes ----
+  specialRequests String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  property Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  room     PropertyRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  // Indexes — the availability overlap query hits (roomId + dates + status)
+  @@index([roomId, checkIn, checkOut, status])
+  @@index([guestUserId])
+  @@index([propertyId])
+  @@index([status])
+  @@index([payoutStatus])
+  @@map("property_bookings")
+}

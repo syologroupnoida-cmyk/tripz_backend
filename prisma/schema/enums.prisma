@@ -147,3 +147,50 @@ enum VendorType {
   // ACTIVITY_PROVIDER
   // TRANSPORT_PROVIDER
 }
+
+// Category of property being listed. Drives frontend form (Hotel shows
+// multi-room UI, Villa shows single-unit UI) but backend schema is uniform.
+enum PropertyType {
+  HOTEL // Multiple room types with quantities (Standard/Deluxe/Suite)
+  VILLA // Single self-contained unit (whole villa)
+  HOMESTAY // Single unit OR multi-room family stay
+  STUDIO // Single small unit (apartment-style)
+  RESORT // Multi-category like hotel + resort amenities
+  GUEST_HOUSE // Budget multi-room accommodation
+}
+
+// Property lifecycle — mirrors PackageStatus pattern.
+enum PropertyStatus {
+  DRAFT // Owner still editing, not visible to admin queue or marketplace
+  SUBMITTED // Sent for admin review
+  APPROVED // Live on marketplace — guests can book
+  REJECTED // Admin rejected with reason; owner can edit and resubmit
+  PAUSED // Owner self-paused (maintenance/off-season)
+}
+
+// Booking lifecycle — from creation through checkout to payout.
+enum BookingStatus {
+  CONFIRMED // Booking successful, inventory blocked
+  CHECKED_IN // Owner marked guest checked in
+  CHECKED_OUT // Owner marked guest checked out
+  COMPLETED // Post-checkout, ready for payout
+  CANCELLED // Guest or owner cancelled
+  NO_SHOW // Guest didn't arrive
+}
+
+// Payment tracking on a booking. All start PENDING; payment integration
+// (Razorpay) later flips to PAID / REFUNDED / FAILED.
+enum PaymentStatus {
+  PENDING // No payment collected yet (MVP default)
+  PAID // Guest paid via gateway
+  REFUNDED // Full refund issued (cancellation)
+  PARTIALLY_REFUNDED // Partial refund per cancellation policy
+  FAILED // Gateway failure
+}
+
+// Manual payout to property owner (admin negotiates commission offline).
+enum PayoutStatus {
+  PENDING // Booking completed, admin hasn't paid owner yet
+  PAID // Admin manually transferred to owner (with reference)
+  ON_HOLD // Dispute or issue — payout blocked temporarily
+}
