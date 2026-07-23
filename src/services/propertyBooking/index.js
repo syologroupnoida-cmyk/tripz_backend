@@ -1,6 +1,15 @@
 import prisma from '../../config/db.js';
 import { ApiError } from '../../utils/ApiError.js';
 import * as bookingRepo from '../../repositories/propertyBooking.repository.js';
+import * as mail from '../mail/index.js';
+
+// Fire-and-forget email helper — swallow errors so a mail failure never
+// breaks the booking flow. Errors are logged for observability.
+const sendEmailQuietly = (label, promise) => {
+  Promise.resolve(promise).catch((err) => {
+    console.error(`[booking-email] ${label} failed:`, err?.message ?? err);
+  });
+};
 
 // ---- GUEST: create booking ----
 export const createBooking = async ({ guestUserId, data }) => {
@@ -60,7 +69,62 @@ export const createBooking = async ({ guestUserId, data }) => {
     specialRequests: data.specialRequests,
   });
 
+  // 4. Fire notifications (non-blocking). We look up owner details separately
+  // so a slow user table doesn't delay the response.
+  sendBookingCreatedNotifications(booking);
+
   return { booking, message: 'Booking confirmed.' };
+};
+
+// Look up the owner's user record and send guest + owner emails in parallel.
+// Runs after createBooking returns — errors logged, never propagated.
+const sendBookingCreatedNotifications = async (booking) => {
+  try {
+    const owner = await prisma.user.findUnique({
+      where: { id: booking.property.ownerUserId },
+      select: { firstName: true, email: true },
+    });
+
+    sendEmailQuietly('guest confirmation', mail.sendBookingConfirmationToGuest({
+      to: booking.guestEmail,
+      guestName: booking.guestName,
+      bookingId: booking.id,
+      propertyTitle: booking.property.title,
+      propertyAddress: booking.property.address,
+      propertyCity: booking.property.city,
+      roomName: booking.room.name,
+      checkIn: booking.checkIn,
+      checkOut: booking.checkOut,
+      nights: booking.nights,
+      numGuests: booking.numGuests,
+      unitsBooked: booking.unitsBooked,
+      totalAmountInPaise: booking.totalAmountInPaise,
+      ownerContactPhone: booking.property.contactPhone,
+      ownerContactEmail: booking.property.contactEmail,
+    }));
+
+    if (owner?.email) {
+      sendEmailQuietly('owner new-booking', mail.sendNewBookingReceivedToOwner({
+        to: owner.email,
+        ownerName: owner.firstName,
+        bookingId: booking.id,
+        propertyTitle: booking.property.title,
+        roomName: booking.room.name,
+        checkIn: booking.checkIn,
+        checkOut: booking.checkOut,
+        nights: booking.nights,
+        numGuests: booking.numGuests,
+        unitsBooked: booking.unitsBooked,
+        totalAmountInPaise: booking.totalAmountInPaise,
+        guestName: booking.guestName,
+        guestPhone: booking.guestPhone,
+        guestEmail: booking.guestEmail,
+        specialRequests: booking.specialRequests,
+      }));
+    }
+  } catch (err) {
+    console.error('[booking-email] notification lookup failed:', err?.message ?? err);
+  }
 };
 
 // ---- GUEST: list my bookings ----
@@ -110,7 +174,47 @@ export const cancelMyBooking = async ({ guestUserId, bookingId, reason }) => {
   if (!ok) throw new ApiError(500, 'Failed to cancel booking.');
 
   const updated = await bookingRepo.getBookingById(bookingId);
+
+  // Fire cancellation emails to guest + owner (non-blocking)
+  sendBookingCancelledNotifications(updated);
+
   return { booking: updated, message: 'Booking cancelled.' };
+};
+
+// Guest + owner cancellation emails. Fire-and-forget.
+const sendBookingCancelledNotifications = async (booking) => {
+  try {
+    const owner = await prisma.user.findUnique({
+      where: { id: booking.property.ownerUserId },
+      select: { firstName: true, email: true },
+    });
+
+    sendEmailQuietly('guest cancellation', mail.sendBookingCancelledToGuest({
+      to: booking.guestEmail,
+      guestName: booking.guestName,
+      bookingId: booking.id,
+      propertyTitle: booking.property.title,
+      checkIn: booking.checkIn,
+      checkOut: booking.checkOut,
+      cancellationReason: booking.cancellationReason,
+    }));
+
+    if (owner?.email) {
+      sendEmailQuietly('owner cancellation', mail.sendBookingCancelledToOwner({
+        to: owner.email,
+        ownerName: owner.firstName,
+        bookingId: booking.id,
+        propertyTitle: booking.property.title,
+        roomName: booking.room.name,
+        checkIn: booking.checkIn,
+        checkOut: booking.checkOut,
+        guestName: booking.guestName,
+        cancellationReason: booking.cancellationReason,
+      }));
+    }
+  } catch (err) {
+    console.error('[booking-email] cancellation lookup failed:', err?.message ?? err);
+  }
 };
 
 // ---- OWNER: list bookings across my properties ----

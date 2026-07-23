@@ -731,6 +731,86 @@
           }
         },
         {
+          "name": "Create property — HOMESTAY (host lives onsite)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Sharma Family Homestay Manali\",\n  \"propertyType\": \"HOMESTAY\",\n  \"shortDescription\": \"Cozy family homestay with mountain views, home-cooked meals, and warm hospitality.\",\n  \"fullDescription\": \"Experience Himachali culture with our family. We offer 3 comfortable bedrooms in our traditional house. Home-cooked meals included. The host family lives onsite and shares local knowledge, cooking tips, and hiking routes. Perfect for solo travelers, couples, or small groups seeking an authentic experience.\",\n  \"city\": \"Manali\",\n  \"state\": \"Himachal Pradesh\",\n  \"country\": \"India\",\n  \"address\": \"Village Prini, Old Manali Road\",\n  \"landmark\": \"Near Apple Orchard\",\n  \"pincode\": \"175131\",\n  \"latitude\": 32.2432,\n  \"longitude\": 77.1892,\n  \"mainImage\": \"https://res.cloudinary.com/tripz/property-main/sharma-homestay.jpg\",\n  \"galleryImages\": [\n    \"https://res.cloudinary.com/tripz/property-gallery/homestay-1.jpg\",\n    \"https://res.cloudinary.com/tripz/property-gallery/homestay-2.jpg\",\n    \"https://res.cloudinary.com/tripz/property-gallery/homestay-3.jpg\"\n  ],\n  \"amenities\": [\"WiFi\", \"Home-cooked meals\", \"Hot water\", \"Parking\", \"Bonfire\", \"Garden\"],\n  \"houseRules\": [\"Respect family customs\", \"No smoking inside\", \"Meals at fixed times\"],\n  \"nearbyPlaces\": [\"Solang Valley - 5km\", \"Vashisht Temple - 3km\", \"Mall Road - 4km\"],\n  \"highlights\": [\"Host lives onsite\", \"Home-cooked meals included\", \"Traditional Himachali experience\"],\n  \"totalBedrooms\": 3,\n  \"totalBathrooms\": 2,\n  \"hostLivesOnsite\": true,\n  \"checkInTime\": \"12:00\",\n  \"checkOutTime\": \"10:00\",\n  \"minStayNights\": 2,\n  \"contactPhone\": \"9876500001\",\n  \"contactEmail\": \"sharma.homestay@example.com\",\n  \"rooms\": [\n    {\n      \"name\": \"Master Bedroom (King)\",\n      \"category\": \"MASTER\",\n      \"pricePerNight\": 2500,\n      \"maxGuests\": 2,\n      \"totalUnits\": 1,\n      \"bedrooms\": 1,\n      \"bathrooms\": 1,\n      \"bedType\": \"King\",\n      \"amenities\": [\"Attached bathroom\", \"Mountain view\", \"Heater\"]\n    },\n    {\n      \"name\": \"Family Room (Queen + Twin)\",\n      \"category\": \"FAMILY\",\n      \"pricePerNight\": 3200,\n      \"extraGuestFee\": 500,\n      \"maxGuests\": 4,\n      \"totalUnits\": 1,\n      \"bedrooms\": 1,\n      \"bathrooms\": 1,\n      \"bedType\": \"Queen + Twin\",\n      \"amenities\": [\"Attached bathroom\", \"Common area\"]\n    },\n    {\n      \"name\": \"Cozy Single Room\",\n      \"category\": \"SINGLE\",\n      \"pricePerNight\": 1500,\n      \"maxGuests\": 1,\n      \"totalUnits\": 1,\n      \"bedrooms\": 1,\n      \"bathrooms\": 0,\n      \"bedType\": \"Single\",\n      \"amenities\": [\"Shared bathroom\", \"Reading nook\"]\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/vendor/properties?draft=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["vendor", "properties"],
+              "query": [
+                { "key": "draft", "value": "true" }
+              ]
+            },
+            "description": "HOMESTAY type — usually smaller (2-5 rooms), host lives onsite (`hostLivesOnsite: true`).\n\n**Key differences from HOTEL:**\n- No star rating (personal property)\n- Fewer amenities (WiFi + basics)\n- `hostLivesOnsite: true` shown as trust badge\n- Longer minStayNights (2+ typical)\n- More personal/informal messaging in description"
+          }
+        },
+        {
+          "name": "Create property — STUDIO (single small unit)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Modern Studio Apartment Goa\",\n  \"propertyType\": \"STUDIO\",\n  \"shortDescription\": \"Compact modern studio near Baga Beach — perfect for solo travelers or couples.\",\n  \"fullDescription\": \"Fully-furnished studio apartment 500m from Baga Beach. Includes a Queen bed, kitchenette, workspace, private bathroom, and balcony. Great for digital nomads, couples, or short business trips. Building has 24-hour security and elevator access.\",\n  \"city\": \"North Goa\",\n  \"state\": \"Goa\",\n  \"country\": \"India\",\n  \"address\": \"Baga Beach Road, Anjuna\",\n  \"landmark\": \"500m from Baga Beach\",\n  \"pincode\": \"403516\",\n  \"latitude\": 15.5533,\n  \"longitude\": 73.7515,\n  \"mainImage\": \"https://res.cloudinary.com/tripz/property-main/goa-studio.jpg\",\n  \"galleryImages\": [\n    \"https://res.cloudinary.com/tripz/property-gallery/studio-1.jpg\",\n    \"https://res.cloudinary.com/tripz/property-gallery/studio-2.jpg\"\n  ],\n  \"amenities\": [\"WiFi\", \"AC\", \"Kitchenette\", \"Workspace\", \"Balcony\", \"Elevator\", \"24hr Security\"],\n  \"houseRules\": [\"No smoking inside\", \"No parties\", \"Max 2 guests\"],\n  \"nearbyPlaces\": [\"Baga Beach - 500m\", \"Tito's Nightclub - 1km\", \"Anjuna Flea Market - 3km\"],\n  \"highlights\": [\"Beach nearby\", \"Fully equipped kitchen\", \"Workspace with fast WiFi\"],\n  \"totalBedrooms\": 1,\n  \"totalBathrooms\": 1,\n  \"hostLivesOnsite\": false,\n  \"checkInTime\": \"14:00\",\n  \"checkOutTime\": \"11:00\",\n  \"minStayNights\": 1,\n  \"contactPhone\": \"9876500002\",\n  \"rooms\": [\n    {\n      \"name\": \"Studio Apartment\",\n      \"description\": \"Whole studio — living area combined with sleeping area\",\n      \"category\": \"STUDIO\",\n      \"pricePerNight\": 2800,\n      \"maxGuests\": 2,\n      \"totalUnits\": 1,\n      \"bedrooms\": 1,\n      \"bathrooms\": 1,\n      \"bedType\": \"Queen\",\n      \"roomSizeSqft\": 380,\n      \"amenities\": [\"AC\", \"TV\", \"WiFi\", \"Kitchenette\", \"Workspace\", \"Balcony\"]\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/vendor/properties?draft=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["vendor", "properties"],
+              "query": [
+                { "key": "draft", "value": "true" }
+              ]
+            },
+            "description": "STUDIO type — compact single-unit apartment. Perfect for solo travelers, couples, digital nomads.\n\n**Key differences:**\n- Always 1 room entry with `totalUnits: 1`\n- Small `maxGuests` (usually 2)\n- Combined living + sleeping area\n- Focus on urban/short-stay amenities (kitchenette, workspace, WiFi)\n- Usually no minimum stay restriction"
+          }
+        },
+        {
+          "name": "Create property — RESORT (luxury multi-category)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Emerald Bay Resort & Spa\",\n  \"propertyType\": \"RESORT\",\n  \"shortDescription\": \"Beachfront 4-star resort with pool, spa, and private beach access.\",\n  \"fullDescription\": \"Emerald Bay Resort offers a full-service luxury experience: 3 pools, full-service spa, private beach access, 4 restaurants, adventure activities center, kids' club, and 24-hour concierge. 50 rooms across 4 categories including beachfront villas with plunge pools. Perfect for honeymoons, family vacations, and corporate retreats.\",\n  \"city\": \"South Goa\",\n  \"state\": \"Goa\",\n  \"country\": \"India\",\n  \"address\": \"Cavelossim Beach Road, Cavelossim\",\n  \"landmark\": \"Directly on Cavelossim Beach\",\n  \"pincode\": \"403731\",\n  \"latitude\": 15.1723,\n  \"longitude\": 73.9421,\n  \"mainImage\": \"https://res.cloudinary.com/tripz/property-main/emerald-resort.jpg\",\n  \"galleryImages\": [\n    \"https://res.cloudinary.com/tripz/property-gallery/resort-pool.jpg\",\n    \"https://res.cloudinary.com/tripz/property-gallery/resort-beach.jpg\",\n    \"https://res.cloudinary.com/tripz/property-gallery/resort-spa.jpg\",\n    \"https://res.cloudinary.com/tripz/property-gallery/resort-restaurant.jpg\",\n    \"https://res.cloudinary.com/tripz/property-gallery/resort-lobby.jpg\"\n  ],\n  \"amenities\": [\"WiFi\", \"AC\", \"3 Pools\", \"Full-service Spa\", \"Private Beach\", \"4 Restaurants\", \"Bar\", \"Kids Club\", \"Gym\", \"Water Sports\", \"Concierge\", \"Parking\", \"Airport Shuttle\"],\n  \"houseRules\": [\"Valid ID at check-in\", \"Pool towels available at reception\", \"Beach access via resort gate only\"],\n  \"nearbyPlaces\": [\"Cavelossim Beach - 0m (beachfront)\", \"Mobor Beach - 1km\", \"Dabolim Airport - 45km\"],\n  \"highlights\": [\"Beachfront location\", \"Full-service spa\", \"4 dining options\", \"Kids club\", \"Water sports\"],\n  \"starRating\": 4,\n  \"totalBedrooms\": 50,\n  \"totalBathrooms\": 50,\n  \"hostLivesOnsite\": false,\n  \"checkInTime\": \"14:00\",\n  \"checkOutTime\": \"12:00\",\n  \"minStayNights\": 2,\n  \"contactPhone\": \"9876500003\",\n  \"contactEmail\": \"reservations@emeraldbay.example.com\",\n  \"rooms\": [\n    {\n      \"name\": \"Garden View Room\",\n      \"category\": \"GARDEN_VIEW\",\n      \"pricePerNight\": 6500,\n      \"maxGuests\": 2,\n      \"totalUnits\": 20,\n      \"bedrooms\": 1,\n      \"bathrooms\": 1,\n      \"bedType\": \"King\",\n      \"roomSizeSqft\": 350,\n      \"amenities\": [\"AC\", \"TV\", \"Mini bar\", \"Garden view\", \"Balcony\"]\n    },\n    {\n      \"name\": \"Sea View Room\",\n      \"category\": \"SEA_VIEW\",\n      \"pricePerNight\": 9500,\n      \"maxGuests\": 2,\n      \"totalUnits\": 20,\n      \"bedrooms\": 1,\n      \"bathrooms\": 1,\n      \"bedType\": \"King\",\n      \"roomSizeSqft\": 400,\n      \"amenities\": [\"AC\", \"TV\", \"Mini bar\", \"Sea view\", \"Private balcony\"]\n    },\n    {\n      \"name\": \"Family Suite\",\n      \"category\": \"SUITE\",\n      \"pricePerNight\": 15000,\n      \"extraGuestFee\": 1500,\n      \"maxGuests\": 4,\n      \"totalUnits\": 8,\n      \"bedrooms\": 2,\n      \"bathrooms\": 2,\n      \"bedType\": \"1 King + 2 Twin\",\n      \"roomSizeSqft\": 750,\n      \"amenities\": [\"AC\", \"TV\", \"Mini bar\", \"Living area\", \"Sea view\", \"Kids amenities\"]\n    },\n    {\n      \"name\": \"Beachfront Villa with Plunge Pool\",\n      \"category\": \"VILLA\",\n      \"pricePerNight\": 25000,\n      \"maxGuests\": 4,\n      \"totalUnits\": 2,\n      \"bedrooms\": 2,\n      \"bathrooms\": 2,\n      \"bedType\": \"2 King\",\n      \"roomSizeSqft\": 1200,\n      \"amenities\": [\"AC\", \"TV\", \"Private plunge pool\", \"Direct beach access\", \"Butler service\"]\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/vendor/properties?draft=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["vendor", "properties"],
+              "query": [
+                { "key": "draft", "value": "true" }
+              ]
+            },
+            "description": "RESORT type — luxury multi-category property. Similar to HOTEL but with extensive amenities + higher price tier.\n\n**Key differences from HOTEL:**\n- Extensive amenity list (pool, spa, restaurants, activities, kids club)\n- Multiple room categories with wider price range (Garden View → Villa)\n- Villa-style top-tier rooms (single-unit within resort)\n- Higher star rating (typically 4-5)\n- Longer min stay (2-3 nights)\n- Focus on \"experience\" language in description"
+          }
+        },
+        {
+          "name": "Create property — GUEST_HOUSE (budget multi-room)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Backpackers Guest House Rishikesh\",\n  \"propertyType\": \"GUEST_HOUSE\",\n  \"shortDescription\": \"Budget-friendly guest house near Ganga ghats. Clean rooms, hot showers, common kitchen.\",\n  \"fullDescription\": \"Simple clean rooms for backpackers and budget travelers. Walking distance to Ram Jhula, Laxman Jhula, and yoga ashrams. Common kitchen, laundry service, rooftop chill area with mountain view. Free WiFi. English-speaking staff.\",\n  \"city\": \"Rishikesh\",\n  \"state\": \"Uttarakhand\",\n  \"country\": \"India\",\n  \"address\": \"Near Ram Jhula, Swarg Ashram\",\n  \"landmark\": \"Behind Parmarth Niketan\",\n  \"pincode\": \"249304\",\n  \"latitude\": 30.1108,\n  \"longitude\": 78.3110,\n  \"mainImage\": \"https://res.cloudinary.com/tripz/property-main/backpackers-rishikesh.jpg\",\n  \"galleryImages\": [\n    \"https://res.cloudinary.com/tripz/property-gallery/gh-room.jpg\",\n    \"https://res.cloudinary.com/tripz/property-gallery/gh-terrace.jpg\",\n    \"https://res.cloudinary.com/tripz/property-gallery/gh-kitchen.jpg\"\n  ],\n  \"amenities\": [\"WiFi\", \"Common Kitchen\", \"Laundry\", \"Rooftop\", \"Hot water\", \"Yoga Mat Rental\", \"Bicycle Rental\"],\n  \"houseRules\": [\"No alcohol\", \"No non-veg food\", \"Quiet hours 10 PM - 7 AM\", \"Shoes off in rooms\"],\n  \"nearbyPlaces\": [\"Ram Jhula - 200m\", \"Laxman Jhula - 1km\", \"Parmarth Niketan - 50m\", \"Beatles Ashram - 2km\"],\n  \"highlights\": [\"Walking distance to ghats\", \"Budget-friendly\", \"Yoga-friendly environment\"],\n  \"totalBedrooms\": 15,\n  \"totalBathrooms\": 10,\n  \"hostLivesOnsite\": true,\n  \"checkInTime\": \"11:00\",\n  \"checkOutTime\": \"10:00\",\n  \"minStayNights\": 1,\n  \"contactPhone\": \"9876500004\",\n  \"rooms\": [\n    {\n      \"name\": \"Dorm Bed (Mixed 6-bed)\",\n      \"description\": \"Bunk bed in shared 6-person dormitory. Shared bathroom.\",\n      \"category\": \"DORM\",\n      \"pricePerNight\": 400,\n      \"maxGuests\": 1,\n      \"totalUnits\": 12,\n      \"bedrooms\": 0,\n      \"bathrooms\": 0,\n      \"bedType\": \"Single Bunk\",\n      \"amenities\": [\"Locker\", \"Shared bathroom\", \"Reading light\"]\n    },\n    {\n      \"name\": \"Private Single Room\",\n      \"category\": \"PRIVATE_SINGLE\",\n      \"pricePerNight\": 900,\n      \"maxGuests\": 1,\n      \"totalUnits\": 5,\n      \"bedrooms\": 1,\n      \"bathrooms\": 1,\n      \"bedType\": \"Single\",\n      \"amenities\": [\"Attached bathroom\", \"Fan\", \"Window\"]\n    },\n    {\n      \"name\": \"Private Double Room\",\n      \"category\": \"PRIVATE_DOUBLE\",\n      \"pricePerNight\": 1400,\n      \"maxGuests\": 2,\n      \"totalUnits\": 8,\n      \"bedrooms\": 1,\n      \"bathrooms\": 1,\n      \"bedType\": \"Queen\",\n      \"amenities\": [\"Attached bathroom\", \"Fan\", \"Ganga view (some rooms)\"]\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/vendor/properties?draft=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["vendor", "properties"],
+              "query": [
+                { "key": "draft", "value": "true" }
+              ]
+            },
+            "description": "GUEST_HOUSE type — budget accommodation. Often includes dorm beds + private rooms.\n\n**Key differences from HOTEL:**\n- Budget pricing (₹300-₹2000 per night typical)\n- Dorm beds treated as room type with `totalUnits: <bed count>` and `maxGuests: 1`\n- Simpler amenities (WiFi, hot water, shared common areas)\n- Often has house rules around food/alcohol\n- May have host living onsite (backpacker family run)\n- Usually no star rating"
+          }
+        },
+        {
           "name": "List my properties",
           "request": {
             "method": "GET",
@@ -889,6 +969,48 @@
             "header": [],
             "url": { "raw": "{{baseUrl}}/vendor/properties/{{propertyId}}/rooms/{{roomId}}", "host": ["{{baseUrl}}"], "path": ["vendor", "properties", "{{propertyId}}", "rooms", "{{roomId}}"] },
             "description": "Hard delete a room. **Use with caution** — cascades will delete bookings referencing this room too.\n\nSafer: PATCH with `isActive: false` to hide without deleting."
+          }
+        },
+        {
+          "name": "Dashboard: Owner overview (across all properties)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/vendor/properties/dashboard/overview", "host": ["{{baseUrl}}"], "path": ["vendor", "properties", "dashboard", "overview"] },
+            "description": "Aggregate stats across all owner's properties. Perfect for the dashboard landing page.\n\n**Response:**\n```json\n{\n  \"properties\": {\n    \"total\": 3,\n    \"draft\": 1,\n    \"submitted\": 0,\n    \"approved\": 2,\n    \"rejected\": 0,\n    \"paused\": 0,\n    \"pendingReview\": 0\n  },\n  \"bookings\": {\n    \"todayArrivals\": 2,\n    \"todayDepartures\": 1,\n    \"upcomingNext7Days\": 8,\n    \"currentlyInStay\": 5\n  },\n  \"revenue\": {\n    \"thisMonthInPaise\": 12500000,\n    \"thisMonthBookingsCount\": 15,\n    \"awaitingPayoutInPaise\": 4500000,\n    \"awaitingPayoutCount\": 3,\n    \"paidOutThisMonthInPaise\": 8000000,\n    \"paidOutThisMonthCount\": 5\n  }\n}\n```"
+          }
+        },
+        {
+          "name": "Dashboard: Inventory summary (per property, date range)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/vendor/properties/{{propertyId}}/inventory-summary?fromDate=2026-12-01&toDate=2027-01-01",
+              "host": ["{{baseUrl}}"],
+              "path": ["vendor", "properties", "{{propertyId}}", "inventory-summary"],
+              "query": [
+                { "key": "fromDate", "value": "2026-12-01", "description": "YYYY-MM-DD, required" },
+                { "key": "toDate", "value": "2027-01-01", "description": "YYYY-MM-DD, exclusive, must be after fromDate" }
+              ]
+            },
+            "description": "Per-room occupancy stats for a date window. Great for the property detail page showing rooms with utilization %.\n\n**Response:**\n```json\n{\n  \"propertyId\": \"...\",\n  \"propertyTitle\": \"Kashmir Villa\",\n  \"period\": { \"from\": \"2026-12-01\", \"to\": \"2027-01-01\", \"nights\": 31 },\n  \"rooms\": [\n    {\n      \"roomId\": \"...\",\n      \"name\": \"AC Standard\",\n      \"totalUnits\": 20,\n      \"totalRoomNights\": 620,\n      \"bookedRoomNights\": 145,\n      \"occupancyPercent\": 23.4,\n      \"activeBookings\": 12,\n      \"estimatedRevenueInPaise\": 5075000\n    }\n  ],\n  \"overall\": {\n    \"totalRoomNights\": 1240,\n    \"bookedRoomNights\": 480,\n    \"occupancyPercent\": 38.7,\n    \"estimatedRevenueInPaise\": 12500000\n  }\n}\n```\n\n**Revenue is prorated** — if a booking straddles the window, only the overlapping portion of its total is counted."
+          }
+        },
+        {
+          "name": "Dashboard: Calendar view (per property, one month)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/vendor/properties/{{propertyId}}/calendar?month=2026-12",
+              "host": ["{{baseUrl}}"],
+              "path": ["vendor", "properties", "{{propertyId}}", "calendar"],
+              "query": [
+                { "key": "month", "value": "2026-12", "description": "YYYY-MM, required" }
+              ]
+            },
+            "description": "Day-by-day booking view for one month. Frontend renders as a calendar grid — color-code cells based on occupancy (green=free, yellow=partial, red=fully booked).\n\n**Response:**\n```json\n{\n  \"propertyId\": \"...\",\n  \"propertyTitle\": \"Kashmir Villa\",\n  \"month\": \"2026-12\",\n  \"days\": [\n    {\n      \"date\": \"2026-12-01\",\n      \"totalBookedUnits\": 8,\n      \"totalCapacity\": 32,\n      \"isFullyBooked\": false,\n      \"rooms\": [\n        {\n          \"roomId\": \"...\",\n          \"name\": \"AC Standard\",\n          \"totalUnits\": 20,\n          \"bookedUnits\": 5,\n          \"availableUnits\": 15,\n          \"bookings\": [\n            { \"id\": \"...\", \"guestName\": \"Aashna\", \"status\": \"CONFIRMED\" }\n          ]\n        }\n      ]\n    }\n  ]\n}\n```"
           }
         }
       ]

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { requireVendorType } from '../../middlewares/auth.middleware.js';
 import { validateRequest } from '../../middlewares/validation.middleware.js';
 import * as propertyController from '../../controllers/property.controller.js';
+import * as dashboardController from '../../controllers/propertyDashboard.controller.js';
 import {
   createPropertySchema,
   updatePropertySchema,
@@ -11,6 +12,8 @@ import {
   pausePropertyQuerySchema,
   roomInputSchema,
   roomUpdateSchema,
+  inventorySummaryQuerySchema,
+  calendarQuerySchema,
 } from '../../validators/property.validator.js';
 
 const router = Router();
@@ -34,8 +37,25 @@ router.get('/',
   propertyController.listMyProperties,
 );
 
+// ---- Dashboard endpoints (must come BEFORE /:id to avoid path collision) ----
+
+// GET /vendor/properties/dashboard/overview — aggregate stats across all my properties
+router.get('/dashboard/overview', dashboardController.getOwnerOverview);
+
 // GET /vendor/properties/:id
 router.get('/:id', propertyController.getMyPropertyDetail);
+
+// GET /vendor/properties/:id/inventory-summary?fromDate=&toDate=
+router.get('/:id/inventory-summary',
+  validateRequest(inventorySummaryQuerySchema, 'query'),
+  dashboardController.getInventorySummary,
+);
+
+// GET /vendor/properties/:id/calendar?month=YYYY-MM
+router.get('/:id/calendar',
+  validateRequest(calendarQuerySchema, 'query'),
+  dashboardController.getPropertyCalendar,
+);
 
 // PATCH /vendor/properties/:id?draft=true|false
 router.patch('/:id',

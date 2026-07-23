@@ -387,6 +387,27 @@ export const publicPropertiesQuerySchema = z.object({
   };
 });
 
+// ---- Dashboard queries (owner) ----
+
+// Inventory summary — date range required.
+export const inventorySummaryQuerySchema = z.object({
+  fromDate: dateOnly,
+  toDate:   dateOnly,
+})
+.strict()
+.refine((q) => q.toDate > q.fromDate, {
+  message: 'toDate must be after fromDate',
+  path: ['toDate'],
+})
+.transform((q) => ({ fromDate: q.fromDate, toDate: q.toDate }));
+
+// Calendar view — month required (YYYY-MM).
+export const calendarQuerySchema = z.object({
+  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'month must be in YYYY-MM format'),
+})
+.strict()
+.transform((q) => ({ month: q.month }));
+
 // ---- Public: availability check for a specific property ----
 // Given checkIn + checkOut + optional guests, returns which rooms are available
 // and the total price for the stay.

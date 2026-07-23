@@ -4,6 +4,10 @@ import { passwordResetOtpTemplate } from './templates/passwordResetOtp.template.
 import { passwordChangedNoticeTemplate } from './templates/passwordChangedNotice.template.js';
 import { vendorApprovedNoticeTemplate } from './templates/vendorApprovedNotice.template.js';
 import { vendorRejectedNoticeTemplate } from './templates/vendorRejectedNotice.template.js';
+import { bookingConfirmationGuestTemplate } from './templates/bookingConfirmationGuest.template.js';
+import { newBookingReceivedOwnerTemplate } from './templates/newBookingReceivedOwner.template.js';
+import { bookingCancelledGuestTemplate } from './templates/bookingCancelledGuest.template.js';
+import { bookingCancelledOwnerTemplate } from './templates/bookingCancelledOwner.template.js';
 import { env } from '../../config/env.js';
 
 export { verifyMailTransport } from './mailer.js';
@@ -38,5 +42,27 @@ export const sendVendorApprovedNotice = async ({ to, firstName, loginUrl }) => {
 
 export const sendVendorRejectedNotice = async ({ to, firstName, reason, loginUrl }) => {
   const { subject, html, text } = vendorRejectedNoticeTemplate({ firstName, reason, loginUrl });
+  return sendMail({ to, subject, html, text });
+};
+
+// ---- Property booking notifications ----
+
+export const sendBookingConfirmationToGuest = async ({ to, ...args }) => {
+  const { subject, html, text } = bookingConfirmationGuestTemplate(args);
+  return sendMail({ to, subject, html, text });
+};
+
+export const sendNewBookingReceivedToOwner = async ({ to, ...args }) => {
+  const { subject, html, text } = newBookingReceivedOwnerTemplate(args);
+  return sendMail({ to, subject, html, text });
+};
+
+export const sendBookingCancelledToGuest = async ({ to, ...args }) => {
+  const { subject, html, text } = bookingCancelledGuestTemplate(args);
+  return sendMail({ to, subject, html, text });
+};
+
+export const sendBookingCancelledToOwner = async ({ to, ...args }) => {
+  const { subject, html, text } = bookingCancelledOwnerTemplate(args);
   return sendMail({ to, subject, html, text });
 };

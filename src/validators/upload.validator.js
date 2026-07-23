@@ -11,10 +11,13 @@ export const UPLOAD_PURPOSES = [
   'header_logo',
   'package-main', // Package cover image
   'package-gallery', // Package gallery images (multiple per package)
-  'destination-guide', 
+  'destination-guide',
   'destination-gallery',
   'story-image',
   'story-gallery',
+  'property-main', // Property main/cover image (marketplace card)
+  'property-gallery', // Property gallery images (multiple per property)
+  'property-room', // Per-room images (AC/Deluxe/Suite/etc.)
   'other',
 ];
 
