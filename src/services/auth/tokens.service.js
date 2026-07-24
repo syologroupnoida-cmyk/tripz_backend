@@ -72,8 +72,19 @@ export const refreshTokens = async (incomingRefreshToken) => {
     );
   }
 
-  const newAccessToken = signAccessToken(buildAccessPayload(user));
-  const { token: newRefreshToken } = signRefreshToken(buildRefreshPayload(user));
+  // For vendors, fetch vendorType from VendorProfile so it lands in the new
+  // access token — otherwise requireVendorType middleware sees undefined and
+  // fails all vendor-type-gated routes after every refresh.
+  const vendorProfile =
+    user.role === 'VENDOR' ? await kycRepo.findVendorKycStatus(user.id) : null;
+
+  const payloadUser =
+    user.role === 'VENDOR'
+      ? { ...user, vendorType: vendorProfile?.vendorType ?? 'TRAVEL_AGENT' }
+      : user;
+
+  const newAccessToken = signAccessToken(buildAccessPayload(payloadUser));
+  const { token: newRefreshToken } = signRefreshToken(buildRefreshPayload(payloadUser));
   const decoded = jwt.decode(newRefreshToken);
   const newExpiresAt = new Date(decoded.exp * 1000);
 

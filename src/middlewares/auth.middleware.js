@@ -96,26 +96,14 @@ export const requireVendorType = (...allowedTypes) => {
     throw new Error('requireVendorType: at least one vendor type is required.');
   }
   return (req, _res, next) => {
-    console.log('\n=== requireVendorType Middleware Triggered ===');
-    console.log('Target Allowed Types:', allowedTypes);
-    
-
-    console.log('Current req.user:', JSON.stringify(req.user, null, 2));
-
     if (!req.user) {
-      console.error('FAILED: req.user is completely missing.');
       return next(ApiError.unauthorized('Authentication required.'));
     }
     if (req.user.role !== 'VENDOR') {
-      console.error(`FAILED: Role mismatch. Expected 'VENDOR', got '${req.user.role}'`);
       return next(ApiError.forbidden('This action is available to vendors only.'));
     }
-
-    const currentVendorType = req.user.vendorType;
-    console.log(`Checking vendorType: "${currentVendorType}" (Type: ${typeof currentVendorType})`);
     if (!allowedTypes.includes(req.user.vendorType)) {
-      console.error(' FAILED: VENDOR_TYPE_MISMATCH');
-      console.error(`Reason: The array [${allowedTypes.join(', ')}] does not include "${currentVendorType}"`);
+      console.log('this is the vendorType', req.user.vendorType)
       return next(
         ApiError.forbidden(
           `Access denied. This action requires vendor type: ${allowedTypes.join(' or ')}.`,
