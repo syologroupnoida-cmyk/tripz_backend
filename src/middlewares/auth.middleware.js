@@ -103,6 +103,7 @@ export const requireVendorType = (...allowedTypes) => {
       return next(ApiError.forbidden('This action is available to vendors only.'));
     }
     if (!allowedTypes.includes(req.user.vendorType)) {
+      console.log(req.user.vendorType)
       return next(
         ApiError.forbidden(
           `Access denied. This action requires vendor type: ${allowedTypes.join(' or ')}.`,
