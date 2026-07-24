@@ -114,7 +114,7 @@ export const requireVendorType = (...allowedTypes) => {
     const currentVendorType = req.user.vendorType;
     console.log(`Checking vendorType: "${currentVendorType}" (Type: ${typeof currentVendorType})`);
     if (!allowedTypes.includes(req.user.vendorType)) {
-      console.error('❌ FAILED: VENDOR_TYPE_MISMATCH');
+      console.error(' FAILED: VENDOR_TYPE_MISMATCH');
       console.error(`Reason: The array [${allowedTypes.join(', ')}] does not include "${currentVendorType}"`);
       return next(
         ApiError.forbidden(
