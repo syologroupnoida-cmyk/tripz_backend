@@ -343,17 +343,33 @@
               "host": ["{{baseUrl}}"],
               "path": ["admin", "packages"],
               "query": [
-                { "key": "status", "value": "SUBMITTED" },
+                { "key": "status", "value": "SUBMITTED", "description": "DRAFT | SUBMITTED | APPROVED | REJECTED | PAUSED" },
                 { "key": "page", "value": "0" },
                 { "key": "size", "value": "20" },
-                { "key": "destination", "value": "Kashmir", "disabled": true },
-                { "key": "vendorUserId", "value": "{{vendorId}}", "disabled": true },
-                { "key": "hasPendingReview", "value": "true", "disabled": true, "description": "APPROVED packages that were edited" },
-                { "key": "sortBy", "value": "submittedAt", "disabled": true },
-                { "key": "order", "value": "asc", "disabled": true }
+                { "key": "hasPendingReview", "value": "true", "disabled": true, "description": "APPROVED packages that were edited post-approval" },
+                { "key": "vendorUserId", "value": "{{vendorId}}", "disabled": true, "description": "Filter by specific vendor" },
+                { "key": "agencyName", "value": "Wanderlust", "disabled": true, "description": "Case-insensitive contains on agencyName snapshot" },
+                { "key": "destination", "value": "Kashmir", "disabled": true, "description": "Case-insensitive contains" },
+                { "key": "packageRegion", "value": "NATIONAL", "disabled": true, "description": "NATIONAL | INTERNATIONAL" },
+                { "key": "packageType", "value": "FAMILY", "disabled": true, "description": "HONEYMOON | FAMILY | HOLIDAY | COUPLE | SOLO | GROUP | ADVENTURE | RELIGIOUS | BEACH | HILL_STATION | WILDLIFE | CULTURAL | CORPORATE | NATURE | WATERACTIVITY | OTHER" },
+                { "key": "validityType", "value": "EVERGREEN", "disabled": true, "description": "EVERGREEN | SEASONAL" },
+                { "key": "duration", "value": "4N", "disabled": true, "description": "Case-insensitive contains — '4N' matches '4N/2D', '4N/3D', etc." },
+                { "key": "hotelCategory", "value": "4 star", "disabled": true, "description": "Case-insensitive contains" },
+                { "key": "search", "value": "kashmir", "disabled": true, "description": "Case-insensitive contains on title OR overview" },
+                { "key": "minPrice", "value": "1000", "disabled": true, "description": "Rupees (backend converts to paise)" },
+                { "key": "maxPrice", "value": "50000", "disabled": true, "description": "Rupees" },
+                { "key": "createdFrom", "value": "2026-01-01", "disabled": true, "description": "YYYY-MM-DD — createdAt >= this" },
+                { "key": "createdTo", "value": "2026-12-31", "disabled": true, "description": "YYYY-MM-DD — createdAt <= this" },
+                { "key": "submittedFrom", "value": "2026-06-01", "disabled": true, "description": "YYYY-MM-DD — submittedAt >= this" },
+                { "key": "submittedTo", "value": "2026-06-30", "disabled": true, "description": "YYYY-MM-DD — submittedAt <= this" },
+                { "key": "activeOn", "value": "2026-12-25", "disabled": true, "description": "YYYY-MM-DD — SEASONAL packages whose window covers this single date" },
+                { "key": "validFrom", "value": "2026-11-01", "disabled": true, "description": "YYYY-MM-DD — SEASONAL packages starting on/after this" },
+                { "key": "validTo", "value": "2026-12-31", "disabled": true, "description": "YYYY-MM-DD — SEASONAL packages ending on/before this" },
+                { "key": "sortBy", "value": "submittedAt", "disabled": true, "description": "createdAt | updatedAt | submittedAt | reviewedAt | title | priceInPaise" },
+                { "key": "order", "value": "desc", "disabled": true, "description": "asc | desc" }
               ]
             },
-            "description": "**status values:** DRAFT / SUBMITTED / APPROVED / REJECTED / PAUSED\n\n**sortBy:** `createdAt` | `updatedAt` | `submittedAt` | `reviewedAt` | `title`\n\nResponse includes each package's owning vendor's user info."
+            "description": "Admin moderation queue with **full filter support**. Enable any combination of query params.\n\n**Filter groups:**\n\n**Lifecycle / workflow:**\n- `status` — one of DRAFT / SUBMITTED / APPROVED / REJECTED / PAUSED\n- `hasPendingReview` — APPROVED packages edited post-approval (needing re-review)\n\n**Ownership:**\n- `vendorUserId` — filter by specific vendor\n- `agencyName` — case-insensitive contains on agency name\n\n**Content:**\n- `destination` — contains\n- `packageRegion` — NATIONAL / INTERNATIONAL\n- `packageType` — one of the enum values\n- `validityType` — EVERGREEN / SEASONAL\n- `duration` — contains (e.g., '4N' matches '4N/2D')\n- `hotelCategory` — contains (e.g., '4 star')\n- `search` — free text on title + overview\n\n**Price range (rupees, backend → paise):**\n- `minPrice` / `maxPrice`\n\n**Date ranges (YYYY-MM-DD):**\n- `createdFrom` / `createdTo`\n- `submittedFrom` / `submittedTo`\n\n**Seasonal validity window (YYYY-MM-DD):**\n- `activeOn` — packages whose window covers this single date\n- `validFrom` / `validTo` — packages within a date range\n\n**Sort:** `createdAt` | `updatedAt` | `submittedAt` | `reviewedAt` | `title` | `priceInPaise`\n\nResponse includes each package's owning vendor's user + vendor profile info."
           }
         },
         {

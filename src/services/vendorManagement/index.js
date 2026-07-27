@@ -82,6 +82,8 @@ export const listVendors = async (query) => {
     emailVerifiedAt: profile.user.emailVerifiedAt,
     createdAt: profile.user.createdAt,
     kycStatus: profile.kycStatus,
+    userRole: profile.user.role,
+    vendorType: profile.vendorType,
     companyName: profile.kyc?.companyName ?? null,
     businessName: profile.kyc?.businessName ?? null,
     country: profile.kyc?.country ?? null,

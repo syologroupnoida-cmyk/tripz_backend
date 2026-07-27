@@ -607,24 +607,94 @@ export const listVendorPackagesQuerySchema = z
   }));
 
 // Admin list — status + destination + vendor + review-pending filter.
+// ISO date helper for admin range filters (createdAt, submittedAt, etc.)
+const isoDateOptional = z.string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format')
+  .optional()
+  .transform((s) => (s ? new Date(`${s}T00:00:00.000Z`) : undefined));
+
+// Rupees → paise (optional). Returns undefined for empty string too, so
+// disabled/blank Postman params don't accidentally coerce to 0.
+const rupeesToPaiseOptional = z
+  .union([z.string(), z.number()])
+  .optional()
+  .transform((v) => {
+    if (v === undefined || v === null || v === '') return undefined;
+    const n = typeof v === 'string' ? Number(v) : v;
+    return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) : undefined;
+  });
+
 export const listAdminPackagesQuerySchema = z
   .object({
     ...paginatedBase,
-    status: packageStatusEnum.optional(),
-    destination: z.string().trim().max(120).optional(),
+    // Lifecycle + workflow filters
+    status:            packageStatusEnum.optional(),
+    hasPendingReview:  stringBool,
+
+    // Ownership
     vendorUserId: z.string().max(80).optional(),
-    hasPendingReview: stringBool,
+    agencyName:   z.string().trim().max(200).optional(), // Snapshot on package
+
+    // Content filters (enum + free-text)
+    destination:   z.string().trim().max(120).optional(),
+    packageRegion: packageRegionEnum.optional(),
+    packageType:   packageTypeEnum.optional(),
+    validityType:  validityTypeEnum.optional(),
+    duration:      z.string().trim().max(60).optional(),
+    hotelCategory: z.string().trim().max(40).optional(),
+
+    // Full-text-ish search on title + overview
+    search: z.string().trim().max(200).optional(),
+
+    // Price range (in rupees; backend converts to paise)
+    minPrice: rupeesToPaiseOptional,
+    maxPrice: rupeesToPaiseOptional,
+
+    // Creation / submission date range
+    createdFrom:  isoDateOptional,
+    createdTo:    isoDateOptional,
+    submittedFrom: isoDateOptional,
+    submittedTo:   isoDateOptional,
+
+    // Seasonal package validity window overlap check
+    activeOn:   isoDateOptional, // A single date — packages whose window covers this
+    validFrom:  isoDateOptional, // Range window — pkg.startDate ≥ this
+    validTo:    isoDateOptional, // Range window — pkg.endDate ≤ this
+
     sortBy: z
-      .enum(['createdAt', 'updatedAt', 'submittedAt', 'reviewedAt', 'title'])
+      .enum(['createdAt', 'updatedAt', 'submittedAt', 'reviewedAt', 'title', 'priceInPaise'])
       .optional()
       .default('submittedAt'),
   })
   .strict()
   .transform((q) => ({
     status: q.status,
-    destination: q.destination,
-    vendorUserId: q.vendorUserId,
     hasPendingReview: q.hasPendingReview,
+
+    vendorUserId: q.vendorUserId,
+    agencyName: q.agencyName,
+
+    destination: q.destination,
+    packageRegion: q.packageRegion,
+    packageType: q.packageType,
+    validityType: q.validityType,
+    duration: q.duration,
+    hotelCategory: q.hotelCategory,
+
+    search: q.search,
+
+    minPriceInPaise: q.minPrice,
+    maxPriceInPaise: q.maxPrice,
+
+    createdFrom: q.createdFrom,
+    createdTo: q.createdTo,
+    submittedFrom: q.submittedFrom,
+    submittedTo: q.submittedTo,
+
+    activeOn: q.activeOn,
+    validFrom: q.validFrom,
+    validTo: q.validTo,
+
     sortBy: q.sortBy,
     order: q.order,
     ...pagingTransform(q),

@@ -175,19 +175,84 @@ export const listPackagesForVendor = async ({
 // -----------------------------------------------------------------------------
 export const listPackagesForAdmin = async ({
   status,
-  destination,
-  vendorUserId,
   hasPendingReview,
+  vendorUserId,
+  agencyName,
+  destination,
+  packageRegion,
+  packageType,
+  validityType,
+  duration,
+  hotelCategory,
+  search,
+  minPriceInPaise,
+  maxPriceInPaise,
+  createdFrom,
+  createdTo,
+  submittedFrom,
+  submittedTo,
+  activeOn,
+  validFrom,
+  validTo,
   sortBy,
   order,
   take,
   skip,
 }) => {
   const where = { deletedAt: null };
+
+  // Lifecycle + workflow
   if (status) where.status = status;
-  if (destination) where.destination = { contains: destination, mode: 'insensitive' };
-  if (vendorUserId) where.vendorUserId = vendorUserId;
   if (typeof hasPendingReview === 'boolean') where.hasPendingReview = hasPendingReview;
+
+  // Ownership
+  if (vendorUserId) where.vendorUserId = vendorUserId;
+  if (agencyName) where.agencyName = { contains: agencyName, mode: 'insensitive' };
+
+  // Enum filters
+  if (packageRegion) where.packageRegion = packageRegion;
+  if (packageType) where.packageType = packageType;
+  if (validityType) where.validityType = validityType;
+
+  // Free-text contains filters
+  if (destination) where.destination = { contains: destination, mode: 'insensitive' };
+  if (duration) where.duration = { contains: duration, mode: 'insensitive' };
+  if (hotelCategory) where.hotelCategory = { contains: hotelCategory, mode: 'insensitive' };
+  if (search) {
+    where.OR = [
+      { title: { contains: search, mode: 'insensitive' } },
+      { overview: { contains: search, mode: 'insensitive' } },
+    ];
+  }
+
+  // Price range
+  if (minPriceInPaise !== undefined || maxPriceInPaise !== undefined) {
+    where.priceInPaise = {};
+    if (minPriceInPaise !== undefined) where.priceInPaise.gte = minPriceInPaise;
+    if (maxPriceInPaise !== undefined) where.priceInPaise.lte = maxPriceInPaise;
+  }
+
+  // Timestamp ranges
+  if (createdFrom || createdTo) {
+    where.createdAt = {};
+    if (createdFrom) where.createdAt.gte = createdFrom;
+    if (createdTo) where.createdAt.lte = createdTo;
+  }
+  if (submittedFrom || submittedTo) {
+    where.submittedAt = {};
+    if (submittedFrom) where.submittedAt.gte = submittedFrom;
+    if (submittedTo) where.submittedAt.lte = submittedTo;
+  }
+
+  // Seasonal validity window filters
+  //   activeOn — package's window contains this single date
+  //   validFrom / validTo — window falls entirely within this range
+  if (activeOn) {
+    where.startDate = { lte: activeOn };
+    where.endDate = { gte: activeOn };
+  }
+  if (validFrom) where.startDate = { ...(where.startDate ?? {}), gte: validFrom };
+  if (validTo) where.endDate = { ...(where.endDate ?? {}), lte: validTo };
 
   const [items, total] = await Promise.all([
     prisma.package.findMany({

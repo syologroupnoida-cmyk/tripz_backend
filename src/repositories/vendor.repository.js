@@ -5,6 +5,7 @@ const VENDOR_USER_LIST_SELECT = {
   id: true,
   firstName: true,
   lastName: true,
+  role: true,
   email: true,
   phone: true,
   isActive: true,
