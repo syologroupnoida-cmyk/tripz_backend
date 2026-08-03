@@ -1,21 +1,19 @@
 import prisma from '../config/db.js';
 import { ApiError } from '../utils/ApiError.js';
 
-// Fields returned in booking responses. Includes property + room + minimal owner info.
+// Fields returned in booking responses. Includes property + items (each with
+// its own room details) + minimal owner info.
 const BOOKING_SELECT = {
   id: true,
   guestUserId: true,
   propertyId: true,
-  roomId: true,
   guestName: true,
   guestPhone: true,
   guestEmail: true,
   numGuests: true,
-  unitsBooked: true,
   checkIn: true,
   checkOut: true,
   nights: true,
-  pricePerNightInPaise: true,
   totalAmountInPaise: true,
   status: true,
   paymentStatus: true,
@@ -41,15 +39,24 @@ const BOOKING_SELECT = {
       ownerUserId: true,
     },
   },
-  room: {
+  items: {
+    orderBy: { createdAt: 'asc' },
     select: {
-      id: true, name: true, category: true,
-      pricePerNightInPaise: true, maxGuests: true,
+      id: true,
+      roomId: true,
+      unitsBooked: true,
+      pricePerNightInPaise: true,
+      subtotalInPaise: true,
+      room: {
+        select: {
+          id: true, name: true, category: true,
+          pricePerNightInPaise: true, maxGuests: true, totalUnits: true,
+        },
+      },
     },
   },
 };
 
-// Extended select for admin — attaches owner user info too.
 const ADMIN_BOOKING_SELECT = {
   ...BOOKING_SELECT,
   property: {
@@ -72,71 +79,82 @@ const ADMIN_BOOKING_SELECT = {
 
 // ---- Availability primitive ----
 // Sum of units already booked for a room over an overlapping window.
-// Runs inside a transaction — see createBookingSafely.
+// Aggregates ACROSS PropertyBookingItem — a booking may have multiple items,
+// we only count those matching the requested room.
 export const countBookedUnitsForRoomTx = async (tx, { roomId, checkIn, checkOut }) => {
-  const result = await tx.propertyBooking.aggregate({
+  const result = await tx.propertyBookingItem.aggregate({
     where: {
       roomId,
-      status: { in: ['CONFIRMED', 'CHECKED_IN'] },
-      checkOut: { gt: checkIn },
-      checkIn:  { lt: checkOut },
+      booking: {
+        status: { in: ['CONFIRMED', 'CHECKED_IN'] },
+        checkOut: { gt: checkIn },
+        checkIn:  { lt: checkOut },
+      },
     },
     _sum: { unitsBooked: true },
   });
   return result._sum.unitsBooked ?? 0;
 };
 
-// ---- Atomic booking creation with overbooking protection ----
-// Two concurrent bookings for the same room could both pass a naive availability
-// check and both succeed. Wrapping in a transaction with a fresh availability
-// query INSIDE the transaction closes the race window.
-//
-// Note: this alone doesn't lock the row — under high concurrency you may want
-// Serializable isolation or SELECT FOR UPDATE. For MVP volume this is enough.
+// Non-transaction version for public availability check + dashboard queries.
+export const countBookedUnitsForRoom = async ({ roomId, checkIn, checkOut }) =>
+  countBookedUnitsForRoomTx(prisma, { roomId, checkIn, checkOut });
+
+// ---- Atomic multi-room booking creation ----
+// Given a property + array of { room, unitsBooked }, checks EACH room's
+// availability inside a single transaction, then creates the booking + all
+// items atomically. Any single room short → whole booking rolls back.
 export const createBookingSafely = async ({
-  guestUserId, property, room,
+  guestUserId, property,
+  itemsResolved, // [{ room, unitsBooked }]
   checkIn, checkOut, nights,
-  numGuests, unitsBooked,
+  numGuests,
   guestName, guestPhone, guestEmail, specialRequests,
 }) => {
-  const pricePerNightInPaise = room.pricePerNightInPaise;
-  const totalAmountInPaise = pricePerNightInPaise * nights * unitsBooked;
-
   return prisma.$transaction(async (tx) => {
-    // Fresh availability check inside the transaction.
-    const bookedUnits = await countBookedUnitsForRoomTx(tx, {
-      roomId: room.id,
-      checkIn,
-      checkOut,
-    });
-    const availableUnits = room.totalUnits - bookedUnits;
-
-    if (availableUnits < unitsBooked) {
-      throw new ApiError(409, 'Not enough rooms available for the selected dates.', {
-        code: 'INSUFFICIENT_AVAILABILITY',
-        requested: unitsBooked,
-        available: availableUnits,
+    // 1. Availability check for every requested room
+    for (const { room, unitsBooked } of itemsResolved) {
+      const bookedUnits = await countBookedUnitsForRoomTx(tx, {
+        roomId: room.id,
+        checkIn,
+        checkOut,
       });
+      const available = room.totalUnits - bookedUnits;
+      if (available < unitsBooked) {
+        throw new ApiError(409, `Not enough rooms available for "${room.name}".`, {
+          code: 'INSUFFICIENT_AVAILABILITY',
+          roomId: room.id,
+          roomName: room.name,
+          requested: unitsBooked,
+          available,
+        });
+      }
     }
 
+    // 2. Compute totals + build items payload
+    const itemsToCreate = itemsResolved.map(({ room, unitsBooked }) => ({
+      roomId: room.id,
+      unitsBooked,
+      pricePerNightInPaise: room.pricePerNightInPaise,
+      subtotalInPaise: room.pricePerNightInPaise * nights * unitsBooked,
+    }));
+    const totalAmountInPaise = itemsToCreate.reduce(
+      (sum, i) => sum + i.subtotalInPaise, 0,
+    );
+
+    // 3. Create booking with nested items
     return tx.propertyBooking.create({
       data: {
         guestUserId,
         propertyId: property.id,
-        roomId: room.id,
-        guestName,
-        guestPhone,
-        guestEmail,
+        guestName, guestPhone, guestEmail,
         numGuests,
-        unitsBooked,
-        checkIn,
-        checkOut,
-        nights,
-        pricePerNightInPaise,
+        checkIn, checkOut, nights,
         totalAmountInPaise,
         status: 'CONFIRMED',
-        paymentStatus: 'PENDING', // No payment gateway yet — MVP
+        paymentStatus: 'PENDING', // MVP — payment gateway not integrated yet
         specialRequests: specialRequests ?? null,
+        items: { create: itemsToCreate },
       },
       select: BOOKING_SELECT,
     });

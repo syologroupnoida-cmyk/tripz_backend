@@ -1098,7 +1098,7 @@
       "description": "Guest-facing booking flow. CLIENT role required.\n\n**No payment gateway yet (MVP)** — booking goes directly to `CONFIRMED` status. Inventory is blocked immediately. `paymentStatus` defaults to `PENDING` until Razorpay integrated later.\n\n**Booking lifecycle:**\n`CONFIRMED` → `CHECKED_IN` (owner marks) → `COMPLETED` (owner marks after checkout)\n\nAlternate paths:\n`CONFIRMED` → `CANCELLED` (guest cancels before check-in)\n`CONFIRMED` → `NO_SHOW` (owner marks after check-in date passes)",
       "item": [
         {
-          "name": "Create booking",
+          "name": "Create booking (single room type)",
           "event": [
             {
               "listen": "test",
@@ -1119,10 +1119,38 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"propertyId\": \"{{propertyId}}\",\n  \"roomId\": \"{{roomId}}\",\n  \"checkIn\": \"2026-12-25\",\n  \"checkOut\": \"2026-12-28\",\n  \"numGuests\": 4,\n  \"unitsBooked\": 1,\n  \"guestName\": \"Aashna Sharma\",\n  \"guestPhone\": \"9876543210\",\n  \"guestEmail\": \"aashna@example.com\",\n  \"specialRequests\": \"Early check-in if possible; family with kids\"\n}"
+              "raw": "{\n  \"propertyId\": \"{{propertyId}}\",\n  \"checkIn\": \"2026-12-25\",\n  \"checkOut\": \"2026-12-28\",\n  \"numGuests\": 4,\n  \"items\": [\n    { \"roomId\": \"{{roomId}}\", \"unitsBooked\": 1 }\n  ],\n  \"guestName\": \"Aashna Sharma\",\n  \"guestPhone\": \"9876543210\",\n  \"guestEmail\": \"aashna@example.com\",\n  \"specialRequests\": \"Early check-in if possible; family with kids\"\n}"
             },
             "url": { "raw": "{{baseUrl}}/client/property-bookings", "host": ["{{baseUrl}}"], "path": ["client", "property-bookings"] },
-            "description": "**Atomic booking creation** — runs inside DB transaction with overbooking protection.\n\n**Validation rules:**\n- checkIn must be today or future\n- checkOut must be after checkIn\n- numGuests <= room.maxGuests × unitsBooked\n- nights >= property.minStayNights\n- Property must be APPROVED, room must be active\n\n**Total price auto-calculated:** `room.pricePerNightInPaise × nights × unitsBooked` (snapshotted at booking time — later price changes don't affect this booking).\n\n**Status:** CONFIRMED immediately (no payment step in MVP).\n\n**Errors:**\n- 400 `GUEST_COUNT_EXCEEDS_CAPACITY` — too many guests for selected units\n- 400 `MIN_STAY_NOT_MET` — nights < property min stay\n- 404 — property/room not found or inactive\n- 409 `INSUFFICIENT_AVAILABILITY` — not enough rooms available (returns `requested` + `available`)\n\n**Side effect:** Auto-saves `bookingId`."
+            "description": "**Multi-room booking model** — every booking has `items[]` array. This request books just ONE room type (single item).\n\n**Atomic booking creation** — DB transaction checks EACH item's availability before insert. If ANY room is short → whole booking rolls back with `409 INSUFFICIENT_AVAILABILITY` (response includes which room + how many available).\n\n**Validation rules:**\n- checkIn must be today or future\n- checkOut must be after checkIn\n- All items[].roomId must exist under this property + be active\n- items[] must not repeat the same roomId twice\n- Total capacity across all items >= numGuests\n- nights >= property.minStayNights\n- Property must be APPROVED\n\n**Total price auto-calculated:** `SUM(item.pricePerNight × nights × item.unitsBooked)` — snapshotted at booking time.\n\n**Status:** CONFIRMED immediately (no payment step in MVP).\n\n**Errors:**\n- 400 `GUEST_COUNT_EXCEEDS_CAPACITY` — total capacity too low\n- 400 `MIN_STAY_NOT_MET` — nights < property min stay\n- 400 duplicate roomId in items\n- 404 — property or one of the rooms not found/inactive\n- 409 `INSUFFICIENT_AVAILABILITY` — includes `roomId`, `roomName`, `requested`, `available`\n\n**Side effect:** Auto-saves `bookingId`."
+          }
+        },
+        {
+          "name": "Create booking (multi-room: 1 AC + 2 Non-AC)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.id) {",
+                  "  pm.environment.set('bookingId', res.data.id);",
+                  "  console.log('Auto-saved multi-room bookingId:', res.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"propertyId\": \"{{propertyId}}\",\n  \"checkIn\": \"2026-12-25\",\n  \"checkOut\": \"2026-12-28\",\n  \"numGuests\": 6,\n  \"items\": [\n    { \"roomId\": \"{{acRoomId}}\", \"unitsBooked\": 1 },\n    { \"roomId\": \"{{nonAcRoomId}}\", \"unitsBooked\": 2 }\n  ],\n  \"guestName\": \"Rahul Family\",\n  \"guestPhone\": \"9876500123\",\n  \"guestEmail\": \"rahul@example.com\",\n  \"specialRequests\": \"Adjacent rooms preferred; family with grandparents\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/client/property-bookings", "host": ["{{baseUrl}}"], "path": ["client", "property-bookings"] },
+            "description": "**Multi-room booking example** — books 1 AC + 2 Non-AC rooms in a single booking.\n\n**How this differs from single-room:** just add more entries to `items[]`. Backend:\n1. Fetches all rooms in one query\n2. Inside DB transaction, checks availability for each room\n3. If ALL available → creates booking + N item rows atomically\n4. If ANY short → whole booking rolls back (no orphan items)\n\n**Response includes items[] array:**\n```json\n{\n  \"id\": \"bk-...\",\n  \"totalAmountInPaise\": 2250000,\n  \"nights\": 3,\n  \"items\": [\n    {\n      \"roomId\": \"...\",\n      \"unitsBooked\": 1,\n      \"pricePerNightInPaise\": 350000,\n      \"subtotalInPaise\": 1050000,\n      \"room\": { \"name\": \"AC Standard\", ... }\n    },\n    {\n      \"roomId\": \"...\",\n      \"unitsBooked\": 2,\n      \"pricePerNightInPaise\": 200000,\n      \"subtotalInPaise\": 1200000,\n      \"room\": { \"name\": \"Non-AC Standard\", ... }\n    }\n  ]\n}\n```\n\n**Setup:** save `acRoomId` + `nonAcRoomId` as environment variables from the HOTEL property's rooms array (visible in `GET /vendor/properties/:id`)."
           }
         },
         {

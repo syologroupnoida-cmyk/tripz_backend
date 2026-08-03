@@ -11,9 +11,12 @@ const sendEmailQuietly = (label, promise) => {
   });
 };
 
-// ---- GUEST: create booking ----
+// ---- GUEST: create booking (multi-room support) ----
+// Accepts data.items = [{ roomId, unitsBooked }, ...]. Backend resolves rooms,
+// validates capacity + min-stay, then does atomic transaction with per-room
+// availability checks. Any single room short → whole booking rolls back.
 export const createBooking = async ({ guestUserId, data }) => {
-  // 1. Fetch property + room together — validate both exist, are active/approved
+  // 1. Fetch property — must exist, be APPROVED
   const property = await prisma.property.findFirst({
     where: { id: data.propertyId, deletedAt: null, status: 'APPROVED' },
     select: {
@@ -25,27 +28,45 @@ export const createBooking = async ({ guestUserId, data }) => {
     throw ApiError.notFound('Property not found or not available for booking.');
   }
 
-  const room = await prisma.propertyRoom.findFirst({
-    where: { id: data.roomId, propertyId: data.propertyId, isActive: true },
+  // 2. Fetch all requested rooms in one query
+  const roomIds = data.items.map((i) => i.roomId);
+  const rooms = await prisma.propertyRoom.findMany({
+    where: { id: { in: roomIds }, propertyId: data.propertyId, isActive: true },
     select: {
       id: true, name: true, pricePerNightInPaise: true,
       maxGuests: true, totalUnits: true,
     },
   });
-  if (!room) {
-    throw ApiError.notFound('Room not found or is inactive.');
-  }
 
-  // 2. Business rules
-  const totalCapacity = room.maxGuests * data.unitsBooked;
-  if (data.numGuests > totalCapacity) {
-    throw new ApiError(400,
-      `Number of guests (${data.numGuests}) exceeds capacity ` +
-      `(${room.maxGuests} per room × ${data.unitsBooked} rooms = ${totalCapacity}).`,
-      { code: 'GUEST_COUNT_EXCEEDS_CAPACITY' },
+  // Verify every requested roomId was found (missing/inactive/wrong property)
+  const foundRoomIds = new Set(rooms.map((r) => r.id));
+  const missingIds = roomIds.filter((id) => !foundRoomIds.has(id));
+  if (missingIds.length > 0) {
+    throw ApiError.notFound(
+      `One or more rooms not found or are inactive: ${missingIds.join(', ')}`,
     );
   }
 
+  // 3. Resolve items — pair each item with its full room record
+  const roomsById = new Map(rooms.map((r) => [r.id, r]));
+  const itemsResolved = data.items.map((i) => ({
+    room: roomsById.get(i.roomId),
+    unitsBooked: i.unitsBooked,
+  }));
+
+  // 4. Business rules
+  // 4a. Total capacity across all items must accommodate all guests
+  const totalCapacity = itemsResolved.reduce(
+    (sum, { room, unitsBooked }) => sum + room.maxGuests * unitsBooked, 0,
+  );
+  if (data.numGuests > totalCapacity) {
+    throw new ApiError(400,
+      `Number of guests (${data.numGuests}) exceeds total capacity (${totalCapacity} across selected rooms).`,
+      { code: 'GUEST_COUNT_EXCEEDS_CAPACITY', totalCapacity },
+    );
+  }
+
+  // 4b. Minimum stay
   if (data.nights < property.minStayNights) {
     throw new ApiError(400,
       `Minimum stay is ${property.minStayNights} nights. Your booking is ${data.nights} nights.`,
@@ -53,28 +74,33 @@ export const createBooking = async ({ guestUserId, data }) => {
     );
   }
 
-  // 3. Atomic create with overbooking protection (inside DB transaction)
+  // 5. Atomic create with per-item availability check (inside DB transaction)
   const booking = await bookingRepo.createBookingSafely({
     guestUserId,
     property,
-    room,
+    itemsResolved,
     checkIn: data.checkIn,
     checkOut: data.checkOut,
     nights: data.nights,
     numGuests: data.numGuests,
-    unitsBooked: data.unitsBooked,
     guestName: data.guestName,
     guestPhone: data.guestPhone,
     guestEmail: data.guestEmail,
     specialRequests: data.specialRequests,
   });
 
-  // 4. Fire notifications (non-blocking). We look up owner details separately
-  // so a slow user table doesn't delay the response.
+  // 6. Fire notifications (non-blocking)
   sendBookingCreatedNotifications(booking);
 
   return { booking, message: 'Booking confirmed.' };
 };
+
+// Flatten booking.items into a display-friendly summary for email templates.
+//   [{ room: {name}, unitsBooked: 1 }, { room: {name}, unitsBooked: 2 }]
+//   →  "AC Room × 1, Non-AC Room × 2"
+const summarizeItems = (items) => items
+  .map((i) => `${i.room?.name ?? 'Room'} × ${i.unitsBooked}`)
+  .join(', ');
 
 // Look up the owner's user record and send guest + owner emails in parallel.
 // Runs after createBooking returns — errors logged, never propagated.
@@ -85,6 +111,9 @@ const sendBookingCreatedNotifications = async (booking) => {
       select: { firstName: true, email: true },
     });
 
+    const roomsSummary = summarizeItems(booking.items);
+    const totalUnits = booking.items.reduce((s, i) => s + i.unitsBooked, 0);
+
     sendEmailQuietly('guest confirmation', mail.sendBookingConfirmationToGuest({
       to: booking.guestEmail,
       guestName: booking.guestName,
@@ -92,12 +121,12 @@ const sendBookingCreatedNotifications = async (booking) => {
       propertyTitle: booking.property.title,
       propertyAddress: booking.property.address,
       propertyCity: booking.property.city,
-      roomName: booking.room.name,
+      roomName: roomsSummary,
       checkIn: booking.checkIn,
       checkOut: booking.checkOut,
       nights: booking.nights,
       numGuests: booking.numGuests,
-      unitsBooked: booking.unitsBooked,
+      unitsBooked: totalUnits,
       totalAmountInPaise: booking.totalAmountInPaise,
       ownerContactPhone: booking.property.contactPhone,
       ownerContactEmail: booking.property.contactEmail,
@@ -109,12 +138,12 @@ const sendBookingCreatedNotifications = async (booking) => {
         ownerName: owner.firstName,
         bookingId: booking.id,
         propertyTitle: booking.property.title,
-        roomName: booking.room.name,
+        roomName: roomsSummary,
         checkIn: booking.checkIn,
         checkOut: booking.checkOut,
         nights: booking.nights,
         numGuests: booking.numGuests,
-        unitsBooked: booking.unitsBooked,
+        unitsBooked: totalUnits,
         totalAmountInPaise: booking.totalAmountInPaise,
         guestName: booking.guestName,
         guestPhone: booking.guestPhone,
@@ -205,7 +234,7 @@ const sendBookingCancelledNotifications = async (booking) => {
         ownerName: owner.firstName,
         bookingId: booking.id,
         propertyTitle: booking.property.title,
-        roomName: booking.room.name,
+        roomName: summarizeItems(booking.items),
         checkIn: booking.checkIn,
         checkOut: booking.checkOut,
         guestName: booking.guestName,

@@ -231,8 +231,9 @@ export const updatePropertySchema = z.object({
 
   cancellationPolicy: z.any().optional(),
 })
-.passthrough()
-.refine((d) => Object.keys(d).length > 0, { message: 'At least one field must be provided' });
+.passthrough();
+// NOTE: no "at least one field" refine — empty body is valid when the caller
+// only wants to submit (?draft=false) after prior PATCHes filled everything.
 
 // ---- List query filters (vendor's own properties) ----
 export const listMyPropertiesQuerySchema = z.object({

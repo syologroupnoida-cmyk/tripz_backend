@@ -34,14 +34,26 @@ const rupeesToPaise = z.union([z.string(), z.number()])
     return Math.round(n * 100);
   });
 
+// Single line-item in a multi-room booking payload.
+const bookingItemSchema = z.object({
+  roomId:      z.string({ required_error: 'items[].roomId is required' }).min(1),
+  unitsBooked: z.coerce.number().int().min(1).max(20).default(1),
+});
+
 // ---- CREATE booking (guest side) ----
+// Multi-room support: guest can book multiple room types in ONE booking
+// (e.g. 1 AC + 2 Non-AC). Backend checks all items' availability atomically.
 export const createBookingSchema = z.object({
   propertyId:      z.string({ required_error: 'propertyId is required' }).min(1),
-  roomId:          z.string({ required_error: 'roomId is required' }).min(1),
   checkIn:         dateOnly,
   checkOut:        dateOnly,
   numGuests:       z.coerce.number().int().min(1).max(50).default(1),
-  unitsBooked:     z.coerce.number().int().min(1).max(20).default(1),
+
+  // One or more room-type line items. Same roomId can't repeat in one booking
+  // (backend enforces via unique(bookingId, roomId) constraint).
+  items: z.array(bookingItemSchema)
+    .min(1, 'At least one room item is required')
+    .max(20, 'Too many items — max 20 room types per booking'),
 
   // Guest info — snapshotted at booking time
   guestName:  z.string({ required_error: 'guestName is required' })
@@ -64,6 +76,14 @@ export const createBookingSchema = z.object({
 }, {
   message: 'checkIn must be today or a future date',
   path: ['checkIn'],
+})
+.refine((d) => {
+  // No duplicate roomId inside items[]
+  const roomIds = d.items.map((i) => i.roomId);
+  return new Set(roomIds).size === roomIds.length;
+}, {
+  message: 'items[] cannot contain the same roomId twice — combine them',
+  path: ['items'],
 })
 .transform((d) => ({
   ...d,

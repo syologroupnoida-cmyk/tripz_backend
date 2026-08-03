@@ -370,15 +370,19 @@ export const getPropertyBySlugForMarketplace = async (slug) => {
   });
 };
 
-// Sum of overlapping bookings for a specific room within a date window.
+// Sum of overlapping booking-items for a specific room within a date window.
+// Items live on PropertyBookingItem now (multi-room bookings) — we aggregate
+// via the booking relation to check status + date overlap.
 // Overlap rule: booking checkOut > requestCheckIn AND booking checkIn < requestCheckOut
 export const countBookedUnitsForRoom = async ({ roomId, checkIn, checkOut }) => {
-  const result = await prisma.propertyBooking.aggregate({
+  const result = await prisma.propertyBookingItem.aggregate({
     where: {
       roomId,
-      status: { in: ['CONFIRMED', 'CHECKED_IN'] },
-      checkOut: { gt: checkIn },
-      checkIn: { lt: checkOut },
+      booking: {
+        status: { in: ['CONFIRMED', 'CHECKED_IN'] },
+        checkOut: { gt: checkIn },
+        checkIn:  { lt: checkOut },
+      },
     },
     _sum: { unitsBooked: true },
   });

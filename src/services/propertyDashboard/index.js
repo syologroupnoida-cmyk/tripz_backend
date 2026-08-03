@@ -43,32 +43,39 @@ export const getInventorySummary = async ({ ownerUserId, propertyId, fromDate, t
 
   const perRoom = await Promise.all(
     property.rooms.map(async (room) => {
-      // Overlap query — all bookings hitting this window
-      const bookings = await prisma.propertyBooking.findMany({
+      // Fetch matching PropertyBookingItems joined with their booking, since
+      // multi-room bookings put each room's units on a separate item row.
+      const items = await prisma.propertyBookingItem.findMany({
         where: {
           roomId: room.id,
-          status: { in: ['CONFIRMED', 'CHECKED_IN', 'CHECKED_OUT', 'COMPLETED'] },
-          checkOut: { gt: fromDate },
-          checkIn:  { lt: toDate },
+          booking: {
+            status: { in: ['CONFIRMED', 'CHECKED_IN', 'CHECKED_OUT', 'COMPLETED'] },
+            checkOut: { gt: fromDate },
+            checkIn:  { lt: toDate },
+          },
         },
         select: {
-          checkIn: true, checkOut: true, unitsBooked: true,
-          totalAmountInPaise: true, status: true,
+          unitsBooked: true,
+          subtotalInPaise: true,
+          bookingId: true,
+          booking: { select: { checkIn: true, checkOut: true } },
         },
       });
 
-      // Room-nights consumed within window (clamp booking to window bounds)
+      // Room-nights consumed within window (clamp booking dates to window)
       let bookedRoomNights = 0;
       let revenueInPaise = 0;
-      for (const b of bookings) {
-        const overlapStart = b.checkIn > fromDate ? b.checkIn : fromDate;
-        const overlapEnd = b.checkOut < toDate ? b.checkOut : toDate;
+      const bookingIds = new Set();
+      for (const it of items) {
+        bookingIds.add(it.bookingId);
+        const overlapStart = it.booking.checkIn > fromDate ? it.booking.checkIn : fromDate;
+        const overlapEnd = it.booking.checkOut < toDate ? it.booking.checkOut : toDate;
         const overlapNights = daysBetween(overlapStart, overlapEnd);
-        bookedRoomNights += overlapNights * b.unitsBooked;
-        // Revenue: proportional share of booking amount for this window
-        const bookingNights = daysBetween(b.checkIn, b.checkOut);
+        bookedRoomNights += overlapNights * it.unitsBooked;
+        // Revenue: proportional share of this item's subtotal for the window
+        const bookingNights = daysBetween(it.booking.checkIn, it.booking.checkOut);
         if (bookingNights > 0) {
-          revenueInPaise += Math.round((b.totalAmountInPaise * overlapNights) / bookingNights);
+          revenueInPaise += Math.round((it.subtotalInPaise * overlapNights) / bookingNights);
         }
       }
 
@@ -87,7 +94,7 @@ export const getInventorySummary = async ({ ownerUserId, propertyId, fromDate, t
         totalRoomNights,
         bookedRoomNights,
         occupancyPercent,
-        activeBookings: bookings.length,
+        activeBookings: bookingIds.size,
         estimatedRevenueInPaise: revenueInPaise,
       };
     }),
@@ -139,17 +146,27 @@ export const getPropertyCalendar = async ({ ownerUserId, propertyId, month }) =>
     throw new ApiError(403, 'You can only view your own properties.');
   }
 
-  // Get all bookings touching this month, once
-  const bookings = await prisma.propertyBooking.findMany({
+  // Multi-room bookings store per-room quantities on PropertyBookingItem.
+  // Fetch items joined with their booking header (once), then bucket by day.
+  const items = await prisma.propertyBookingItem.findMany({
     where: {
-      propertyId,
-      status: { in: ['CONFIRMED', 'CHECKED_IN', 'CHECKED_OUT', 'COMPLETED'] },
-      checkOut: { gt: monthStart },
-      checkIn:  { lt: monthEnd },
+      booking: {
+        propertyId,
+        status: { in: ['CONFIRMED', 'CHECKED_IN', 'CHECKED_OUT', 'COMPLETED'] },
+        checkOut: { gt: monthStart },
+        checkIn:  { lt: monthEnd },
+      },
     },
     select: {
-      id: true, roomId: true, checkIn: true, checkOut: true,
-      unitsBooked: true, numGuests: true, guestName: true, status: true,
+      roomId: true,
+      unitsBooked: true,
+      bookingId: true,
+      booking: {
+        select: {
+          id: true, checkIn: true, checkOut: true,
+          guestName: true, status: true,
+        },
+      },
     },
   });
 
@@ -161,19 +178,31 @@ export const getPropertyCalendar = async ({ ownerUserId, propertyId, month }) =>
     dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
 
     const rooms = property.rooms.map((room) => {
-      const overlaps = bookings.filter((b) =>
-        b.roomId === room.id && b.checkOut > dayStart && b.checkIn < dayEnd,
+      const overlaps = items.filter((it) =>
+        it.roomId === room.id
+        && it.booking.checkOut > dayStart
+        && it.booking.checkIn < dayEnd,
       );
-      const bookedUnits = overlaps.reduce((sum, b) => sum + b.unitsBooked, 0);
+      const bookedUnits = overlaps.reduce((sum, it) => sum + it.unitsBooked, 0);
+      // Dedupe bookings so the same multi-room booking appears once per row
+      const seen = new Set();
+      const bookings = [];
+      for (const it of overlaps) {
+        if (seen.has(it.bookingId)) continue;
+        seen.add(it.bookingId);
+        bookings.push({
+          id: it.booking.id,
+          guestName: it.booking.guestName,
+          status: it.booking.status,
+        });
+      }
       return {
         roomId: room.id,
         name: room.name,
         totalUnits: room.totalUnits,
         bookedUnits,
         availableUnits: Math.max(0, room.totalUnits - bookedUnits),
-        bookings: overlaps.map((b) => ({
-          id: b.id, guestName: b.guestName, status: b.status,
-        })),
+        bookings,
       };
     });
 

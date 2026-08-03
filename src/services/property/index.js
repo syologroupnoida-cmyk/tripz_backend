@@ -107,7 +107,11 @@ export const updateProperty = async ({ ownerUserId, propertyId, data, draft = tr
     patch.hasPendingReview = true;
   }
 
-  const updated = await propertyRepo.updateProperty(propertyId, patch);
+  // Only hit the DB if there's actually something to update. Empty body PATCH
+  // with ?draft=false is a common "just submit" flow — no field write needed.
+  const updated = Object.keys(patch).length > 0
+    ? await propertyRepo.updateProperty(propertyId, patch)
+    : await propertyRepo.getPropertyById(propertyId);
 
   // If draft=false, submit for review after update (DRAFT/REJECTED only)
   if (!draft && ['DRAFT', 'REJECTED'].includes(updated.status)) {

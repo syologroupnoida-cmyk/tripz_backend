@@ -117,8 +117,8 @@ model PropertyRoom {
   updatedAt DateTime @updatedAt
 
   // Relations
-  property Property           @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  bookings PropertyBooking[]
+  property     Property              @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  bookingItems PropertyBookingItem[]
 
   @@index([propertyId])
   @@index([isActive])
@@ -126,13 +126,16 @@ model PropertyRoom {
 }
 
 // Booking record — created when guest confirms a stay.
+// A single booking can span MULTIPLE room types (line items) — e.g. a family
+// booking 1 AC + 2 Non-AC in one hotel. Per-room details live in
+// PropertyBookingItem below.
+//
 // For now (no payment gateway), status jumps directly to CONFIRMED.
 // When Razorpay ships, add PENDING_PAYMENT step before CONFIRMED.
 model PropertyBooking {
   id           String @id @default(uuid())
   guestUserId  String // Booking guest (CLIENT role)
   propertyId   String
-  roomId       String
 
   // ---- Guest info (snapshot at booking time) ----
   guestName  String
@@ -140,15 +143,13 @@ model PropertyBooking {
   guestEmail String
   numGuests  Int    @default(1)
 
-  // ---- Dates ----
-  checkIn      DateTime @db.Date
-  checkOut     DateTime @db.Date
-  nights       Int // Auto-calculated at creation
-  unitsBooked  Int @default(1) // How many rooms of this type
+  // ---- Dates (whole booking shares one date window) ----
+  checkIn  DateTime @db.Date
+  checkOut DateTime @db.Date
+  nights   Int // Auto-calculated at creation
 
-  // ---- Amount ----
-  pricePerNightInPaise Int // Snapshot from room at booking time
-  totalAmountInPaise   Int // pricePerNight × nights × unitsBooked
+  // ---- Amount (aggregate across all items) ----
+  totalAmountInPaise Int // SUM(item.subtotalInPaise)
 
   // ---- Status ----
   status        BookingStatus @default(CONFIRMED)
@@ -162,12 +163,12 @@ model PropertyBooking {
   cancellationReason String? @db.Text
 
   // ---- Payout (admin fills after negotiating commission offline) ----
-  commissionInPaise  Int?
+  commissionInPaise   Int?
   payoutAmountInPaise Int?
-  payoutStatus       PayoutStatus @default(PENDING)
-  payoutReference    String? // Bank txn ref (IMPS/NEFT)
-  payoutAt           DateTime?
-  payoutNotes        String? @db.Text
+  payoutStatus        PayoutStatus @default(PENDING)
+  payoutReference     String? // Bank txn ref (IMPS/NEFT)
+  payoutAt            DateTime?
+  payoutNotes         String? @db.Text
 
   // ---- Notes ----
   specialRequests String? @db.Text
@@ -176,14 +177,38 @@ model PropertyBooking {
   updatedAt DateTime @updatedAt
 
   // Relations
-  property Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  room     PropertyRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  property Property              @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  items    PropertyBookingItem[]
 
-  // Indexes — the availability overlap query hits (roomId + dates + status)
-  @@index([roomId, checkIn, checkOut, status])
+  // Indexes — booking-level lookups
   @@index([guestUserId])
   @@index([propertyId])
   @@index([status])
   @@index([payoutStatus])
+  @@index([checkIn, checkOut, status])
   @@map("property_bookings")
+}
+
+// Per-room line item of a booking. One booking → N items (one row per room
+// type). Availability queries aggregate SUM(unitsBooked) across items for a
+// given roomId over an overlapping date window.
+model PropertyBookingItem {
+  id        String @id @default(uuid())
+  bookingId String
+  roomId    String
+
+  unitsBooked          Int
+  pricePerNightInPaise Int // Snapshot at booking time
+  subtotalInPaise      Int // pricePerNight × booking.nights × unitsBooked
+
+  createdAt DateTime @default(now())
+
+  booking PropertyBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  room    PropertyRoom    @relation(fields: [roomId], references: [id], onDelete: Restrict)
+
+  // Availability query hits (roomId → overlapping bookings → items)
+  @@index([roomId, bookingId])
+  @@index([bookingId])
+  @@unique([bookingId, roomId]) // Same room shouldn't appear twice in one booking
+  @@map("property_booking_items")
 }
