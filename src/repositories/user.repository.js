@@ -190,6 +190,41 @@ export const updateUserPassword = async (id, passwordHash) => {
   });
 };
 
+// Self-profile update — only the fields the validator gates. Anything else
+// (email, role, googleId, etc.) is out of scope for this endpoint on purpose.
+export const updateUserProfile = async (id, data) => {
+  return prisma.user.update({
+    where: { id },
+    data,
+    select: PUBLIC_USER_SELECT,
+  });
+};
+
+// Full user row including password hash — for the change-password flow, which
+// needs to bcrypt-compare against the current hash. Keep usage narrow; most
+// callers should use `findUserById` (returns PUBLIC_USER_SELECT).
+export const findUserByIdWithPassword = async (id) => {
+  return prisma.user.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      email: true,
+      password: true,
+      authProvider: true,
+    },
+  });
+};
+
+// Cheap "is this phone taken by SOMEONE ELSE" check for uniqueness enforcement.
+// Returns true if a different user owns this phone.
+export const isPhoneTakenByAnother = async ({ userId, phone }) => {
+  const owner = await prisma.user.findUnique({
+    where: { phone },
+    select: { id: true },
+  });
+  return Boolean(owner && owner.id !== userId);
+};
+
 /**
  * Attach a Google identity to an existing user account. Promotes LOCAL → HYBRID
  * (so the user keeps password login) and confirms email verification — Google's

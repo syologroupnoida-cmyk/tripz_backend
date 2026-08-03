@@ -106,9 +106,21 @@ const summarizeItems = (items) => items
 // Runs after createBooking returns — errors logged, never propagated.
 const sendBookingCreatedNotifications = async (booking) => {
   try {
+    console.log('[booking-email] booking created — looking up owner', {
+      bookingId: booking.id,
+      ownerUserId: booking.property?.ownerUserId,
+      guestEmail: booking.guestEmail,
+    });
+
     const owner = await prisma.user.findUnique({
       where: { id: booking.property.ownerUserId },
-      select: { firstName: true, email: true },
+      select: { firstName: true, email: true, isActive: true },
+    });
+
+    console.log('[booking-email] owner lookup result:', {
+      found: Boolean(owner),
+      hasEmail: Boolean(owner?.email),
+      email: owner?.email,
     });
 
     const roomsSummary = summarizeItems(booking.items);
@@ -133,6 +145,7 @@ const sendBookingCreatedNotifications = async (booking) => {
     }));
 
     if (owner?.email) {
+      console.log('[booking-email] dispatching owner email to', owner.email);
       sendEmailQuietly('owner new-booking', mail.sendNewBookingReceivedToOwner({
         to: owner.email,
         ownerName: owner.firstName,
@@ -150,6 +163,11 @@ const sendBookingCreatedNotifications = async (booking) => {
         guestEmail: booking.guestEmail,
         specialRequests: booking.specialRequests,
       }));
+    } else {
+      console.warn('[booking-email] SKIPPED owner email — owner user or email missing', {
+        ownerUserId: booking.property.ownerUserId,
+        owner,
+      });
     }
   } catch (err) {
     console.error('[booking-email] notification lookup failed:', err?.message ?? err);

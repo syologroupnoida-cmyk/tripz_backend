@@ -13,6 +13,8 @@ import {
   verifyResetOtpSchema,
   resetPasswordSchema,
   googleLoginSchema,
+  updateProfileSchema,
+  changePasswordSchema,
 } from '../../validators/auth.validator.js';
 
 const router = Router();
@@ -51,5 +53,22 @@ router.post(
 );
 
 router.get('/me', authenticateUser, authController.me);
+
+// PATCH /auth/me — update self profile (firstName, lastName, phone, avatarUrl)
+router.patch(
+  '/me',
+  authenticateUser,
+  validateRequest(updateProfileSchema),
+  authController.updateProfile,
+);
+
+// POST /auth/change-password — authenticated user changes their own password
+// (needs currentPassword). Distinct from /password/reset (OTP-based).
+router.post(
+  '/change-password',
+  authenticateUser,
+  validateRequest(changePasswordSchema),
+  authController.changePassword,
+);
 
 export default router;

@@ -16,3 +16,4 @@ export {
   resetPassword,
 } from './passwordReset.service.js';
 export { refreshTokens, logoutUser } from './tokens.service.js';
+export { updateProfile, changePassword } from './profile.service.js';

@@ -148,6 +148,43 @@ export const googleLoginSchema = z
   // ship email/picture/etc for debugging. We always ignore them server-side.
   .passthrough();
 
+// ---- Profile update (self, any authenticated role) ----
+// Updateable User fields only. Email/password/role/vendorType are NOT touched.
+// Empty string for avatarUrl is coerced to null (frontend "remove avatar" flow).
+export const updateProfileSchema = z
+  .object({
+    firstName: nameField.optional(),
+    lastName:  nameField.optional(),
+    phone:     phoneField.optional(),
+    avatarUrl: z
+      .string()
+      .trim()
+      .max(1000, 'avatarUrl too long')
+      .optional()
+      .or(z.literal('').transform(() => null)),
+  })
+  .strict()
+  .refine((d) => Object.keys(d).length > 0, {
+    message: 'At least one field must be provided',
+  });
+
+// ---- Change password (authenticated user knows their current password) ----
+// Distinct from /password/reset (OTP-based, for forgotten passwords). This
+// requires the current password as a security safeguard — protects against
+// someone using a stolen session token to lock out the owner.
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z
+      .string({ required_error: 'currentPassword is required' })
+      .min(1, 'currentPassword is required'),
+    newPassword: passwordSchema,
+  })
+  .strict()
+  .refine((d) => d.currentPassword !== d.newPassword, {
+    message: 'New password must be different from current password',
+    path: ['newPassword'],
+  });
+
 // ---- Admin creation (SuperAdmin only) ----
 export const createAdminSchema = z
   .object({

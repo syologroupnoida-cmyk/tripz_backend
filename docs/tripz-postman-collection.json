@@ -1749,6 +1749,32 @@
           }
         },
         {
+          "name": "Update my profile (PATCH /me)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Rahul\",\n  \"lastName\": \"Sharma\",\n  \"phone\": \"9876543210\",\n  \"avatarUrl\": \"https://res.cloudinary.com/tripz/avatar/rahul.jpg\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/me", "host": ["{{baseUrl}}"], "path": ["auth", "me"] },
+            "description": "Self-update for any authenticated user (CLIENT / VENDOR / ADMIN / SUPER_ADMIN).\n\n**Updateable fields:** `firstName`, `lastName`, `phone`, `avatarUrl` — all optional, at least one required.\n\n**NOT updateable here:**\n- `email` — auth identity, needs OTP re-verification (not built yet)\n- `password` — use `POST /auth/change-password`\n- `role` / `vendorType` — fixed at signup\n- Vendor company details (companyName, GST, address) — go through KYC flow\n\n**Avatar upload flow:** frontend uploads to `POST /uploads/image?purpose=avatar`, gets back Cloudinary URL, sends URL here.\n\n**Notes:**\n- `avatarUrl: \"\"` (empty string) → sets it to null (remove avatar)\n- Phone uniqueness enforced — 409 `PHONE_ALREADY_TAKEN` if taken\n- Response has same shape as `GET /auth/me`\n\n**Errors:**\n- 400 — at least one field required, or invalid format\n- 409 `PHONE_ALREADY_TAKEN` — another user has this phone"
+          }
+        },
+        {
+          "name": "Change password (authenticated)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"OldPass@1234\",\n  \"newPassword\": \"NewPass@5678\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/change-password", "host": ["{{baseUrl}}"], "path": ["auth", "change-password"] },
+            "description": "Change password when the user already knows the current one. Distinct from `POST /auth/password/reset` (OTP-based, for forgotten passwords).\n\n**Why require `currentPassword`?** Protects against a stolen session token being used to lock out the account owner.\n\n**Password rules** (same as registration):\n- 8-72 chars\n- At least one uppercase, one lowercase, one number\n- Must differ from currentPassword\n\n**Side effect:** After success, ALL refresh tokens for this user are revoked. Other devices/sessions must log in again. The current tab keeps working until its short-lived access token expires (~15 min).\n\n**Errors:**\n- 400 — password rules failed\n- 400 `PASSWORD_NOT_SET` — Google-only account (no local password). User must set one via `/password/forgot` flow first.\n- 401 `CURRENT_PASSWORD_INVALID` — currentPassword doesn't match"
+          }
+        },
+        {
           "name": "Logout",
           "request": {
             "method": "POST",

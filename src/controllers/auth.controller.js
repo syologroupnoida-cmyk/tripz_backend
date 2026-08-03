@@ -186,3 +186,28 @@ export const me = asyncHandler(async (req, res) => {
     data: { user },
   });
 });
+
+export const updateProfile = asyncHandler(async (req, res) => {
+  const result = await authService.updateProfile({
+    userId: req.user.id,
+    data: req.body,
+  });
+  return sendSuccess(res, {
+    statusCode: 200,
+    message: 'Profile updated.',
+    data: result,
+  });
+});
+
+export const changePassword = asyncHandler(async (req, res) => {
+  const result = await authService.changePassword({
+    userId: req.user.id,
+    currentPassword: req.body.currentPassword,
+    newPassword: req.body.newPassword,
+  });
+  return sendSuccess(res, {
+    statusCode: 200,
+    message: result.message,
+    data: null,
+  });
+});
