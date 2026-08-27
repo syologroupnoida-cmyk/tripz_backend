@@ -111,6 +111,7 @@ state — use this for bulk import). Auth: JWT of the owning vendor from step 2.
 |---|---|---|---|
 | `title` | string | **yes** | 2–200 chars |
 | `destination` | string | **yes** | 2–120 chars, free text (e.g. `"Manali, Himachal Pradesh"`) |
+| `departureCity` | string | no | ≤120 chars, journey starting point (e.g. `"Delhi"`); omit when the package begins at the destination |
 | `overview` | string | **yes** | 2–5000 chars, descriptive copy |
 | `packageRegion` | enum | **yes** | `NATIONAL` \| `INTERNATIONAL` |
 | `packageType` | enum | **yes** | one of: `HONEYMOON`, `FAMILY`, `HOLIDAY`, `COUPLE`, `SOLO`, `GROUP`, `ADVENTURE`, `RELIGIOUS`, `BEACH`, `HILL_STATION`, `WILDLIFE`, `CULTURAL`, `CORPORATE`, `NATURE`, `WATERACTIVITY`, `OTHER` |
@@ -171,6 +172,7 @@ this data will ever be shown in a real UI — they'll render broken.
 {
   "title": "Magical Manali Getaway",
   "destination": "Manali, Himachal Pradesh",
+  "departureCity": "Delhi",
   "overview": "A refreshing 5-day escape to the mountains, covering Solang Valley, Old Manali, and Kasol, with comfortable stays and guided sightseeing.",
   "packageRegion": "NATIONAL",
   "packageType": "HILL_STATION",

@@ -12,8 +12,8 @@ model VendorSubscription {
   planId       String
   status       SubscriptionStatus @default(ACTIVE)
 
-  startsAt   DateTime  @default(now())
-  expiresAt  DateTime // startsAt + plan.durationDays (+ bonus days for upgrades)
+  startsAt    DateTime  @default(now())
+  expiresAt   DateTime // startsAt + plan.durationDays (+ bonus days for upgrades)
   cancelledAt DateTime?
   cancelledBy String? // admin userId if force-cancelled
 

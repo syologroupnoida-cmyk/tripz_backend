@@ -12,7 +12,7 @@ import { publicPackagesQuerySchema } from '../../validators/package.validator.js
 
 const router = Router();
 
-// GET /api/v1/packages?destination=Kashmir&packageType=FAMILY&validityType=SEASONAL
+// GET /api/v1/packages?departureCity=Delhi&destination=Kashmir&packageType=FAMILY
 router.get(
   '/',
   validateRequest(publicPackagesQuerySchema, 'query'),

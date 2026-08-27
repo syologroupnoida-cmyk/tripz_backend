@@ -29,6 +29,11 @@ import { PAN_REGEX, AADHAAR_REGEX } from './_formats.js';
 
 export const PROVIDER_NAME = 'SUREPASS';
 
+// Flip to false once the commented-out real Surepass calls below are
+// restored. Read by providers/index.js to keep the boot log (and anything
+// else that cares) honest about whether we're actually hitting Surepass.
+export const BYPASS_MODE = true;
+
 // -----------------------------------------------------------------------------
 //   Low-level HTTP helper — Bearer auth + timeout + error mapping
 // -----------------------------------------------------------------------------

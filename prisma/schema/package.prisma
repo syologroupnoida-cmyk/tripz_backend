@@ -12,9 +12,9 @@
 // Pricing is in paise (INR × 100) to stay consistent with SubscriptionPlan
 // and Razorpay's future integration.
 model Package {
-  id           String @id @default(uuid())
-  vendorUserId String
-  slug         String @unique // URL-friendly; auto-generated from title
+  id           String  @id @default(uuid())
+  vendorUserId String?
+  slug         String  @unique // URL-friendly; auto-generated from title
 
   // ---- Content ----
   // Only `title` is required — it's the row's human identifier while it's a
@@ -23,6 +23,7 @@ model Package {
   // transitions out of DRAFT into SUBMITTED (see submitPackageForReview).
   title              String
   agencyName         String? // Displayed as "Package by <agency>"; vendors without an agency leave it blank.
+  departureCity      String? // Journey origin, e.g., "Delhi"; nullable when the package begins at the destination.
   destination        String? // "Kashmir", "Goa" — indexed for filter
   route              String? // Descriptive route text, e.g., "2N and 2D"
   duration           String? // Descriptive duration, e.g., "4N/2D"
@@ -83,10 +84,11 @@ model Package {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  vendor VendorProfile @relation(fields: [vendorUserId], references: [userId], onDelete: Cascade)
+  vendor VendorProfile? @relation(fields: [vendorUserId], references: [userId], onDelete: Cascade)
   leads  Lead[] // customer inquiries linked back via Lead.packageId (SetNull on delete)
 
   @@index([status, validityType])
+  @@index([departureCity])
   @@index([destination])
   @@index([packageType])
   @@index([vendorUserId, status])

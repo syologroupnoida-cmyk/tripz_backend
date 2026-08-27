@@ -183,7 +183,14 @@ const CUSTOMER_LEAD_SELECT = {
   unlockCount: true,
   packageId: true, // lets the customer see "Inquiry for {package.title}"
   package: {
-    select: { id: true, title: true, slug: true, destination: true, mainImageUrl: true },
+    select: {
+      id: true,
+      title: true,
+      slug: true,
+      departureCity: true,
+      destination: true,
+      mainImageUrl: true,
+    },
   },
   createdAt: true,
   updatedAt: true,

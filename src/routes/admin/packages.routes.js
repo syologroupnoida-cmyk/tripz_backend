@@ -11,7 +11,7 @@ import {
 
 const router = Router();
 
-// GET /api/v1/admin/packages?status=SUBMITTED&hasPendingReview=true
+// GET /api/v1/admin/packages?status=SUBMITTED&departureCity=Delhi&hasPendingReview=true
 router.get(
   '/',
   validateRequest(listAdminPackagesQuerySchema, 'query'),

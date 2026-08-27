@@ -8,9 +8,9 @@ model Story {
   storyType         StoryType
   authorName        String
   authorDesignation String?
-  quote             String?     @db.Text
-  shortDescription  String      @db.Text
-  fullStory         String      @db.Text
+  quote             String?   @db.Text
+  shortDescription  String    @db.Text
+  fullStory         String    @db.Text
   year              String?
   location          String?
 

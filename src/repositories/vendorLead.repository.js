@@ -9,6 +9,7 @@ const PACKAGE_SUMMARY_SELECT = {
   id: true,
   title: true,
   slug: true,
+  departureCity: true,
   destination: true,
   mainImageUrl: true,
 };

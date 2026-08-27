@@ -1,7 +1,7 @@
 model TravelGuide {
-  id               String   @id @default(uuid())
-  vendorUserId     String // JWT se aayega, client se nahi
-  slug             String @unique //SEO URL: /travel-guides/kashmir-adventure
+  id           String @id @default(uuid())
+  vendorUserId String // JWT se aayega, client se nahi
+  slug         String @unique //SEO URL: /travel-guides/kashmir-adventure
 
   // ------Content--------
   title            String
@@ -10,34 +10,33 @@ model TravelGuide {
   continent        String
   category         String
   shortDescription String
-  description      String   @db.Text 
+  description      String  @db.Text
   bestTimeToVisit  String
   duration         String
-  budget           Float    
+  budget           Float
   currency         String
-  rating           Float    
+  rating           Float
   weather          String
   language         String
-  visaRequired     Boolean  
+  visaRequired     Boolean
   transportation   String
   accommodation    String
   cuisine          String
   safetyRating     Float
 
   // -------Media------
-  mainImage        String
-  galleryImages    String[] 
-  
+  mainImage     String
+  galleryImages String[]
+
   // -------Structured lists (Postgress test[])---------
-  highlights       String[]
-  activities       String[]
-  tips             String[]
+  highlights String[]
+  activities String[]
+  tips       String[]
 
   // -------Soft delete + timestamps--------
-  deletedAt        DateTime?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   // Relation to vendor -  Cascade means vednor delete hoga toh guides bhi delete 
   vendor VendorProfile @relation(fields: [vendorUserId], references: [userId], onDelete: Cascade)

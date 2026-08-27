@@ -10,6 +10,7 @@ const PACKAGE_SELECT = {
 
   title: true,
   agencyName: true,
+  departureCity: true,
   destination: true,
   route: true,
   duration: true,
@@ -148,6 +149,8 @@ export const countVendorActivePackages = async (vendorUserId) => {
 export const listPackagesForVendor = async ({
   vendorUserId,
   status,
+  departureCity,
+  destination,
   sortBy,
   order,
   take,
@@ -155,6 +158,8 @@ export const listPackagesForVendor = async ({
 }) => {
   const where = { vendorUserId, deletedAt: null };
   if (status) where.status = status;
+  if (departureCity) where.departureCity = { contains: departureCity, mode: 'insensitive' };
+  if (destination) where.destination = { contains: destination, mode: 'insensitive' };
 
   const [items, total] = await Promise.all([
     prisma.package.findMany({
@@ -178,6 +183,7 @@ export const listPackagesForAdmin = async ({
   hasPendingReview,
   vendorUserId,
   agencyName,
+  departureCity,
   destination,
   packageRegion,
   packageType,
@@ -215,6 +221,7 @@ export const listPackagesForAdmin = async ({
   if (validityType) where.validityType = validityType;
 
   // Free-text contains filters
+  if (departureCity) where.departureCity = { contains: departureCity, mode: 'insensitive' };
   if (destination) where.destination = { contains: destination, mode: 'insensitive' };
   if (duration) where.duration = { contains: duration, mode: 'insensitive' };
   if (hotelCategory) where.hotelCategory = { contains: hotelCategory, mode: 'insensitive' };
@@ -279,6 +286,7 @@ export const getPackageByIdForAdmin = async (id) => {
 //   Public marketplace listing — APPROVED only, active validity window
 // -----------------------------------------------------------------------------
 export const listPackagesPublic = async ({
+  departureCity,
   destination,
   packageRegion,
   packageType,
@@ -309,6 +317,7 @@ export const listPackagesPublic = async ({
     ],
   };
 
+  if (departureCity) where.departureCity = { contains: departureCity, mode: 'insensitive' };
   if (destination) where.destination = { contains: destination, mode: 'insensitive' };
   if (packageRegion) where.packageRegion = packageRegion;
   if (packageType) where.packageType = packageType;

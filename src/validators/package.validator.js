@@ -220,6 +220,7 @@ export const createDraftPackageSchema = z
   .object({
     title: trimmedRequired(2, 200, 'title'),
     agencyName: trimmedOptional(200, 'agencyName'),
+    departureCity: trimmedOptional(120, 'departureCity'),
     destination: trimmedOptional(120, 'destination'),
     route: trimmedOptional(120, 'route'),
     duration: trimmedOptional(60, 'duration'),
@@ -260,6 +261,7 @@ export const createDraftPackageSchema = z
     return {
       title: raw.title,
       agencyName: raw.agencyName,
+      departureCity: raw.departureCity,
       destination: raw.destination,
       route: raw.route,
       duration: raw.duration,
@@ -326,6 +328,7 @@ export const createPackageSchema = z
   .object({
     title: trimmedRequired(2, 200, 'title'),
     agencyName: trimmedOptional(200, 'agencyName'),
+    departureCity: trimmedOptional(120, 'departureCity'),
     destination: trimmedRequired(2, 120, 'destination'),
     route: trimmedOptional(120, 'route'),
     duration: trimmedOptional(60, 'duration'),
@@ -374,6 +377,7 @@ export const createPackageSchema = z
     return {
       title: raw.title,
       agencyName: raw.agencyName,
+      departureCity: raw.departureCity,
       destination: raw.destination,
       route: raw.route,
       duration: raw.duration,
@@ -455,6 +459,7 @@ export const updatePackageSchema = z
   .object({
     title: trimmedOptional(200, 'title'),
     agencyName: trimmedOptional(200, 'agencyName'),
+    departureCity: trimmedOptional(120, 'departureCity'),
     destination: trimmedOptional(120, 'destination'),
     route: trimmedOptional(120, 'route'),
     duration: trimmedOptional(60, 'duration'),
@@ -495,6 +500,7 @@ export const updatePackageSchema = z
 
     if (raw.title !== undefined) out.title = raw.title;
     if (raw.agencyName !== undefined) out.agencyName = raw.agencyName;
+    if (raw.departureCity !== undefined) out.departureCity = raw.departureCity;
     if (raw.destination !== undefined) out.destination = raw.destination;
     if (raw.route !== undefined) out.route = raw.route;
     if (raw.duration !== undefined) out.duration = raw.duration;
@@ -596,11 +602,15 @@ export const listVendorPackagesQuerySchema = z
   .object({
     ...paginatedBase,
     status: packageStatusEnum.optional(),
+    departureCity: z.string().trim().max(120).optional(),
+    destination: z.string().trim().max(120).optional(),
     sortBy: z.enum(['createdAt', 'updatedAt', 'title']).optional().default('createdAt'),
   })
   .strict()
   .transform((q) => ({
     status: q.status,
+    departureCity: q.departureCity,
+    destination: q.destination,
     sortBy: q.sortBy,
     order: q.order,
     ...pagingTransform(q),
@@ -636,6 +646,7 @@ export const listAdminPackagesQuerySchema = z
     agencyName:   z.string().trim().max(200).optional(), // Snapshot on package
 
     // Content filters (enum + free-text)
+    departureCity: z.string().trim().max(120).optional(),
     destination:   z.string().trim().max(120).optional(),
     packageRegion: packageRegionEnum.optional(),
     packageType:   packageTypeEnum.optional(),
@@ -674,6 +685,7 @@ export const listAdminPackagesQuerySchema = z
     vendorUserId: q.vendorUserId,
     agencyName: q.agencyName,
 
+    departureCity: q.departureCity,
     destination: q.destination,
     packageRegion: q.packageRegion,
     packageType: q.packageType,
@@ -704,6 +716,7 @@ export const listAdminPackagesQuerySchema = z
 export const publicPackagesQuerySchema = z
   .object({
     ...paginatedBase,
+    departureCity: z.string().trim().max(120).optional(),
     destination: z.string().trim().max(120).optional(),
     packageRegion: packageRegionEnum.optional(),
     packageType: packageTypeEnum.optional(),
@@ -736,6 +749,7 @@ export const publicPackagesQuerySchema = z
   })
   .strict()
   .transform((q) => ({
+    departureCity: q.departureCity,
     destination: q.destination,
     packageRegion: q.packageRegion,
     packageType: q.packageType,

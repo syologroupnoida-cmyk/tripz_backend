@@ -1,7 +1,7 @@
 model Property {
-  id           String @id @default(uuid())
-  ownerUserId  String // JWT se aayega — property owner (VendorProfile.userId)
-  slug         String @unique // SEO URL: /properties/kashmir-riverside-villa
+  id          String @id @default(uuid())
+  ownerUserId String // JWT se aayega — property owner (VendorProfile.userId)
+  slug        String @unique // SEO URL: /properties/kashmir-riverside-villa
 
   // ---- Basic info (marketplace card + detail) ----
   // Nullable at DB level for draft flow — completeness check at submit-time
@@ -12,35 +12,35 @@ model Property {
   fullDescription  String?      @db.Text
 
   // ---- Location ----
-  city        String?
-  state       String?
-  country     String  @default("India")
-  address     String? @db.Text
-  landmark    String?
-  pincode     String?
-  latitude    Float?
-  longitude   Float?
+  city      String?
+  state     String?
+  country   String  @default("India")
+  address   String? @db.Text
+  landmark  String?
+  pincode   String?
+  latitude  Float?
+  longitude Float?
 
   // ---- Media ----
   mainImage     String?
   galleryImages String[] // Min 3 recommended for marketplace credibility
 
   // ---- Facilities (marketplace filters + display) ----
-  amenities        String[] // ["WiFi", "AC", "Pool", "Parking", "Kitchen", "Gym"]
-  houseRules       String[] // ["No smoking", "No pets", "No parties"]
-  nearbyPlaces     String[] // ["Dal Lake - 500m", "Airport - 10km"]
-  highlights       String[] // ["Mountain view", "Private balcony", "24hr checkin"]
+  amenities    String[] // ["WiFi", "AC", "Pool", "Parking", "Kitchen", "Gym"]
+  houseRules   String[] // ["No smoking", "No pets", "No parties"]
+  nearbyPlaces String[] // ["Dal Lake - 500m", "Airport - 10km"]
+  highlights   String[] // ["Mountain view", "Private balcony", "24hr checkin"]
 
   // ---- Property-level metadata ----
-  starRating       Int?    // 1-5 for HOTEL/RESORT (nullable for others)
-  totalBedrooms    Int?    // Aggregate across the property (for filters)
-  totalBathrooms   Int?
-  hostLivesOnsite  Boolean @default(false) // Mainly for HOMESTAY
+  starRating      Int? // 1-5 for HOTEL/RESORT (nullable for others)
+  totalBedrooms   Int? // Aggregate across the property (for filters)
+  totalBathrooms  Int?
+  hostLivesOnsite Boolean @default(false) // Mainly for HOMESTAY
 
   // ---- Check-in / check-out ----
-  checkInTime  String @default("14:00") // 24hr format "HH:mm"
-  checkOutTime String @default("11:00")
-  minStayNights Int   @default(1)
+  checkInTime   String @default("14:00") // 24hr format "HH:mm"
+  checkOutTime  String @default("11:00")
+  minStayNights Int    @default(1)
 
   // ---- Contact (shown to guest after booking, not before) ----
   contactPhone String?
@@ -51,13 +51,13 @@ model Property {
   cancellationPolicy Json?
 
   // ---- Lifecycle ----
-  status               PropertyStatus @default(DRAFT)
-  hasPendingReview     Boolean        @default(false) // Post-approval edit flag
-  submittedAt          DateTime?
-  approvedAt           DateTime?
-  rejectedAt           DateTime?
-  rejectionReason      String?
-  reviewedByAdminId    String?
+  status            PropertyStatus @default(DRAFT)
+  hasPendingReview  Boolean        @default(false) // Post-approval edit flag
+  submittedAt       DateTime?
+  approvedAt        DateTime?
+  rejectedAt        DateTime?
+  rejectionReason   String?
+  reviewedByAdminId String?
 
   // ---- Soft delete + timestamps ----
   deletedAt DateTime?
@@ -100,10 +100,10 @@ model PropertyRoom {
   totalUnits Int @default(1) // Villa=1, Hotel might have 20
 
   // ---- Physical details ----
-  bedrooms       Int?
-  bathrooms      Int?
-  bedType        String? // "King" / "Queen" / "Twin" / "Sofa"
-  roomSizeSqft   Int?
+  bedrooms     Int?
+  bathrooms    Int?
+  bedType      String? // "King" / "Queen" / "Twin" / "Sofa"
+  roomSizeSqft Int?
 
   // ---- Media + facilities ----
   amenities String[] // Room-specific ["AC", "TV", "Balcony", "Attached bath"]
@@ -133,9 +133,9 @@ model PropertyRoom {
 // For now (no payment gateway), status jumps directly to CONFIRMED.
 // When Razorpay ships, add PENDING_PAYMENT step before CONFIRMED.
 model PropertyBooking {
-  id           String @id @default(uuid())
-  guestUserId  String // Booking guest (CLIENT role)
-  propertyId   String
+  id          String @id @default(uuid())
+  guestUserId String // Booking guest (CLIENT role)
+  propertyId  String
 
   // ---- Guest info (snapshot at booking time) ----
   guestName  String
@@ -160,7 +160,7 @@ model PropertyBooking {
   checkedOutAt       DateTime?
   cancelledAt        DateTime?
   cancelledByUserId  String?
-  cancellationReason String? @db.Text
+  cancellationReason String?   @db.Text
 
   // ---- Payout (admin fills after negotiating commission offline) ----
   commissionInPaise   Int?
@@ -168,7 +168,7 @@ model PropertyBooking {
   payoutStatus        PayoutStatus @default(PENDING)
   payoutReference     String? // Bank txn ref (IMPS/NEFT)
   payoutAt            DateTime?
-  payoutNotes         String? @db.Text
+  payoutNotes         String?      @db.Text
 
   // ---- Notes ----
   specialRequests String? @db.Text
@@ -206,9 +206,9 @@ model PropertyBookingItem {
   booking PropertyBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   room    PropertyRoom    @relation(fields: [roomId], references: [id], onDelete: Restrict)
 
+  @@unique([bookingId, roomId]) // Same room shouldn't appear twice in one booking
   // Availability query hits (roomId → overlapping bookings → items)
   @@index([roomId, bookingId])
   @@index([bookingId])
-  @@unique([bookingId, roomId]) // Same room shouldn't appear twice in one booking
   @@map("property_booking_items")
 }

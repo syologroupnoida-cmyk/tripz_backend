@@ -79,6 +79,7 @@
               "query": [
                 { "key": "page", "value": "0" },
                 { "key": "size", "value": "20" },
+                { "key": "departureCity", "value": "Delhi", "disabled": true, "description": "Case-insensitive journey-origin filter" },
                 { "key": "destination", "value": "Kashmir", "disabled": true },
                 { "key": "packageRegion", "value": "NATIONAL", "disabled": true, "description": "NATIONAL or INTERNATIONAL" },
                 { "key": "packageType", "value": "GROUP", "disabled": true },
@@ -215,6 +216,8 @@
                 { "key": "page", "value": "0" },
                 { "key": "size", "value": "20" },
                 { "key": "status", "value": "DRAFT", "disabled": true, "description": "DRAFT / SUBMITTED / APPROVED / REJECTED / PAUSED" },
+                { "key": "departureCity", "value": "Delhi", "disabled": true, "description": "Case-insensitive journey-origin filter" },
+                { "key": "destination", "value": "Kashmir", "disabled": true, "description": "Case-insensitive destination filter" },
                 { "key": "sortBy", "value": "createdAt", "disabled": true },
                 { "key": "order", "value": "desc", "disabled": true }
               ]
@@ -349,6 +352,7 @@
                 { "key": "hasPendingReview", "value": "true", "disabled": true, "description": "APPROVED packages that were edited post-approval" },
                 { "key": "vendorUserId", "value": "{{vendorId}}", "disabled": true, "description": "Filter by specific vendor" },
                 { "key": "agencyName", "value": "Wanderlust", "disabled": true, "description": "Case-insensitive contains on agencyName snapshot" },
+                { "key": "departureCity", "value": "Delhi", "disabled": true, "description": "Case-insensitive journey-origin filter" },
                 { "key": "destination", "value": "Kashmir", "disabled": true, "description": "Case-insensitive contains" },
                 { "key": "packageRegion", "value": "NATIONAL", "disabled": true, "description": "NATIONAL | INTERNATIONAL" },
                 { "key": "packageType", "value": "FAMILY", "disabled": true, "description": "HONEYMOON | FAMILY | HOLIDAY | COUPLE | SOLO | GROUP | ADVENTURE | RELIGIOUS | BEACH | HILL_STATION | WILDLIFE | CULTURAL | CORPORATE | NATURE | WATERACTIVITY | OTHER" },

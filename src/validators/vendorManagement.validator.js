@@ -39,7 +39,7 @@ export const listVendorsQuerySchema = z
     skip: z.coerce.number().int().min(0).optional(),
     // Page-based (frontend-friendly alternative). 0-indexed: page=0 is first page.
     page: z.coerce.number().int().min(0).optional(),
-    size: z.coerce.number().int().min(1).max(100).optional(),
+    size: z.coerce.number().int().min(1).max(200).optional(),
     sortBy: z.enum(['createdAt', 'updatedAt', 'name']).optional().default('createdAt'),
     order: z.enum(['asc', 'desc']).optional().default('desc'),
   })

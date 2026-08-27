@@ -103,7 +103,7 @@ export const submitLead = async ({ payload, customerUserId = null }) => {
 
   // ----- Phase 2C — package inquiry flow (highest priority) -----
   // If `packageId` is set, this is a customer inquiring from a package detail
-  // page. Auto-APPROVED. Backend derives targetVendorId + destination from
+  // page. Auto-APPROVED. Backend derives targetVendorId and journey endpoints from
   // the package itself; any client-sent values are overridden to prevent
   // spoofing.
   if (payload.packageId) {
@@ -118,6 +118,7 @@ export const submitLead = async ({ payload, customerUserId = null }) => {
 
     const lead = await leadRepo.createLead({
       ...top,
+      departureCity: pkg.departureCity, // authoritative — don't trust client
       destination: pkg.destination, // authoritative — don't trust client
       customerUserId,
       requirements,

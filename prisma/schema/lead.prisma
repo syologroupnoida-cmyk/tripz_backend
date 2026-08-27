@@ -7,7 +7,7 @@ model Lead {
 
   // ---- Indexed top-level fields ----
   destination    String // form.destination
-  departureCity  String?   // form.departureCity — promoted from JSONB; vendors filter by hub
+  departureCity  String? // form.departureCity — promoted from JSONB; vendors filter by hub
   travelDate     DateTime? // form.travelDate — promoted from JSONB; date-range + expiry cron
   email          String // form.email (masked in teaser mode)
   phone          String // form.phone (masked in teaser mode)

@@ -160,6 +160,7 @@ export const getLeadDetailForAdmin = async (leadId) => {
           id: true,
           title: true,
           slug: true,
+          departureCity: true,
           destination: true,
           mainImageUrl: true,
           status: true,

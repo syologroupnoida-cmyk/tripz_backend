@@ -18,6 +18,7 @@
 import { env } from '../../../config/env.js';
 import * as surepass from './surepass.provider.js';
 import * as stub from './stub.provider.js';
+import pc from 'picocolors';
 
 // Selection rule: if SUREPASS_TOKEN is configured, use Surepass; else stub.
 // Future: add `process.env.KYC_PROVIDER === 'razorpay' ? razorpay : ...` here.
@@ -31,7 +32,13 @@ export const PROVIDER_NAME = active.PROVIDER_NAME;
  * the stub is active so it can't be shipped to prod silently.
  */
 export const logKycVerificationMode = () => {
-  if (PROVIDER_NAME === 'SUREPASS') {
+  if (PROVIDER_NAME === 'SUREPASS' && active.BYPASS_MODE) {
+    console.log(
+    pc.dim('[kyc] Verification mode: ') +
+      pc.yellow('MANUAL') +
+      pc.dim(' (SurePass not integrated — decisions go through admin review only)'),
+  );
+  } else if (PROVIDER_NAME === 'SUREPASS') {
     console.log(`[kyc] Document verification: LIVE via Surepass (${env.SUREPASS_BASE_URL})`);
   } else {
     console.warn(
