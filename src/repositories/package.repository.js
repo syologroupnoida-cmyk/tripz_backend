@@ -283,7 +283,7 @@ export const getPackageByIdForAdmin = async (id) => {
 };
 
 // -----------------------------------------------------------------------------
-//   Public marketplace listing — APPROVED only, active validity window
+//   Public marketplace listing — APPROVED only, not expired
 // -----------------------------------------------------------------------------
 export const listPackagesPublic = async ({
   departureCity,
@@ -308,10 +308,10 @@ export const listPackagesPublic = async ({
     OR: [
       // Evergreen packages: always shown
       { validityType: 'EVERGREEN' },
-      // Seasonal packages: only if we're inside the window
+      // Seasonal packages may be browsed before their start date so customers
+      // can plan or inquire in advance. Hide them only after they expire.
       {
         validityType: 'SEASONAL',
-        startDate: { lte: now },
         endDate: { gte: now },
       },
     ],

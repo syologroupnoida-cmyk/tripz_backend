@@ -1,0 +1,48 @@
+DESTINATION / TRAVEL GUIDE FLOW
+
+1. A user registers as role VENDOR with vendorType TRAVEL_AGENT.
+2. The vendor profile must exist before a guide can be created.
+3. The authenticated travel-agent vendor creates a guide through:
+   POST /api/v1/vendor/travel-guide
+4. The API normally takes vendorUserId from the JWT and generates id and slug.
+5. The guide is published immediately. There is currently no admin approval,
+   review queue, status column, or draft state for travel guides.
+6. Anyone can browse guides through GET /api/v1/travel-guide and open a guide
+   using its slug.
+7. The owner can edit the guide. Deleting it is a soft delete that fills deletedAt.
+
+DIRECT PGADMIN CSV IMPORT
+
+Import travel_guides_import_with_2_examples.csv into public.travel_guides.
+Choose Format=csv, Header=Yes, Delimiter=comma.
+
+Before importing:
+- Replace each example vendorUserId with a real vendor_profiles.userId belonging
+  to a TRAVEL_AGENT vendor. Otherwise the foreign-key check will fail.
+- Make id and slug unique.
+- Replace example.com image URLs with real uploaded image URLs.
+- Keep deletedAt empty for a publicly visible guide.
+- All columns in the current database schema, except deletedAt, are required.
+
+DATA FORMATS
+
+PostgreSQL text array:
+  Human: Dal Lake, Gulmarg Gondola, Pahalgam
+  PostgreSQL: {"Dal Lake","Gulmarg Gondola","Pahalgam"}
+  CSV: "{""Dal Lake"",""Gulmarg Gondola"",""Pahalgam""}"
+
+Boolean:
+  visaRequired must be true or false.
+
+Numbers:
+  budget, rating, and safetyRating are numbers without currency symbols.
+  Example: budget=25000, rating=4.8, safetyRating=4.5.
+
+Timestamp:
+  Use ISO format, for example 2026-09-01T11:00:00+05:30.
+
+IMPORTANT
+
+Direct database import bypasses API validation and automatic slug generation.
+Using the API is safer for production data, but this CSV matches the current
+travel_guides PostgreSQL table for pgAdmin import.

@@ -5,8 +5,8 @@ import { publicPackagesQuerySchema } from '../../validators/package.validator.js
 
 // Public marketplace catalog. NO authentication — anyone browsing the site
 // can see and detail-view APPROVED packages before signing up. Repository
-// filters to APPROVED + non-deleted + active validity window (SEASONAL
-// packages auto-hide when their endDate passes).
+// filters to APPROVED + non-deleted. SEASONAL packages can be browsed before
+// their startDate and auto-hide only when their endDate passes.
 //
 // Mounted under /packages by common/index.js.
 

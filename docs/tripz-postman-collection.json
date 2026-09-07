@@ -49,7 +49,7 @@
     },
     {
       "name": "Public — Packages (marketplace browse)",
-      "description": "Public-facing package catalog. No authentication — customers browse without signing up.\n\n**Server-side filters (automatic):**\n- `status = 'APPROVED'` only\n- `deletedAt IS NULL`\n- EVERGREEN packages always shown; SEASONAL packages shown only when today is between startDate and endDate\n\nPrices are in **paise** (INR × 100). Frontend divides by 100 for display.",
+      "description": "Public-facing package catalog. No authentication — customers browse without signing up.\n\n**Server-side filters (automatic):**\n- `status = 'APPROVED'` only\n- `deletedAt IS NULL`\n- EVERGREEN packages always shown; SEASONAL packages may be browsed before startDate and are hidden only after endDate\n\nPrices are in **paise** (INR × 100). Frontend divides by 100 for display.",
       "item": [
         {
           "name": "Browse packages (with filters)",
