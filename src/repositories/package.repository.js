@@ -305,25 +305,37 @@ export const listPackagesPublic = async ({
   const where = {
     deletedAt: null,
     status: 'APPROVED',
-    OR: [
-      // Evergreen packages: always shown
-      { validityType: 'EVERGREEN' },
-      // Seasonal packages may be browsed before their start date so customers
-      // can plan or inquire in advance. Hide them only after they expire.
+    AND: [
       {
-        validityType: 'SEASONAL',
-        endDate: { gte: now },
+        OR: [
+          // Evergreen packages: always shown
+          { validityType: 'EVERGREEN' },
+          // Seasonal packages may be browsed before their start date so customers
+          // can plan or inquire in advance. Hide them only after they expire.
+          {
+            validityType: 'SEASONAL',
+            endDate: { gte: now },
+          },
+        ],
       },
     ],
   };
 
-  if (departureCity) where.departureCity = { contains: departureCity, mode: 'insensitive' };
-  if (destination) where.destination = { contains: destination, mode: 'insensitive' };
-  if (packageRegion) where.packageRegion = packageRegion;
-  if (packageType) where.packageType = packageType;
-  if (validityType) where.validityType = validityType;
-  if (duration) where.duration = { contains: duration, mode: 'insensitive' };
-  if (hotelCategory) where.hotelCategory = { contains: hotelCategory, mode: 'insensitive' };
+  // Values within one filter are OR-ed; different filters remain AND-ed.
+  const addContainsAny = (field, values) => {
+    if (!values?.length) return;
+    where.AND.push({
+      OR: values.map((value) => ({ [field]: { contains: value, mode: 'insensitive' } })),
+    });
+  };
+
+  addContainsAny('departureCity', departureCity);
+  addContainsAny('destination', destination);
+  addContainsAny('duration', duration);
+  addContainsAny('hotelCategory', hotelCategory);
+  if (packageRegion?.length) where.packageRegion = { in: packageRegion };
+  if (packageType?.length) where.packageType = { in: packageType };
+  if (validityType?.length) where.validityType = { in: validityType };
   if (minPriceInPaise !== undefined || maxPriceInPaise !== undefined) {
     where.priceInPaise = {};
     if (minPriceInPaise !== undefined) where.priceInPaise.gte = minPriceInPaise;

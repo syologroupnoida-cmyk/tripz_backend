@@ -597,6 +597,23 @@ const pagingTransform = (q) => {
   return { take, skip };
 };
 
+// Public filters accept comma/pipe-separated values or repeated query keys:
+//   ?packageType=FAMILY,HONEYMOON
+//   ?packageType=FAMILY|HONEYMOON
+//   ?packageType=FAMILY&packageType=HONEYMOON
+const queryList = (itemSchema, maxItems = 30) =>
+  z.preprocess(
+    (value) => {
+      if (value === undefined || value === null || value === '') return undefined;
+      const values = Array.isArray(value) ? value : [value];
+      return values
+        .flatMap((item) => (typeof item === 'string' ? item.split(/[|,]/) : item))
+        .map((item) => (typeof item === 'string' ? item.trim() : item))
+        .filter((item) => item !== '');
+    },
+    z.array(itemSchema).min(1).max(maxItems).optional(),
+  );
+
 // Vendor's own list — filter by status only.
 export const listVendorPackagesQuerySchema = z
   .object({
@@ -716,15 +733,15 @@ export const listAdminPackagesQuerySchema = z
 export const publicPackagesQuerySchema = z
   .object({
     ...paginatedBase,
-    departureCity: z.string().trim().max(120).optional(),
-    destination: z.string().trim().max(120).optional(),
-    packageRegion: packageRegionEnum.optional(),
-    packageType: packageTypeEnum.optional(),
-    validityType: validityTypeEnum.optional(),
+    departureCity: queryList(z.string().trim().min(1).max(120)),
+    destination: queryList(z.string().trim().min(1).max(120)),
+    packageRegion: queryList(packageRegionEnum),
+    packageType: queryList(packageTypeEnum),
+    validityType: queryList(validityTypeEnum),
     // Free-form fields — matched with case-insensitive `contains` so vendors
     // don't need to hit exact strings ("4N" matches "4N/2D", "4N/3D" etc.).
-    duration: z.string().trim().max(60).optional(),
-    hotelCategory: z.string().trim().max(40).optional(),
+    duration: queryList(z.string().trim().min(1).max(60)),
+    hotelCategory: queryList(z.string().trim().min(1).max(40)),
     // Rupee-range filters — transformed to paise.
     minPrice: z
       .union([z.string(), z.number()])
