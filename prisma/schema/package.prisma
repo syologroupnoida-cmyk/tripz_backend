@@ -84,8 +84,9 @@ model Package {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  vendor VendorProfile? @relation(fields: [vendorUserId], references: [userId], onDelete: Cascade)
-  leads  Lead[] // customer inquiries linked back via Lead.packageId (SetNull on delete)
+  vendor       VendorProfile?       @relation(fields: [vendorUserId], references: [userId], onDelete: Cascade)
+  leads        Lead[] // customer inquiries linked back via Lead.packageId (SetNull on delete)
+  offerTargets OfferPackageTarget[]
 
   @@index([status, validityType])
   @@index([departureCity])

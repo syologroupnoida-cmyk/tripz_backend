@@ -9,6 +9,8 @@ import packagesRoutes from './packages.routes.js';
 import storiesRoutes from './stories.routes.js';
 import propertiesRoutes from './properties.routes.js';
 import propertyBookingsRoutes from './propertyBookings.routes.js';
+import dashboardRoutes from './dashboard.routes.js';
+import offersRoutes from './offers.routes.js';
 
 const router = Router();
 
@@ -16,6 +18,8 @@ const router = Router();
 router.use(authenticateUser, authorizeRoles(['SUPER_ADMIN', 'ADMIN']));
 
 router.use('/', adminRoutes);
+router.use('/dashboard', dashboardRoutes);
+router.use('/offers', offersRoutes);
 router.use('/vendors', vendorsRoutes);
 router.use('/leads', leadsRoutes);
 router.use('/subscription-plans', subscriptionPlansRoutes);

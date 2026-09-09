@@ -62,6 +62,10 @@ export const createBookingSchema = z.object({
   guestEmail: emailField,
 
   specialRequests: z.string().trim().max(2000).optional(),
+  couponCode: z.string().trim().min(3).max(50)
+    .regex(/^[A-Za-z0-9_-]+$/)
+    .transform((value) => value.toUpperCase())
+    .optional(),
 })
 .passthrough()
 .refine((d) => d.checkOut > d.checkIn, {

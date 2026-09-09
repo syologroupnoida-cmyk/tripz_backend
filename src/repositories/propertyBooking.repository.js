@@ -14,7 +14,11 @@ const BOOKING_SELECT = {
   checkIn: true,
   checkOut: true,
   nights: true,
+  subtotalAmountInPaise: true,
+  discountAmountInPaise: true,
   totalAmountInPaise: true,
+  appliedOfferId: true,
+  appliedCouponCode: true,
   status: true,
   paymentStatus: true,
   checkedInAt: true,
@@ -54,6 +58,12 @@ const BOOKING_SELECT = {
         },
       },
     },
+  },
+  appliedOffer: {
+    select: { id: true, name: true, couponCode: true, discountType: true, discountValue: true },
+  },
+  offerRedemption: {
+    select: { id: true, status: true, originalAmountInPaise: true, discountAmountInPaise: true, finalAmountInPaise: true, redeemedAt: true },
   },
 };
 
@@ -109,7 +119,7 @@ export const createBookingSafely = async ({
   itemsResolved, // [{ room, unitsBooked }]
   checkIn, checkOut, nights,
   numGuests,
-  guestName, guestPhone, guestEmail, specialRequests,
+  guestName, guestPhone, guestEmail, specialRequests, couponCode, claimOfferTx,
 }) => {
   return prisma.$transaction(async (tx) => {
     // 1. Availability check for every requested room
@@ -138,9 +148,19 @@ export const createBookingSafely = async ({
       pricePerNightInPaise: room.pricePerNightInPaise,
       subtotalInPaise: room.pricePerNightInPaise * nights * unitsBooked,
     }));
-    const totalAmountInPaise = itemsToCreate.reduce(
+    const subtotalAmountInPaise = itemsToCreate.reduce(
       (sum, i) => sum + i.subtotalInPaise, 0,
     );
+
+    const pricing = await claimOfferTx(tx, {
+      couponCode,
+      customerUserId: guestUserId,
+      property,
+      subtotalAmountInPaise,
+      nights,
+      numGuests,
+      checkIn,
+    });
 
     // 3. Create booking with nested items
     return tx.propertyBooking.create({
@@ -150,11 +170,26 @@ export const createBookingSafely = async ({
         guestName, guestPhone, guestEmail,
         numGuests,
         checkIn, checkOut, nights,
-        totalAmountInPaise,
+        subtotalAmountInPaise,
+        discountAmountInPaise: pricing.discountAmountInPaise,
+        totalAmountInPaise: pricing.finalAmountInPaise,
+        appliedOfferId: pricing.offer?.id ?? null,
+        appliedCouponCode: pricing.offer?.couponCode ?? null,
         status: 'CONFIRMED',
         paymentStatus: 'PENDING', // MVP — payment gateway not integrated yet
         specialRequests: specialRequests ?? null,
         items: { create: itemsToCreate },
+        ...(pricing.offer ? {
+          offerRedemption: {
+            create: {
+              offerId: pricing.offer.id,
+              customerUserId: guestUserId,
+              originalAmountInPaise: subtotalAmountInPaise,
+              discountAmountInPaise: pricing.discountAmountInPaise,
+              finalAmountInPaise: pricing.finalAmountInPaise,
+            },
+          },
+        } : {}),
       },
       select: BOOKING_SELECT,
     });

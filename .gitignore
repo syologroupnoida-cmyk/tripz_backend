@@ -21,3 +21,6 @@ test-db.js
 test-*.js
 scratch.js
 scratch-*.js
+
+# Local offer import data; upload through the admin API when needed.
+docs/Tripz_50_Customer_Offers_Deals*.csv

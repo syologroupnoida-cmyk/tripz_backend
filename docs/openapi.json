@@ -644,6 +644,106 @@
         }
       }
     },
+    "/api/v1/admin/dashboard/stats": {
+      "get": {
+        "tags": ["Admin"],
+        "summary": "Get dashboard totals (ADMIN+)",
+        "description": "Returns total leads, customers, all vendor agents, travel-agent vendors, and property-owner vendors.",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Dashboard statistics retrieved",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "Dashboard statistics retrieved.",
+                  "data": {
+                    "totalLeads": 250,
+                    "totalAgents": 45,
+                    "totalCustomers": 180,
+                    "totalTravelAgents": 30,
+                    "totalPropertyOwners": 15
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/api/v1/admin/offers": {
+      "get": {
+        "tags": ["Admin"], "summary": "List offers", "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["DRAFT", "ACTIVE", "PAUSED", "EXPIRED"] } },
+          { "name": "discountType", "in": "query", "schema": { "type": "string" } },
+          { "name": "applicableTo", "in": "query", "schema": { "type": "string", "enum": ["PACKAGE", "PROPERTY", "BOTH"] } },
+          { "name": "search", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Offers retrieved" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" } }
+      },
+      "post": {
+        "tags": ["Admin"], "summary": "Create an offer", "security": [{ "bearerAuth": [] }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["name", "couponCode", "discountType", "applicableTo", "validFrom", "validTo"] } } } },
+        "responses": { "201": { "description": "Offer created" }, "400": { "description": "Invalid offer" }, "409": { "description": "Coupon code already exists" } }
+      }
+    },
+    "/api/v1/admin/offers/import": {
+      "post": {
+        "tags": ["Admin"], "summary": "Validate or import an offers CSV", "security": [{ "bearerAuth": [] }],
+        "requestBody": { "required": true, "content": { "multipart/form-data": { "schema": { "type": "object", "required": ["file"], "properties": { "file": { "type": "string", "format": "binary" }, "mode": { "type": "string", "enum": ["validate", "import"], "default": "validate" } } } } } },
+        "responses": { "200": { "description": "CSV validated" }, "201": { "description": "Valid rows imported as drafts" }, "400": { "description": "Invalid CSV" } }
+      }
+    },
+    "/api/v1/admin/offers/{id}": {
+      "get": {
+        "tags": ["Admin"], "summary": "Get offer detail", "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Offer retrieved" }, "404": { "description": "Offer not found" } }
+      },
+      "patch": {
+        "tags": ["Admin"], "summary": "Update an offer", "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } },
+        "responses": { "200": { "description": "Offer updated" }, "400": { "description": "Invalid offer" }, "404": { "description": "Offer not found" } }
+      },
+      "delete": {
+        "tags": ["Admin"], "summary": "Soft-delete an offer", "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Offer deleted" }, "404": { "description": "Offer not found" } }
+      }
+    },
+    "/api/v1/admin/offers/{id}/activate": {
+      "post": {
+        "tags": ["Admin"], "summary": "Activate an offer", "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Offer activated" }, "400": { "description": "Offer is not redeemable" }, "404": { "description": "Offer not found" } }
+      }
+    },
+    "/api/v1/admin/offers/{id}/pause": {
+      "post": {
+        "tags": ["Admin"], "summary": "Pause an offer", "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Offer paused" }, "404": { "description": "Offer not found" } }
+      }
+    },
+    "/api/v1/offers": {
+      "get": {
+        "tags": ["Admin"], "summary": "List currently active public offers",
+        "parameters": [{ "name": "applicableTo", "in": "query", "schema": { "type": "string", "enum": ["PACKAGE", "PROPERTY"] } }],
+        "responses": { "200": { "description": "Active offers retrieved" } }
+      }
+    },
+    "/api/v1/client/offers/validate": {
+      "post": {
+        "tags": ["Admin"], "summary": "Validate a coupon and calculate a quote", "security": [{ "bearerAuth": [] }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["couponCode", "productType"] } } } },
+        "responses": { "200": { "description": "Coupon is valid" }, "400": { "description": "Coupon is invalid or ineligible" }, "404": { "description": "Product not found" } }
+      }
+    },
     "/api/v1/admin/vendors": {
       "get": {
         "tags": ["Admin - Vendors"],

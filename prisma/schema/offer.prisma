@@ -1,0 +1,105 @@
+model Offer {
+  id                 String  @id @default(uuid())
+  name               String
+  couponCode         String  @unique
+  description        String? @db.Text
+  bannerText         String?
+  termsAndConditions String? @db.Text
+
+  discountType       OfferDiscountType
+  discountValue      Int?
+  maxDiscountInPaise Int?
+  benefitText        String?
+
+  applicableTo    OfferApplicableTo
+  customerType    OfferCustomerType @default(ALL)
+  customerSegment String?
+  eligibilityText String?           @db.Text
+
+  minimumBookingInPaise Int?
+  minimumStayNights     Int?
+  minimumGuests         Int?
+  advanceBookingDays    Int?
+  destinations          String[]
+  packageTypes          PackageType[]
+  propertyTypes         PropertyType[]
+
+  validFrom        DateTime
+  validTo          DateTime
+  usageLimit       Int?
+  perCustomerLimit Int         @default(1)
+  redemptionCount  Int         @default(0)
+  status           OfferStatus @default(DRAFT)
+  createdByAdminId String?
+  deletedAt        DateTime?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  packageTargets   OfferPackageTarget[]
+  propertyTargets  OfferPropertyTarget[]
+  redemptions      OfferRedemption[]
+  customerUsages   OfferCustomerUsage[]
+  propertyBookings PropertyBooking[]
+
+  @@index([status, validFrom, validTo])
+  @@index([applicableTo])
+  @@index([deletedAt])
+  @@map("offers")
+}
+
+model OfferPackageTarget {
+  offerId   String
+  packageId String
+
+  offer   Offer   @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  package Package @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@id([offerId, packageId])
+  @@index([packageId])
+  @@map("offer_package_targets")
+}
+
+model OfferPropertyTarget {
+  offerId    String
+  propertyId String
+
+  offer    Offer    @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@id([offerId, propertyId])
+  @@index([propertyId])
+  @@map("offer_property_targets")
+}
+
+model OfferCustomerUsage {
+  offerId        String
+  customerUserId String
+  usageCount     Int      @default(0)
+  updatedAt      DateTime @updatedAt
+
+  offer Offer @relation(fields: [offerId], references: [id], onDelete: Cascade)
+
+  @@id([offerId, customerUserId])
+  @@index([customerUserId])
+  @@map("offer_customer_usages")
+}
+
+model OfferRedemption {
+  id                    String                @id @default(uuid())
+  offerId               String
+  customerUserId        String
+  propertyBookingId     String                @unique
+  originalAmountInPaise Int
+  discountAmountInPaise Int
+  finalAmountInPaise    Int
+  status                OfferRedemptionStatus @default(REDEEMED)
+  redeemedAt            DateTime              @default(now())
+  cancelledAt           DateTime?
+
+  offer           Offer           @relation(fields: [offerId], references: [id], onDelete: Restrict)
+  propertyBooking PropertyBooking @relation(fields: [propertyBookingId], references: [id], onDelete: Restrict)
+
+  @@index([offerId, status])
+  @@index([customerUserId, status])
+  @@map("offer_redemptions")
+}

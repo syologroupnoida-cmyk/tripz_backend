@@ -2,6 +2,7 @@ import prisma from '../../config/db.js';
 import { ApiError } from '../../utils/ApiError.js';
 import * as bookingRepo from '../../repositories/propertyBooking.repository.js';
 import * as mail from '../mail/index.js';
+import { claimPropertyOfferTx } from '../offer/index.js';
 
 // Fire-and-forget email helper — swallow errors so a mail failure never
 // breaks the booking flow. Errors are logged for observability.
@@ -20,7 +21,7 @@ export const createBooking = async ({ guestUserId, data }) => {
   const property = await prisma.property.findFirst({
     where: { id: data.propertyId, deletedAt: null, status: 'APPROVED' },
     select: {
-      id: true, ownerUserId: true, minStayNights: true,
+      id: true, ownerUserId: true, minStayNights: true, city: true,
       title: true, propertyType: true,
     },
   });
@@ -87,6 +88,8 @@ export const createBooking = async ({ guestUserId, data }) => {
     guestPhone: data.guestPhone,
     guestEmail: data.guestEmail,
     specialRequests: data.specialRequests,
+    couponCode: data.couponCode,
+    claimOfferTx: claimPropertyOfferTx,
   });
 
   // 6. Fire notifications (non-blocking)

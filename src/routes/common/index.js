@@ -8,6 +8,7 @@ import packagesRoutes from './packages.routes.js';
 import travelGuideRoutes from './travelGuide.routes.js';
 import storyRoutes from './story.routes.js';
 import propertiesRoutes from './properties.routes.js';
+import offersRoutes from './offers.routes.js';
 
 const router = Router();
 
@@ -20,5 +21,6 @@ router.use('/packages', packagesRoutes);
 router.use('/travel-guide', travelGuideRoutes);
 router.use('/stories', storyRoutes);
 router.use('/properties', propertiesRoutes);
+router.use('/offers', offersRoutes);
 
 export default router;

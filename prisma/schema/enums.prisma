@@ -194,3 +194,38 @@ enum PayoutStatus {
   PAID // Admin manually transferred to owner (with reference)
   ON_HOLD // Dispute or issue — payout blocked temporarily
 }
+
+enum OfferDiscountType {
+  PERCENTAGE
+  FLAT
+  FREEBIE
+  CASHBACK
+  CREDIT
+  STARTING_PRICE
+  SPECIAL_PRICE
+  TRAVEL_CREDIT
+}
+
+enum OfferApplicableTo {
+  PACKAGE
+  PROPERTY
+  BOTH
+}
+
+enum OfferCustomerType {
+  ALL
+  NEW
+  EXISTING
+}
+
+enum OfferStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  EXPIRED
+}
+
+enum OfferRedemptionStatus {
+  REDEEMED
+  CANCELLED
+}

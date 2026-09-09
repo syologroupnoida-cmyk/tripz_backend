@@ -65,9 +65,10 @@ model Property {
   updatedAt DateTime  @updatedAt
 
   // Relations
-  owner    VendorProfile     @relation(fields: [ownerUserId], references: [userId], onDelete: Cascade)
-  rooms    PropertyRoom[]
-  bookings PropertyBooking[]
+  owner        VendorProfile         @relation(fields: [ownerUserId], references: [userId], onDelete: Cascade)
+  rooms        PropertyRoom[]
+  bookings     PropertyBooking[]
+  offerTargets OfferPropertyTarget[]
 
   // Indexes for common queries
   @@index([ownerUserId])
@@ -149,7 +150,11 @@ model PropertyBooking {
   nights   Int // Auto-calculated at creation
 
   // ---- Amount (aggregate across all items) ----
-  totalAmountInPaise Int // SUM(item.subtotalInPaise)
+  subtotalAmountInPaise Int     @default(0) // SUM(item.subtotalInPaise) before coupon discount
+  discountAmountInPaise Int     @default(0)
+  totalAmountInPaise    Int // subtotalAmountInPaise - discountAmountInPaise
+  appliedOfferId        String?
+  appliedCouponCode     String?
 
   // ---- Status ----
   status        BookingStatus @default(CONFIRMED)
@@ -177,12 +182,15 @@ model PropertyBooking {
   updatedAt DateTime @updatedAt
 
   // Relations
-  property Property              @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  items    PropertyBookingItem[]
+  property        Property              @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  items           PropertyBookingItem[]
+  appliedOffer    Offer?                @relation(fields: [appliedOfferId], references: [id], onDelete: SetNull)
+  offerRedemption OfferRedemption?
 
   // Indexes — booking-level lookups
   @@index([guestUserId])
   @@index([propertyId])
+  @@index([appliedOfferId])
   @@index([status])
   @@index([payoutStatus])
   @@index([checkIn, checkOut, status])
