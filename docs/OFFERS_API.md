@@ -73,7 +73,9 @@ fields that do not apply; the importer normalizes these markers safely.
 GET /api/v1/offers?applicableTo=PROPERTY&take=20&skip=0
 ```
 
-Only currently active, non-deleted and date-valid offers are returned.
+Active current and upcoming offers are returned. Expired, paused, draft, and
+deleted offers are excluded. Upcoming coupons still cannot be applied before
+their `validFrom` date.
 
 ## Customer Validation
 

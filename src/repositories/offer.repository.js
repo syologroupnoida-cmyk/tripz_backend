@@ -64,7 +64,6 @@ export const listOffers = async ({
   if (publicOnly) {
     const now = new Date();
     where.status = 'ACTIVE';
-    where.validFrom = { lte: now };
     where.validTo = { gte: now };
     if (applicableTo) where.applicableTo = { in: [applicableTo, 'BOTH'] };
   } else {
