@@ -36,6 +36,8 @@ const numberField = (min, max, label) =>
 const stringBool = z.enum(['true', 'false']).optional()
   .transform((v) => (v === undefined ? undefined : v === 'true'));
 
+const travelGuideTypeEnum = z.enum(['NATIONAL', 'INTERNATIONAL']);
+
 // ---- CREATE schema ----
 // Strict: saare zaroori fields required
 export const createTravelGuideSchema = z.object({
@@ -44,6 +46,7 @@ export const createTravelGuideSchema = z.object({
   country:          trimmedRequired(2, 60, 'country').optional(),
   continent:        trimmedRequired(2, 40, 'continent').optional(),
   category:         trimmedRequired(2, 60, 'category').optional(),
+  travelGuideType:  travelGuideTypeEnum.optional().default('NATIONAL'),
   shortDescription: trimmedRequired(2, 500, 'shortDescription').optional(),
   description:      trimmedRequired(2, 10000, 'description').optional(),
   bestTimeToVisit:  trimmedRequired(2, 120, 'bestTimeToVisit').optional(),
@@ -75,6 +78,7 @@ export const updateTravelGuideSchema = z.object({
   country:          trimmedOptional(60, 'country').optional(),
   continent:        trimmedOptional(40, 'continent').optional(),
   category:         trimmedOptional(60, 'category').optional(),
+  travelGuideType:  travelGuideTypeEnum.optional(),
   shortDescription: trimmedOptional(500, 'shortDescription').optional(),
   description:      trimmedOptional(10000, 'description').optional(),
   bestTimeToVisit:  trimmedOptional(120, 'bestTimeToVisit').optional(),
@@ -106,6 +110,7 @@ export const publicTravelGuidesQuerySchema = z.object({
   country:     z.string().trim().max(60).optional(),
   continent:   z.string().trim().max(40).optional(),
   category:    z.string().trim().max(60).optional(),
+  travelGuideType: travelGuideTypeEnum.optional(),
   minBudget:   z.coerce.number().min(0).optional(),
   maxBudget:   z.coerce.number().min(0).optional(),
   minRating:   z.coerce.number().min(0).max(5).optional(),
@@ -125,6 +130,7 @@ export const publicTravelGuidesQuerySchema = z.object({
     country: q.country,
     continent: q.continent,
     category: q.category,
+    travelGuideType: q.travelGuideType,
     minBudget: q.minBudget,
     maxBudget: q.maxBudget,
     minRating: q.minRating,
@@ -137,6 +143,7 @@ export const publicTravelGuidesQuerySchema = z.object({
 
 // ---- Vendor's own list ----
 export const listVendorTravelGuidesQuerySchema = z.object({
+  travelGuideType: travelGuideTypeEnum.optional(),
   take: z.coerce.number().int().min(1).max(100).optional(),
   skip: z.coerce.number().int().min(0).optional(),
   page: z.coerce.number().int().min(0).optional(),
@@ -148,5 +155,5 @@ export const listVendorTravelGuidesQuerySchema = z.object({
 .transform((q) => {
   const take = q.size ?? q.take ?? 20;
   const skip = q.page !== undefined ? q.page * take : (q.skip ?? 0);
-  return { sortBy: q.sortBy, order: q.order, take, skip };
+  return { travelGuideType: q.travelGuideType, sortBy: q.sortBy, order: q.order, take, skip };
 });

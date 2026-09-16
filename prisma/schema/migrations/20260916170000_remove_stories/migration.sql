@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS "stories";
+DROP TYPE IF EXISTS "StoryStatus";
+DROP TYPE IF EXISTS "StoryType";

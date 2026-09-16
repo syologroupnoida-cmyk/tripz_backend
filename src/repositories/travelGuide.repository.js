@@ -10,6 +10,7 @@ const TRAVEL_GUIDE_SELECT = {
   country: true,
   continent: true,
   category: true,
+  travelGuideType: true,
   shortDescription: true,
   description: true,
   bestTimeToVisit: true,
@@ -82,8 +83,9 @@ export const softDeleteGuide = async ({ id, vendorUserId }) => {
 };
 
 // Vendor's own guides list
-export const listGuidesForVendor = async ({ vendorUserId, sortBy, order, take, skip }) => {
+export const listGuidesForVendor = async ({ vendorUserId, travelGuideType, sortBy, order, take, skip }) => {
   const where = { vendorUserId, deletedAt: null };
+  if (travelGuideType) where.travelGuideType = travelGuideType;
   const [items, total] = await Promise.all([
     prisma.travelGuide.findMany({
       where,
@@ -98,7 +100,7 @@ export const listGuidesForVendor = async ({ vendorUserId, sortBy, order, take, s
 
 // Public browse with filters
 export const listGuidesPublic = async ({
-  destination, country, continent, category,
+  destination, country, continent, category, travelGuideType,
   minBudget, maxBudget, minRating,
   sortBy, order, take, skip,
 }) => {
@@ -107,6 +109,7 @@ export const listGuidesPublic = async ({
   if (country) where.country = { contains: country, mode: 'insensitive' };
   if (continent) where.continent = { contains: continent, mode: 'insensitive' };
   if (category) where.category = { contains: category, mode: 'insensitive' };
+  if (travelGuideType) where.travelGuideType = travelGuideType;
   if (minBudget !== undefined || maxBudget !== undefined) {
     where.budget = {};
     if (minBudget !== undefined) where.budget.gte = minBudget;

@@ -445,6 +445,7 @@
                 { "key": "country", "value": "India", "disabled": true, "description": "Case-insensitive contains." },
                 { "key": "continent", "value": "Asia", "disabled": true, "description": "Case-insensitive contains." },
                 { "key": "category", "value": "Adventure", "disabled": true, "description": "Case-insensitive contains." },
+                { "key": "travelGuideType", "value": "NATIONAL", "disabled": true, "description": "NATIONAL | INTERNATIONAL" },
                 { "key": "minBudget", "value": "5000", "disabled": true },
                 { "key": "maxBudget", "value": "50000", "disabled": true },
                 { "key": "minRating", "value": "4", "disabled": true, "description": "0-5" },
@@ -452,7 +453,7 @@
                 { "key": "order", "value": "desc", "disabled": true }
               ]
             },
-            "description": "Enable the query params to filter.\n\nAll text filters (`destination`, `country`, `continent`, `category`) do case-insensitive substring match so partial keywords work.\n\n**Side effect:** Auto-saves the first result's slug into `travelGuideSlug` for the next request."
+            "description": "Enable the query params to filter.\n\n- `travelGuideType` accepts `NATIONAL` or `INTERNATIONAL` (exact enum match).\n- Text filters (`destination`, `country`, `continent`, `category`) use case-insensitive substring matching.\n\nEvery returned guide includes `travelGuideType`.\n\n**Side effect:** Auto-saves the first result's slug into `travelGuideSlug` for the next request."
           }
         },
         {
@@ -497,7 +498,7 @@
               "raw": "{\n  \"title\": \"Kashmir Adventure Guide\",\n  \"destination\": \"Kashmir\",\n  \"country\": \"India\",\n  \"continent\": \"Asia\",\n  \"category\": \"Adventure\",\n  \"shortDescription\": \"A comprehensive guide to exploring the paradise on Earth â€” Kashmir.\",\n  \"description\": \"Kashmir is a paradise for adventure seekers. Nestled in the Himalayas, it offers everything from skiing in Gulmarg to shikara rides on Dal Lake. This guide walks you through the best time to visit, must-see spots, local cuisine, and practical safety tips.\",\n  \"bestTimeToVisit\": \"April to October\",\n  \"duration\": \"7-10 days\",\n  \"budget\": 25000,\n  \"currency\": \"INR\",\n  \"rating\": 4.8,\n  \"weather\": \"Cool\",\n  \"language\": \"Kashmiri, Hindi, English\",\n  \"visaRequired\": \"No\",\n  \"transportation\": \"Flight to Srinagar, then local cabs\",\n  \"accommodation\": \"Houseboats, hotels, guest houses\",\n  \"cuisine\": \"Wazwan, Rogan Josh, Kahwa\",\n  \"safetyRating\": 4.5,\n  \"mainImage\": \"https://res.cloudinary.com/tripz/travel-guide-main/kashmir.jpg\",\n  \"galleryImages\": [\n    \"https://res.cloudinary.com/tripz/travel-guide-gallery/kashmir-1.jpg\",\n    \"https://res.cloudinary.com/tripz/travel-guide-gallery/kashmir-2.jpg\"\n  ],\n  \"highlights\": [\"Dal Lake\", \"Gulmarg Gondola\", \"Pahalgam\"],\n  \"activities\": [\"Skiing\", \"Trekking\", \"Shikara Ride\"],\n  \"tips\": [\"Carry warm clothing\", \"Book houseboats in advance\", \"Try local Kahwa tea\"]\n}"
             },
             "url": { "raw": "{{baseUrl}}/vendor/travel-guide", "host": ["{{baseUrl}}"], "path": ["vendor", "travel-guide"] },
-            "description": "Creates a new travel guide. Publishes immediately (no admin review).\n\n**Key notes:**\n- Only `title` and `mainImage` are strictly required â€” every other field is optional.\n- `budget`, `rating`, `safetyRating` accept strings or numbers.\n- `visaRequired` accepts booleans or `\"Yes\"`/`\"No\"` strings â€” backend normalises to boolean.\n- `slug` is auto-generated from `title`.\n- Client can safely include extra fields â€” they're silently ignored.\n\n**Side effect:** Auto-saves `travelGuideId` and `travelGuideSlug` for follow-up calls."
+            "description": "Creates a new travel guide. Publishes immediately (no admin review).\n\n**Travel guide type:**\n- `travelGuideType`: `NATIONAL` or `INTERNATIONAL`.\n- Optional; defaults to `NATIONAL` when omitted.\n\n**Key notes:**\n- Only `title` and `mainImage` are strictly required â€” every other field is optional.\n- `budget`, `rating`, `safetyRating` accept strings or numbers.\n- `visaRequired` accepts booleans or `\"Yes\"`/`\"No\"` strings â€” backend normalises to boolean.\n- `slug` is auto-generated from `title`.\n- Client can safely include extra fields â€” they're silently ignored.\n\n**Side effect:** Auto-saves `travelGuideId` and `travelGuideSlug` for follow-up calls."
           }
         },
         {
@@ -512,11 +513,12 @@
               "query": [
                 { "key": "page", "value": "0" },
                 { "key": "size", "value": "20" },
+                { "key": "travelGuideType", "value": "NATIONAL", "disabled": true, "description": "NATIONAL | INTERNATIONAL" },
                 { "key": "sortBy", "value": "createdAt", "disabled": true, "description": "createdAt | updatedAt | title" },
                 { "key": "order", "value": "desc", "disabled": true }
               ]
             },
-            "description": "Vendor's own travel guides (soft-deleted rows excluded)."
+            "description": "Vendor's own travel guides (soft-deleted rows excluded). Optionally filter with `travelGuideType=NATIONAL` or `travelGuideType=INTERNATIONAL`. Every item includes `travelGuideType`."
           }
         },
         {
@@ -538,7 +540,7 @@
               "raw": "{\n  \"shortDescription\": \"Updated: Explore Kashmir with our refreshed adventure guide.\",\n  \"budget\": 28000,\n  \"tips\": [\"Carry warm clothing\", \"Book houseboats in advance\", \"Try local Kahwa tea\", \"Keep ID proof handy\"]\n}"
             },
             "url": { "raw": "{{baseUrl}}/vendor/travel-guide/{{travelGuideId}}", "host": ["{{baseUrl}}"], "path": ["vendor", "travel-guide", "{{travelGuideId}}"] },
-            "description": "Partial update â€” send only the fields you want to change. Changes are live immediately (no re-approval).\n\n**Notes:**\n- Title change auto-regenerates the slug.\n- Empty body is rejected (400) â€” at least one field must be provided.\n\n**Errors:**\n- 403 â€” guide belongs to another vendor\n- 404 â€” guide not found"
+            "description": "Partial update â€” send only the fields you want to change. Changes are live immediately (no re-approval).\n\n`travelGuideType` can be changed to `NATIONAL` or `INTERNATIONAL`.\n\n**Notes:**\n- Title change auto-regenerates the slug.\n- Empty body is rejected (400) â€” at least one field must be provided.\n\n**Errors:**\n- 403 â€” guide belongs to another vendor\n- 404 â€” guide not found"
           }
         },
         {
@@ -1322,220 +1324,6 @@
             },
             "url": { "raw": "{{baseUrl}}/admin/property-bookings/{{bookingId}}/payout", "host": ["{{baseUrl}}"], "path": ["admin", "property-bookings", "{{bookingId}}", "payout"] },
             "description": "Admin marks payout as done after offline bank transfer.\n\n**Body:**\n- `commission` â€” amount kept by platform, IN RUPEES (backend â†’ paise)\n- `payoutReference` â€” bank txn ref (IMPS/NEFT/UTR), REQUIRED, 3-120 chars\n- `payoutNotes` â€” optional notes from the call\n\n**Auto-calculated:** `payoutAmountInPaise = totalAmountInPaise - commissionInPaise`\n\n**Preconditions:**\n- Booking status must be COMPLETED\n- payoutStatus must be PENDING (not already paid)\n- commission must not exceed booking total\n\n**Errors:**\n- 400 `INVALID_COMMISSION` â€” commission > total amount\n- 409 `INVALID_PAYOUT_STATE` â€” booking not COMPLETED\n- 409 `ALREADY_PAID_OUT` â€” payout already recorded (returns existing reference)"
-          }
-        }
-      ]
-    },
-    {
-      "name": "Public â€” Stories",
-      "description": "Public-facing story catalog. No authentication.\n\n**Server-side filters (automatic):**\n- `status = 'PUBLISHED'` only (HIDDEN stories excluded)\n- `deletedAt IS NULL`",
-      "item": [
-        {
-          "name": "Browse stories (with filters)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "const res = pm.response.json();",
-                  "if (res?.data?.items?.[0]?.slug) {",
-                  "  pm.environment.set('storySlug', res.data.items[0].slug);",
-                  "  console.log('Auto-saved storySlug:', res.data.items[0].slug);",
-                  "}"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "auth": { "type": "noauth" },
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/stories?page=0&size=20",
-              "host": ["{{baseUrl}}"],
-              "path": ["stories"],
-              "query": [
-                { "key": "page", "value": "0" },
-                { "key": "size", "value": "20" },
-                { "key": "storyType", "value": "FOUNDER_STORY", "disabled": true, "description": "FOUNDER_STORY | CUSTOMER_STORY | VENDOR_STORY | JOURNEY | INSPIRATION | SUCCESS_STORY" },
-                { "key": "location", "value": "Noida", "disabled": true, "description": "Case-insensitive contains" },
-                { "key": "year", "value": "2020", "disabled": true },
-                { "key": "search", "value": "journey", "disabled": true, "description": "Case-insensitive contains on title" },
-                { "key": "sortBy", "value": "createdAt", "disabled": true, "description": "createdAt | title" },
-                { "key": "order", "value": "desc", "disabled": true }
-              ]
-            },
-            "description": "Enable query params to filter.\n\n**Side effect:** Auto-saves the first result's slug into `storySlug` for the detail request."
-          }
-        },
-        {
-          "name": "Get story detail by slug",
-          "request": {
-            "auth": { "type": "noauth" },
-            "method": "GET",
-            "header": [],
-            "url": { "raw": "{{baseUrl}}/stories/{{storySlug}}", "host": ["{{baseUrl}}"], "path": ["stories", "{{storySlug}}"] },
-            "description": "**Public detail page** â€” no auth. Returns every field of one story plus author info (role + name).\n\n**Where the slug comes from:**\n1. Frontend calls `GET /stories` â†’ gets array of stories, each with `slug` field.\n2. User clicks a card â†’ frontend routes to `/stories/<slug>` and calls this endpoint.\n\n**In Postman:** the Browse request auto-saves `res.data.items[0].slug` into `{{storySlug}}`.\n\n**Slug format:** auto-generated from `title` â€” lowercased, non-alphanumeric â†’ `-`, e.g. `\"My Journey to Himalayas\"` â†’ `my-journey-to-himalayas`. Collision â†’ `-2`, `-3`.\n\n**Errors:**\n- 404 â€” slug not found, guide is soft-deleted, or admin has hidden it (status = HIDDEN)"
-          }
-        }
-      ]
-    },
-    {
-      "name": "Authenticated â€” Stories",
-      "description": "Story CRUD for any authenticated user (CLIENT + VENDOR + ADMIN + SUPER_ADMIN can all create/edit/delete their OWN stories).\n\n**Publishing model:** create â†’ live immediately (no admin approval). Admin can hide/delete any story from the moderation panel.\n\n**Image upload:** Frontend uploads each image to `/uploads/image` first, receives Cloudinary URL back, then sends URLs in the create/update body as plain strings.",
-      "item": [
-        {
-          "name": "Create story",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "const res = pm.response.json();",
-                  "if (res?.data?.id) {",
-                  "  pm.environment.set('storyId', res.data.id);",
-                  "  pm.environment.set('storySlug', res.data.slug);",
-                  "  console.log('Auto-saved storyId:', res.data.id, '| slug:', res.data.slug);",
-                  "}"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"title\": \"Journey\",\n  \"storyType\": \"FOUNDER_STORY\",\n  \"authorName\": \"Prashant\",\n  \"authorDesignation\": \"dev\",\n  \"quote\": \"Test Story\",\n  \"shortDescription\": \"Description\",\n  \"fullStory\": \"Full Story..\",\n  \"year\": \"2020\",\n  \"location\": \"Noida\",\n  \"mainImage\": \"https://res.cloudinary.com/tripz/story-main/journey.jpg\",\n  \"galleryImages\": [\n    \"https://res.cloudinary.com/tripz/story-gallery/journey-1.jpg\",\n    \"https://res.cloudinary.com/tripz/story-gallery/journey-2.jpg\"\n  ],\n  \"keyPoints\": [\n    \"Kashmir\",\n    \"6 Months\",\n    \"Choose Basic Brown\"\n  ],\n  \"achievements\": [\n    \"Platinum Pro\",\n    \"3 Days\",\n    \"Tracking\"\n  ]\n}"
-            },
-            "url": { "raw": "{{baseUrl}}/stories", "host": ["{{baseUrl}}"], "path": ["stories"] },
-            "description": "Creates a new story. Publishes immediately (status = PUBLISHED).\n\n**Required fields:** `title`, `storyType`, `authorName`, `shortDescription`, `fullStory`, `mainImage`.\n\n**storyType values:** FOUNDER_STORY | CUSTOMER_STORY | VENDOR_STORY | JOURNEY | INSPIRATION | SUCCESS_STORY\n\n**Notes:**\n- `slug` auto-generated from `title`\n- `authorUserId` set from JWT â€” client cannot send it\n- Client can safely include extra fields â€” silently ignored\n\n**Side effect:** Auto-saves `storyId` and `storySlug`."
-          }
-        },
-        {
-          "name": "List my stories",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/stories/mine?page=0&size=20",
-              "host": ["{{baseUrl}}"],
-              "path": ["stories", "mine"],
-              "query": [
-                { "key": "page", "value": "0" },
-                { "key": "size", "value": "20" },
-                { "key": "sortBy", "value": "createdAt", "disabled": true, "description": "createdAt | updatedAt | title" },
-                { "key": "order", "value": "desc", "disabled": true }
-              ]
-            },
-            "description": "Logged-in user's own stories. Includes both PUBLISHED and HIDDEN (so user knows if admin hid something)."
-          }
-        },
-        {
-          "name": "Get my story detail",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": { "raw": "{{baseUrl}}/stories/mine/{{storyId}}", "host": ["{{baseUrl}}"], "path": ["stories", "mine", "{{storyId}}"] },
-            "description": "Own story detail. Returns 403 if the story belongs to another user."
-          }
-        },
-        {
-          "name": "Update story",
-          "request": {
-            "method": "PATCH",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"shortDescription\": \"Updated short description\",\n  \"achievements\": [\n    \"Platinum Pro\",\n    \"3 Days\",\n    \"Tracking\",\n    \"New milestone\"\n  ]\n}"
-            },
-            "url": { "raw": "{{baseUrl}}/stories/{{storyId}}", "host": ["{{baseUrl}}"], "path": ["stories", "{{storyId}}"] },
-            "description": "Partial update â€” send only fields to change. Changes are live immediately (no re-approval).\n\n**Notes:**\n- Title change auto-regenerates the slug\n- Empty body rejected (400)\n\n**Errors:**\n- 403 â€” story belongs to another user\n- 404 â€” story not found"
-          }
-        },
-        {
-          "name": "Delete my story (soft delete)",
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": { "raw": "{{baseUrl}}/stories/{{storyId}}", "host": ["{{baseUrl}}"], "path": ["stories", "{{storyId}}"] },
-            "description": "Soft delete own story â€” stamps `deletedAt`. Row preserved for audit.\n\n**Errors:**\n- 403 â€” story belongs to another user\n- 404 â€” story not found or already deleted"
-          }
-        }
-      ]
-    },
-    {
-      "name": "Admin â€” Stories",
-      "description": "Story moderation. ADMIN + SUPER_ADMIN.\n\nAdmin can:\n- List ALL stories (including HIDDEN)\n- Hide / unhide any story\n- Delete any story (regardless of author)",
-      "item": [
-        {
-          "name": "List stories queue",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/admin/stories?page=0&size=20",
-              "host": ["{{baseUrl}}"],
-              "path": ["admin", "stories"],
-              "query": [
-                { "key": "page", "value": "0" },
-                { "key": "size", "value": "20" },
-                { "key": "status", "value": "PUBLISHED", "disabled": true, "description": "PUBLISHED | HIDDEN" },
-                { "key": "storyType", "value": "FOUNDER_STORY", "disabled": true },
-                { "key": "authorUserId", "value": "", "disabled": true, "description": "Filter by specific user's stories" },
-                { "key": "search", "value": "", "disabled": true, "description": "Case-insensitive contains on title" },
-                { "key": "sortBy", "value": "createdAt", "disabled": true },
-                { "key": "order", "value": "desc", "disabled": true }
-              ]
-            },
-            "description": "All stories â€” moderation view. Includes HIDDEN stories that the public list excludes."
-          }
-        },
-        {
-          "name": "Hide a story (?hidden=true)",
-          "request": {
-            "method": "PATCH",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"reason\": \"Inappropriate content flagged by users\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/admin/stories/{{storyId}}/hide?hidden=true",
-              "host": ["{{baseUrl}}"],
-              "path": ["admin", "stories", "{{storyId}}", "hide"],
-              "query": [
-                { "key": "hidden", "value": "true", "description": "true (default) â†’ hide. false â†’ unhide." }
-              ]
-            },
-            "description": "PUBLISHED â†’ HIDDEN. Story disappears from public list + detail (404). Author still sees it in `/stories/mine`.\n\n**Body:** `reason` optional (5-500 chars). Stored in `hiddenReason` â€” visible to admin only.\n\n**Same endpoint used for unhide** â€” flip `?hidden=false`.\n\n**Errors:**\n- 409 â€” story already hidden"
-          }
-        },
-        {
-          "name": "Unhide a story (?hidden=false)",
-          "request": {
-            "method": "PATCH",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/admin/stories/{{storyId}}/hide?hidden=false",
-              "host": ["{{baseUrl}}"],
-              "path": ["admin", "stories", "{{storyId}}", "hide"],
-              "query": [
-                { "key": "hidden", "value": "false", "description": "false â†’ unhide (HIDDEN â†’ PUBLISHED)." }
-              ]
-            },
-            "description": "HIDDEN â†’ PUBLISHED. Story reappears on public list. Clears `hiddenReason`. Same endpoint as **Hide a story**, just with `hidden=false`.\n\n**Errors:**\n- 409 â€” story already published"
-          }
-        },
-        {
-          "name": "Delete any story (admin power)",
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": { "raw": "{{baseUrl}}/admin/stories/{{storyId}}", "host": ["{{baseUrl}}"], "path": ["admin", "stories", "{{storyId}}"] },
-            "description": "Soft delete ANY story â€” regardless of author. Stamps `deletedAt`.\n\n**Errors:**\n- 404 â€” story not found or already deleted"
           }
         }
       ]
@@ -2842,6 +2630,152 @@
               ]
             },
             "description": "All of the vendor's past + current subs. Handy for the vendor's account/billing page. UPGRADED rows include `replacedBySubscriptionId` linking to the successor."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Public â€” Blogs",
+      "description": "Public blog catalog. No authentication required. Only records with `isActive = true` and `deletedAt IS NULL` are returned.",
+      "item": [
+        {
+          "name": "List active blogs",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.items?.[0]?.slug) {",
+                  "  pm.environment.set('blogSlug', res.data.items[0].slug);",
+                  "  console.log('Auto-saved blogSlug:', res.data.items[0].slug);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/blogs?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["blogs"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "search", "value": "holiday", "disabled": true, "description": "Searches title, excerpt, and category." },
+                { "key": "category", "value": "Travel Ideas", "disabled": true, "description": "Case-insensitive exact category match." },
+                { "key": "sortBy", "value": "createdAt", "disabled": true, "description": "createdAt | title | category" },
+                { "key": "order", "value": "desc", "disabled": true, "description": "asc | desc" }
+              ]
+            },
+            "description": "Returns active, non-deleted blogs only. `isActive` cannot be overridden from this public endpoint. The first result's slug is saved as `blogSlug`."
+          }
+        },
+        {
+          "name": "Get active blog by slug",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/blogs/{{blogSlug}}", "host": ["{{baseUrl}}"], "path": ["blogs", "{{blogSlug}}"] },
+            "description": "Returns one active, non-deleted blog by SEO slug. Returns 404 when the blog is inactive, deleted, or does not exist."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin â€” Blogs",
+      "description": "Blog CRUD for ADMIN and SUPER_ADMIN. Authentication and an admin bearer token are required.",
+      "item": [
+        {
+          "name": "Create blog",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.id) {",
+                  "  pm.environment.set('blogId', res.data.id);",
+                  "  pm.environment.set('blogSlug', res.data.slug);",
+                  "  console.log('Auto-saved blogId:', res.data.id, '| slug:', res.data.slug);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"A Weekend Travel Planning Guide\",\n  \"excerpt\": \"A practical guide for planning a comfortable weekend getaway.\",\n  \"category\": \"Planning\",\n  \"readTime\": \"4 min read\",\n  \"image\": \"https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1000&q=80\",\n  \"content\": [\n    \"Choose a destination that is close enough to avoid spending most of the weekend in transit.\",\n    \"Book accommodation and transport early, and leave some free time in the itinerary.\"\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/blogs?isActive=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "blogs"],
+              "query": [{ "key": "isActive", "value": "true", "description": "true publishes immediately; false creates an inactive blog" }]
+            },
+            "description": "Creates a blog. `slug` is optional and is generated from `title` when omitted. Set the `isActive` query parameter to `true` or `false`; it defaults to `true` when omitted."
+          }
+        },
+        {
+          "name": "List all blogs (admin)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/blogs?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "blogs"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "isActive", "value": "true", "disabled": true, "description": "true | false" },
+                { "key": "search", "value": "travel", "disabled": true },
+                { "key": "category", "value": "Planning", "disabled": true },
+                { "key": "sortBy", "value": "createdAt", "disabled": true, "description": "createdAt | updatedAt | title | category" },
+                { "key": "order", "value": "desc", "disabled": true }
+              ]
+            },
+            "description": "Lists active and inactive blogs for admins. Soft-deleted blogs are excluded. Use `isActive=true` or `isActive=false` to filter publication state."
+          }
+        },
+        {
+          "name": "Get blog by ID (admin)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/admin/blogs/{{blogId}}", "host": ["{{baseUrl}}"], "path": ["admin", "blogs", "{{blogId}}"] },
+            "description": "Returns one non-deleted blog by database ID, whether active or inactive."
+          }
+        },
+        {
+          "name": "Update blog / change visibility",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"excerpt\": \"Updated blog excerpt for the website.\",\n  \"isActive\": false\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/admin/blogs/{{blogId}}", "host": ["{{baseUrl}}"], "path": ["admin", "blogs", "{{blogId}}"] },
+            "description": "Partial update. Set `isActive` to false to hide the blog from both public endpoints, or true to publish it. Changing the title regenerates the slug unless an explicit slug is supplied."
+          }
+        },
+        {
+          "name": "Delete blog (soft delete)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/admin/blogs/{{blogId}}", "host": ["{{baseUrl}}"], "path": ["admin", "blogs", "{{blogId}}"] },
+            "description": "Soft-deletes the blog. It disappears from admin and public reads but remains in the database."
           }
         }
       ]
