@@ -9,8 +9,9 @@ model TravelGuide {
   country          String
   continent        String
   category         String
+  travelGuideType  TravelGuideType @default(NATIONAL)
   shortDescription String
-  description      String  @db.Text
+  description      String          @db.Text
   bestTimeToVisit  String
   duration         String
   budget           Float
@@ -46,6 +47,7 @@ model TravelGuide {
   @@index([country])
   @@index([continent])
   @@index([category])
+  @@index([travelGuideType])
   @@index([deletedAt])
   @@map("travel_guides")
 }
