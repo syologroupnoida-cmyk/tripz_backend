@@ -16,6 +16,7 @@ export const UPLOAD_PURPOSES = [
   'property-main', // Property main/cover image (marketplace card)
   'property-gallery', // Property gallery images (multiple per property)
   'property-room', // Per-room images (AC/Deluxe/Suite/etc.)
+  'blog-image',
   'other',
 ];
 
