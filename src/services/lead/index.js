@@ -113,6 +113,27 @@ export const submitLead = async ({ payload, customerUserId = null }) => {
         code: 'PACKAGE_NOT_AVAILABLE',
       });
     }
+    
+    if (!pkg.vendorUserId) {
+      const lead = await leadRepo.createLead({
+        ...top,
+        customerUserId,
+        requirements: {
+          ...requirements,
+          sourcePackageId: pkg.id,
+        },
+      });
+
+      return {
+        leadId: lead.id,
+        status: lead.status,
+        isDirect: false,
+        fromPackage: true,
+        createdAt: lead.createdAt,
+        message:
+          'The package vendor is unavailable. Your inquiry has been submitted to the vendor marketplace.',
+      };
+    }
 
     const priceInCredits = await resolveDirectLeadPrice(pkg.vendorUserId);
 

@@ -1,0 +1,10 @@
+# Use this workspace to collaborate
+workspace:
+  id: ""
+
+localResources:
+  environments:
+    - ../docs/tripz-postman-environment-production.json
+    - ../docs/tripz-postman-environment.json
+  specs:
+    - ../docs/openapi.json
