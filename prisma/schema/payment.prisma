@@ -1,0 +1,57 @@
+model Payment {
+  id                String         @id @default(uuid())
+  userId            String
+  purpose           PaymentPurpose
+  referenceId       String
+  provider          String         @default("RAZORPAY")
+  providerOrderId   String?        @unique
+  providerPaymentId String?        @unique
+  amountInPaise     Int
+  refundedInPaise   Int            @default(0)
+  currency          String         @default("INR")
+  status            PaymentState   @default(CREATED)
+  idempotencyKey    String         @unique
+  failureCode       String?
+  failureMessage    String?
+  metadata          Json?
+  paidAt            DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  user    User            @relation(fields: [userId], references: [id], onDelete: Restrict)
+  refunds PaymentRefund[]
+
+  @@index([userId, createdAt])
+  @@index([purpose, referenceId])
+  @@map("payments")
+}
+
+model PaymentRefund {
+  id               String   @id @default(uuid())
+  paymentId        String
+  providerRefundId String?  @unique
+  amountInPaise    Int
+  status           String
+  reason           String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+
+  @@index([paymentId])
+  @@map("payment_refunds")
+}
+
+model PaymentWebhookEvent {
+  id              String    @id @default(uuid())
+  provider        String
+  providerEventId String    @unique
+  eventType       String
+  payload         Json
+  processedAt     DateTime?
+  errorMessage    String?
+  createdAt       DateTime  @default(now())
+
+  @@index([provider, eventType])
+  @@map("payment_webhook_events")
+}

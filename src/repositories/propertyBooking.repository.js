@@ -1,4 +1,5 @@
 import prisma from '../config/db.js';
+import { env } from '../config/env.js';
 import { ApiError } from '../utils/ApiError.js';
 
 // Fields returned in booking responses. Includes property + items (each with
@@ -21,6 +22,7 @@ const BOOKING_SELECT = {
   appliedCouponCode: true,
   status: true,
   paymentStatus: true,
+  paymentExpiresAt: true,
   checkedInAt: true,
   checkedOutAt: true,
   cancelledAt: true,
@@ -96,7 +98,10 @@ export const countBookedUnitsForRoomTx = async (tx, { roomId, checkIn, checkOut 
     where: {
       roomId,
       booking: {
-        status: { in: ['CONFIRMED', 'CHECKED_IN'] },
+        OR: [
+          { status: { in: ['CONFIRMED', 'CHECKED_IN'] } },
+          { status: 'PENDING_PAYMENT', paymentExpiresAt: { gt: new Date() } },
+        ],
         checkOut: { gt: checkIn },
         checkIn:  { lt: checkOut },
       },
@@ -175,8 +180,9 @@ export const createBookingSafely = async ({
         totalAmountInPaise: pricing.finalAmountInPaise,
         appliedOfferId: pricing.offer?.id ?? null,
         appliedCouponCode: pricing.offer?.couponCode ?? null,
-        status: 'CONFIRMED',
+        status: 'PENDING_PAYMENT',
         paymentStatus: 'PENDING', // MVP — payment gateway not integrated yet
+        paymentExpiresAt: new Date(Date.now() + env.PAYMENT_HOLD_MINUTES * 60 * 1000),
         specialRequests: specialRequests ?? null,
         items: { create: itemsToCreate },
         ...(pricing.offer ? {

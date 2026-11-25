@@ -3,6 +3,7 @@ import { ApiError } from '../../utils/ApiError.js';
 import * as bookingRepo from '../../repositories/propertyBooking.repository.js';
 import * as mail from '../mail/index.js';
 import { claimPropertyOfferTx } from '../offer/index.js';
+import { createOrder as createPaymentOrder, refundForReference } from '../payment/index.js';
 
 // Fire-and-forget email helper — swallow errors so a mail failure never
 // breaks the booking flow. Errors are logged for observability.
@@ -92,10 +93,15 @@ export const createBooking = async ({ guestUserId, data }) => {
     claimOfferTx: claimPropertyOfferTx,
   });
 
-  // 6. Fire notifications (non-blocking)
-  sendBookingCreatedNotifications(booking);
+  const payment = await createPaymentOrder({
+    userId: guestUserId,
+    purpose: 'PROPERTY_BOOKING',
+    referenceId: booking.id,
+    amountInPaise: booking.totalAmountInPaise,
+    metadata: { propertyId: property.id },
+  });
 
-  return { booking, message: 'Booking confirmed.' };
+  return { booking, payment, message: 'Booking created. Complete payment to confirm it.' };
 };
 
 // Flatten booking.items into a display-friendly summary for email templates.
@@ -107,7 +113,7 @@ const summarizeItems = (items) => items
 
 // Look up the owner's user record and send guest + owner emails in parallel.
 // Runs after createBooking returns — errors logged, never propagated.
-const sendBookingCreatedNotifications = async (booking) => {
+export const sendBookingCreatedNotifications = async (booking) => {
   try {
     console.log('[booking-email] booking created — looking up owner', {
       bookingId: booking.id,
@@ -224,6 +230,16 @@ export const cancelMyBooking = async ({ guestUserId, bookingId, reason }) => {
   if (!ok) throw new ApiError(500, 'Failed to cancel booking.');
 
   const updated = await bookingRepo.getBookingById(bookingId);
+
+  // Current policy is a full refund. The common payment service safely no-ops
+  // for legacy/unpaid bookings that have no captured gateway payment.
+  await refundForReference({
+    userId: guestUserId,
+    purpose: 'PROPERTY_BOOKING',
+    referenceId: bookingId,
+    amountInPaise: booking.totalAmountInPaise,
+    reason: reason ?? 'Customer cancellation',
+  });
 
   // Fire cancellation emails to guest + owner (non-blocking)
   sendBookingCancelledNotifications(updated);

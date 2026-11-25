@@ -161,12 +161,29 @@ enum PropertyStatus {
 
 // Booking lifecycle — from creation through checkout to payout.
 enum BookingStatus {
+  PENDING_PAYMENT // Inventory held temporarily while checkout is in progress
   CONFIRMED // Booking successful, inventory blocked
   CHECKED_IN // Owner marked guest checked in
   CHECKED_OUT // Owner marked guest checked out
   COMPLETED // Post-checkout, ready for payout
   CANCELLED // Guest or owner cancelled
   NO_SHOW // Guest didn't arrive
+}
+
+enum PaymentPurpose {
+  PROPERTY_BOOKING
+  VENDOR_SUBSCRIPTION
+  WALLET_TOP_UP
+}
+
+enum PaymentState {
+  CREATED
+  PENDING
+  CAPTURED
+  FAILED
+  CANCELLED
+  PARTIALLY_REFUNDED
+  REFUNDED
 }
 
 // Payment tracking on a booking. All start PENDING; payment integration

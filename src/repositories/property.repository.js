@@ -379,7 +379,10 @@ export const countBookedUnitsForRoom = async ({ roomId, checkIn, checkOut }) => 
     where: {
       roomId,
       booking: {
-        status: { in: ['CONFIRMED', 'CHECKED_IN'] },
+        OR: [
+          { status: { in: ['CONFIRMED', 'CHECKED_IN'] } },
+          { status: 'PENDING_PAYMENT', paymentExpiresAt: { gt: new Date() } },
+        ],
         checkOut: { gt: checkIn },
         checkIn:  { lt: checkOut },
       },

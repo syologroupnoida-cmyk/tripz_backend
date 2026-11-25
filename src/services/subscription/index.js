@@ -22,6 +22,7 @@
 
 import { ApiError } from '../../utils/ApiError.js';
 import * as subscriptionRepo from '../../repositories/subscription.repository.js';
+import { createOrder as createPaymentOrder } from '../payment/index.js';
 
 const MS_PER_DAY = 86400000;
 
@@ -282,12 +283,27 @@ export const buySubscription = async ({ vendorUserId, planId }) => {
     });
   }
 
-  const result = await subscriptionRepo.createFreshSubscription({ vendorUserId, plan });
+  if (plan.offerPriceInPaise === 0) {
+    const result = await subscriptionRepo.createFreshSubscription({ vendorUserId, plan });
+    return {
+      subscription: decorate(result.subscription),
+      walletBalanceAfter: result.walletBalanceAfter,
+      message: `Subscribed to ${plan.name}. ${plan.includedCredits} credits added.`,
+    };
+  }
+
+  const payment = await createPaymentOrder({
+    userId: vendorUserId,
+    purpose: 'VENDOR_SUBSCRIPTION',
+    referenceId: plan.id,
+    amountInPaise: plan.offerPriceInPaise,
+    metadata: { action: 'BUY' },
+  });
 
   return {
-    subscription: decorate(result.subscription),
-    walletBalanceAfter: result.walletBalanceAfter,
-    message: `Subscribed to ${plan.name}. ${plan.includedCredits} credits added.`,
+    subscription: null,
+    payment,
+    message: `Payment created for ${plan.name}. Complete payment to activate the subscription.`,
   };
 };
 
@@ -330,6 +346,23 @@ export const upgradeSubscription = async ({ vendorUserId, planId }) => {
     oldPlan,
     newPlan,
   });
+
+  if (newPlan.offerPriceInPaise > 0) {
+    const payment = await createPaymentOrder({
+      userId: vendorUserId,
+      purpose: 'VENDOR_SUBSCRIPTION',
+      referenceId: newPlan.id,
+      amountInPaise: newPlan.offerPriceInPaise,
+      metadata: { action: 'UPGRADE', oldSubscriptionId: currentSub.id, bonusDays },
+    });
+    return {
+      subscription: null,
+      previousSubscriptionId: currentSub.id,
+      bonusDaysGranted: bonusDays,
+      payment,
+      message: `Payment created for ${newPlan.name}. Complete payment to activate the upgrade.`,
+    };
+  }
 
   let result;
   try {

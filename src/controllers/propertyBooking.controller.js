@@ -8,7 +8,11 @@ export const createBooking = asyncHandler(async (req, res) => {
     guestUserId: req.user.id,
     data: req.body,
   });
-  return sendSuccess(res, { statusCode: 201, message: data.message, data: data.booking });
+  return sendSuccess(res, {
+    statusCode: 201,
+    message: data.message,
+    data: { ...data.booking, payment: data.payment },
+  });
 });
 
 export const listMyBookings = asyncHandler(async (req, res) => {

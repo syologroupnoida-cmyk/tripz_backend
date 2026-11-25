@@ -1101,7 +1101,7 @@
     },
     {
       "name": "Client â€” Property Bookings",
-      "description": "Guest-facing booking flow. CLIENT role required.\n\n**No payment gateway yet (MVP)** â€” booking goes directly to `CONFIRMED` status. Inventory is blocked immediately. `paymentStatus` defaults to `PENDING` until Razorpay integrated later.\n\n**Booking lifecycle:**\n`CONFIRMED` â†’ `CHECKED_IN` (owner marks) â†’ `COMPLETED` (owner marks after checkout)\n\nAlternate paths:\n`CONFIRMED` â†’ `CANCELLED` (guest cancels before check-in)\n`CONFIRMED` â†’ `NO_SHOW` (owner marks after check-in date passes)",
+      "description": "Guest-facing Razorpay booking flow. CLIENT role required. Creating a booking returns the existing booking fields plus a `payment` checkout object and starts at `PENDING_PAYMENT`. A verified capture changes it to `CONFIRMED` and sends confirmation emails.\n\n**Lifecycle:** `PENDING_PAYMENT` â†’ `CONFIRMED` â†’ `CHECKED_IN` â†’ `COMPLETED`. Guest cancellation of a captured CONFIRMED booking requests a full gateway refund.",
       "item": [
         {
           "name": "Create booking (single room type)",
@@ -1113,6 +1113,8 @@
                   "const res = pm.response.json();",
                   "if (res?.data?.id) {",
                   "  pm.environment.set('bookingId', res.data.id);",
+                  "  if (res.data.payment?.id) pm.environment.set('paymentId', res.data.payment.id);",
+                  "  if (res.data.payment?.providerOrderId) pm.environment.set('razorpayOrderId', res.data.payment.providerOrderId);",
                   "  console.log('Auto-saved bookingId:', res.data.id);",
                   "}"
                 ],
@@ -1141,6 +1143,8 @@
                   "const res = pm.response.json();",
                   "if (res?.data?.id) {",
                   "  pm.environment.set('bookingId', res.data.id);",
+                  "  if (res.data.payment?.id) pm.environment.set('paymentId', res.data.payment.id);",
+                  "  if (res.data.payment?.providerOrderId) pm.environment.set('razorpayOrderId', res.data.payment.providerOrderId);",
                   "  console.log('Auto-saved multi-room bookingId:', res.data.id);",
                   "}"
                 ],
@@ -1171,7 +1175,7 @@
               "query": [
                 { "key": "page", "value": "0" },
                 { "key": "size", "value": "20" },
-                { "key": "status", "value": "CONFIRMED", "disabled": true, "description": "CONFIRMED | CHECKED_IN | CHECKED_OUT | COMPLETED | CANCELLED | NO_SHOW" },
+                { "key": "status", "value": "PENDING_PAYMENT", "disabled": true, "description": "PENDING_PAYMENT | CONFIRMED | CHECKED_IN | CHECKED_OUT | COMPLETED | CANCELLED | NO_SHOW" },
                 { "key": "sortBy", "value": "createdAt", "disabled": true, "description": "createdAt | checkIn | checkOut" },
                 { "key": "order", "value": "desc", "disabled": true }
               ]
@@ -1198,7 +1202,7 @@
               "raw": "{\n  \"reason\": \"Plans changed â€” traveling later\"\n}"
             },
             "url": { "raw": "{{baseUrl}}/client/property-bookings/{{bookingId}}/cancel", "host": ["{{baseUrl}}"], "path": ["client", "property-bookings", "{{bookingId}}", "cancel"] },
-            "description": "Only CONFIRMED bookings can be cancelled. Inventory auto-releases (query filter excludes CANCELLED).\n\n**MVP:** Free cancellation, no policy tiers, no refund logic (no payment yet).\n\n**Errors:**\n- 403 â€” booking belongs to another user\n- 409 `INVALID_TRANSITION` â€” booking is not CONFIRMED (already checked-in/completed/cancelled)"
+            "description": "Only CONFIRMED bookings can be cancelled. Inventory releases immediately and a full refund is requested for a captured Razorpay payment. Final refund state is applied by the signed webhook.\n\n**Errors:**\n- 403 â€” booking belongs to another user\n- 409 `INVALID_TRANSITION` â€” booking is not CONFIRMED"
           }
         }
       ]
@@ -1219,7 +1223,7 @@
               "query": [
                 { "key": "page", "value": "0" },
                 { "key": "size", "value": "20" },
-                { "key": "status", "value": "CONFIRMED", "disabled": true, "description": "CONFIRMED | CHECKED_IN | CHECKED_OUT | COMPLETED | CANCELLED | NO_SHOW" },
+                { "key": "status", "value": "PENDING_PAYMENT", "disabled": true, "description": "PENDING_PAYMENT | CONFIRMED | CHECKED_IN | CHECKED_OUT | COMPLETED | CANCELLED | NO_SHOW" },
                 { "key": "propertyId", "value": "{{propertyId}}", "disabled": true, "description": "Filter to one specific property" },
                 { "key": "fromDate", "value": "2026-12-01", "disabled": true, "description": "checkIn >= this date (YYYY-MM-DD)" },
                 { "key": "toDate", "value": "2026-12-31", "disabled": true, "description": "checkIn <= this date" },
@@ -1324,6 +1328,65 @@
             },
             "url": { "raw": "{{baseUrl}}/admin/property-bookings/{{bookingId}}/payout", "host": ["{{baseUrl}}"], "path": ["admin", "property-bookings", "{{bookingId}}", "payout"] },
             "description": "Admin marks payout as done after offline bank transfer.\n\n**Body:**\n- `commission` â€” amount kept by platform, IN RUPEES (backend â†’ paise)\n- `payoutReference` â€” bank txn ref (IMPS/NEFT/UTR), REQUIRED, 3-120 chars\n- `payoutNotes` â€” optional notes from the call\n\n**Auto-calculated:** `payoutAmountInPaise = totalAmountInPaise - commissionInPaise`\n\n**Preconditions:**\n- Booking status must be COMPLETED\n- payoutStatus must be PENDING (not already paid)\n- commission must not exceed booking total\n\n**Errors:**\n- 400 `INVALID_COMMISSION` â€” commission > total amount\n- 409 `INVALID_PAYOUT_STATE` â€” booking not COMPLETED\n- 409 `ALREADY_PAID_OUT` â€” payout already recorded (returns existing reference)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payments â€” Razorpay",
+      "description": "Shared payment APIs for property bookings, vendor subscriptions, and wallet top-ups. Booking/subscription creation responses auto-save `paymentId` and `razorpayOrderId` when their Tests scripts are run. Use Razorpay Checkout in the frontend, then send its three returned fields to Verify payment. The webhook request is mainly a signature-testing template; normal webhook calls come directly from Razorpay.",
+      "item": [
+        {
+          "name": "Verify checkout payment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Payment verification succeeded', () => pm.response.to.have.status(200));",
+                  "const res = pm.response.json();",
+                  "if (res?.data?.id) pm.environment.set('paymentId', res.data.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"razorpay_order_id\": \"{{razorpayOrderId}}\",\n  \"razorpay_payment_id\": \"{{razorpayPaymentId}}\",\n  \"razorpay_signature\": \"{{razorpaySignature}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/payments/verify", "host": ["{{baseUrl}}"], "path": ["payments", "verify"] },
+            "description": "Authenticated endpoint used after Razorpay Checkout success. It verifies the HMAC signature and idempotently fulfills the purchase. Booking payments confirm the booking; subscription payments activate/grant credits; wallet payments credit the wallet. The signed webhook remains the server-side source of truth."
+          }
+        },
+        {
+          "name": "Get my payment status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/payments/{{paymentId}}", "host": ["{{baseUrl}}"], "path": ["payments", "{{paymentId}}"] },
+            "description": "Returns the authenticated user's payment status and Razorpay order reference. Returns 404 for another user's payment."
+          }
+        },
+        {
+          "name": "Razorpay webhook â€” payment captured",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-razorpay-signature", "value": "{{razorpayWebhookSignature}}" },
+              { "key": "x-razorpay-event-id", "value": "{{razorpayEventId}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"payment.captured\",\n  \"payload\": {\n    \"payment\": {\n      \"entity\": {\n        \"id\": \"{{razorpayPaymentId}}\",\n        \"order_id\": \"{{razorpayOrderId}}\"\n      }\n    }\n  }\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/payments/webhooks/razorpay", "host": ["{{baseUrl}}"], "path": ["payments", "webhooks", "razorpay"] },
+            "description": "Public signed webhook. The signature must be calculated from the exact raw request body with `RAZORPAY_WEBHOOK_SECRET`; editing whitespace after signing invalidates it. Configure this URL in the Razorpay dashboard for `payment.captured`, `payment.failed`, and `refund.processed`. Duplicate event IDs are safe."
           }
         }
       ]
@@ -1756,7 +1819,7 @@
     },
     {
       "name": "Vendor â€” Wallet",
-      "description": "Vendor's wallet view. Balance + transaction ledger.",
+      "description": "Vendor wallet balance, transaction ledger, and Razorpay-backed credit top-ups. Top-up pricing is calculated by the backend.",
       "item": [
         {
           "name": "Get my wallet (balance + recent txns)",
@@ -1783,6 +1846,29 @@
               ]
             },
             "description": "Full paginated transaction ledger. Optional `type` filter for one specific transaction type."
+          }
+        },
+        {
+          "name": "Create wallet top-up payment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.id) pm.environment.set('paymentId', res.data.id);",
+                  "if (res?.data?.providerOrderId) pm.environment.set('razorpayOrderId', res.data.providerOrderId);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"credits\": 100\n}" },
+            "url": { "raw": "{{baseUrl}}/vendor/wallet/top-ups", "host": ["{{baseUrl}}"], "path": ["vendor", "wallet", "top-ups"] },
+            "description": "Creates a Razorpay order for wallet credits. The server calculates the amount from `WALLET_CREDIT_PRICE_IN_PAISE`; the client cannot choose its own price. Complete checkout, then call `POST /payments/verify`. Credits and the `CREDIT_TOP_UP` ledger row are created exactly once after capture. Auto-saves `paymentId` and `razorpayOrderId`."
           }
         }
       ]
@@ -2539,7 +2625,7 @@
     },
     {
       "name": "Vendor â€” Subscriptions",
-      "description": "Vendor's own plan catalog + buy / upgrade / current / history. VENDOR role.\n\n**Direct-buy MVP:** No payment gateway. Buying a plan immediately activates it and grants the plan's `includedCredits` to the wallet. Razorpay verification will slot in front of buy/upgrade in a later phase.\n\n**Upgrade â€” Add Days:** Old sub's remaining value is converted into bonus days on the new plan at the new plan's daily rate. Vendor pays full new-plan price up front, gets extra time instead.\n\n**Credits â€” Additive:** New plan's credits stack on top of whatever the vendor already had. Old credits never expire.",
+      "description": "Vendor's plan catalog + Razorpay-backed buy / upgrade / current / history. Paid buy and upgrade requests return `subscription: null` plus a `payment` checkout object. The subscription activates and credits are granted only after signed verification/webhook capture. Free plans still activate immediately. Upgrade bonus-day and additive-credit rules remain unchanged.",
       "item": [
         {
           "name": "List active plans (vendor catalog)",
@@ -2558,6 +2644,8 @@
               "script": {
                 "exec": [
                   "const res = pm.response.json();",
+                  "if (res?.data?.payment?.id) pm.environment.set('paymentId', res.data.payment.id);",
+                  "if (res?.data?.payment?.providerOrderId) pm.environment.set('razorpayOrderId', res.data.payment.providerOrderId);",
                   "if (res?.data?.subscription?.id) {",
                   "  pm.environment.set('subscriptionId', res.data.subscription.id);",
                   "  console.log('Auto-saved subscriptionId:', res.data.subscription.id, '| Wallet:', res.data.walletBalanceAfter);",
@@ -2575,7 +2663,7 @@
               "raw": "{\n  \"planId\": \"{{planId}}\"\n}"
             },
             "url": { "raw": "{{baseUrl}}/vendor/subscriptions", "host": ["{{baseUrl}}"], "path": ["vendor", "subscriptions"] },
-            "description": "Fresh purchase. Returns the new sub + `walletBalanceAfter` (post-credit-grant).\n\n**Errors:**\n- 404 â€” plan not found or inactive\n- 409 `ACTIVE_SUBSCRIPTION_EXISTS` â€” vendor already has an ACTIVE sub (use **Upgrade** instead)"
+            "description": "Fresh paid purchase. Returns `subscription: null` and a `payment` object containing the Razorpay order, amount, currency and public key. Complete Checkout and call `POST /payments/verify`; capture then creates the subscription and grants credits. A zero-price plan still activates immediately.\n\n**Errors:**\n- 404 â€” plan not found or inactive\n- 409 `ACTIVE_SUBSCRIPTION_EXISTS`\n- 503 `PAYMENT_GATEWAY_NOT_CONFIGURED`"
           }
         },
         {
@@ -2586,6 +2674,8 @@
               "script": {
                 "exec": [
                   "const res = pm.response.json();",
+                  "if (res?.data?.payment?.id) pm.environment.set('paymentId', res.data.payment.id);",
+                  "if (res?.data?.payment?.providerOrderId) pm.environment.set('razorpayOrderId', res.data.payment.providerOrderId);",
                   "if (res?.data?.subscription?.id) {",
                   "  pm.environment.set('subscriptionId', res.data.subscription.id);",
                   "  console.log('Upgraded. New sub:', res.data.subscription.id, '| Bonus days:', res.data.bonusDaysGranted, '| Wallet:', res.data.walletBalanceAfter);",
@@ -2603,7 +2693,7 @@
               "raw": "{\n  \"planId\": \"{{planId}}\"\n}"
             },
             "url": { "raw": "{{baseUrl}}/vendor/subscriptions/upgrade", "host": ["{{baseUrl}}"], "path": ["vendor", "subscriptions", "upgrade"] },
-            "description": "Upgrade to a pricier plan. Set `planId` to the target plan's id (NOT the current one).\n\n**Formula:**\n```\nremainingValue = (daysRemaining / oldPlan.durationDays) * oldPlan.priceInPaise\nbonusDays      = ceil(remainingValue / (newPlan.priceInPaise / newPlan.durationDays))\nnewExpiresAt   = now + newPlan.durationDays + bonusDays\n```\n\n**Errors:**\n- 400 â€” no active sub / already on this plan\n- 400 `DOWNGRADE_BLOCKED` â€” new plan is cheaper than current\n- 404 â€” plan not found or inactive\n- 409 `CONCURRENT_UPGRADE` â€” someone else touched the old sub between check and update"
+            "description": "Creates a Razorpay payment for an upgrade to a pricier plan. The response includes the calculated `bonusDaysGranted` and checkout `payment`; the old subscription remains active until capture. After verification, fulfillment atomically upgrades the old row, creates the new subscription and grants credits.\n\n**Errors:**\n- 400 â€” no active subscription / same plan\n- 400 `DOWNGRADE_BLOCKED`\n- 404 â€” plan unavailable\n- 409 â€” subscription state changed before capture"
           }
         },
         {

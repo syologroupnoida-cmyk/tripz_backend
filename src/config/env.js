@@ -127,6 +127,14 @@ const envSchema = z
     SUREPASS_DIGILOCKER_FETCH_PATH: z
       .string()
       .default("/digilocker/download-aadhaar"),
+
+    // ---- Razorpay payments ----
+    RAZORPAY_KEY_ID: z.string().min(5).optional(),
+    RAZORPAY_KEY_SECRET: z.string().min(8).optional(),
+    RAZORPAY_WEBHOOK_SECRET: z.string().min(8).optional(),
+    RAZORPAY_BASE_URL: z.string().url().default("https://api.razorpay.com/v1"),
+    PAYMENT_HOLD_MINUTES: z.coerce.number().int().min(5).max(60).default(15),
+    WALLET_CREDIT_PRICE_IN_PAISE: z.coerce.number().int().positive().default(100),
   })
   .refine((data) => data.JWT_ACCESS_SECRET !== data.JWT_REFRESH_SECRET, {
     message:

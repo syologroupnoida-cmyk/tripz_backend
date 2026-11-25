@@ -105,6 +105,42 @@
       "enabled": true
     },
     {
+      "key": "paymentId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "razorpayOrderId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "razorpayPaymentId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "razorpaySignature",
+      "value": "",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "razorpayWebhookSignature",
+      "value": "",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "razorpayEventId",
+      "value": "postman-test-event-001",
+      "type": "default",
+      "enabled": true
+    },
+    {
       "key": "blogId",
       "value": "",
       "type": "default",

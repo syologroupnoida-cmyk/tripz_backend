@@ -157,8 +157,9 @@ model PropertyBooking {
   appliedCouponCode     String?
 
   // ---- Status ----
-  status        BookingStatus @default(CONFIRMED)
-  paymentStatus PaymentStatus @default(PENDING)
+  status           BookingStatus @default(PENDING_PAYMENT)
+  paymentStatus    PaymentStatus @default(PENDING)
+  paymentExpiresAt DateTime?
 
   // ---- Timestamps for state transitions ----
   checkedInAt        DateTime?

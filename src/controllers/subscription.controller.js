@@ -82,7 +82,7 @@ export const buySubscription = asyncHandler(async (req, res) => {
   });
   return sendSuccess(res, {
     statusCode: 201,
-    message: 'Subscription activated.',
+    message: data.message,
     data,
   });
 });
@@ -94,7 +94,7 @@ export const upgradeSubscription = asyncHandler(async (req, res) => {
   });
   return sendSuccess(res, {
     statusCode: 200,
-    message: 'Subscription upgraded.',
+    message: data.message,
     data,
   });
 });
