@@ -13,6 +13,7 @@ import packagesRoutes from './packages.routes.js';
 import travelGuideRoutes from './travelGuide.routes.js';
 import propertiesRoutes from './properties.routes.js';
 import propertyBookingsRoutes from './propertyBookings.routes.js';
+import creditPackagesRoutes from './creditPackages.routes.js';
 
 const router = Router();
 
@@ -24,6 +25,7 @@ router.use('/wallet', walletRoutes);
 router.use('/leads', leadsRoutes);
 router.use('/subscription-plans', subscriptionPlansRoutes);
 router.use('/subscriptions', subscriptionsRoutes);
+router.use('/credit-packages', creditPackagesRoutes);
 
 // TRAVEL_AGENT-only features — packages + travel guides. Property owners get
 // a clear 403 with { code: 'VENDOR_TYPE_MISMATCH' } if they try to access.

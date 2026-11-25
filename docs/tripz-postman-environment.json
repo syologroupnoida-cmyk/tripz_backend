@@ -111,6 +111,12 @@
       "enabled": true
     },
     {
+      "key": "creditPackageId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
       "key": "razorpayOrderId",
       "value": "",
       "type": "default",

@@ -134,7 +134,6 @@ const envSchema = z
     RAZORPAY_WEBHOOK_SECRET: z.string().min(8).optional(),
     RAZORPAY_BASE_URL: z.string().url().default("https://api.razorpay.com/v1"),
     PAYMENT_HOLD_MINUTES: z.coerce.number().int().min(5).max(60).default(15),
-    WALLET_CREDIT_PRICE_IN_PAISE: z.coerce.number().int().positive().default(100),
   })
   .refine((data) => data.JWT_ACCESS_SECRET !== data.JWT_REFRESH_SECRET, {
     message:

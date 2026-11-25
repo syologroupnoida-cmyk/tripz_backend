@@ -1818,6 +1818,57 @@
       ]
     },
     {
+      "name": "Credit Packages",
+      "description": "Super Admin manages purchasable credit cards/packages. Vendors can list only active packages. Prices and credit quantities come from the backend; the wallet top-up request sends only `creditPackageId`.",
+      "item": [
+        {
+          "name": "Create credit package (Super Admin)",
+          "event": [{ "listen": "test", "script": { "exec": ["const res = pm.response.json();", "if (res?.data?.id) pm.environment.set('creditPackageId', res.data.id);"], "type": "text/javascript" } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Growth Credits\",\n  \"description\": \"Best for active travel vendors\",\n  \"credits\": 500,\n  \"salePriceInPaise\": 49900,\n  \"offerPriceInPaise\": 39900,\n  \"isFeatured\": true,\n  \"displayOrder\": 2,\n  \"isActive\": true\n}" },
+            "url": { "raw": "{{baseUrl}}/super-admin/credit-packages", "host": ["{{baseUrl}}"], "path": ["super-admin", "credit-packages"] },
+            "description": "Creates a package. Prices are integer paise. `offerPriceInPaise` cannot exceed `salePriceInPaise`. Auto-saves `creditPackageId`."
+          }
+        },
+        {
+          "name": "List credit packages (Super Admin)",
+          "request": {
+            "method": "GET", "header": [],
+            "url": { "raw": "{{baseUrl}}/super-admin/credit-packages?page=0&size=20", "host": ["{{baseUrl}}"], "path": ["super-admin", "credit-packages"], "query": [{ "key": "page", "value": "0" }, { "key": "size", "value": "20" }, { "key": "isActive", "value": "true", "disabled": true }, { "key": "includeDeleted", "value": "true", "disabled": true }] }
+          }
+        },
+        {
+          "name": "Get credit package (Super Admin)",
+          "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/super-admin/credit-packages/{{creditPackageId}}", "host": ["{{baseUrl}}"], "path": ["super-admin", "credit-packages", "{{creditPackageId}}"] } }
+        },
+        {
+          "name": "Update / activate credit package (Super Admin)",
+          "request": {
+            "method": "PATCH", "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"offerPriceInPaise\": 34900,\n  \"isFeatured\": true,\n  \"isActive\": true\n}" },
+            "url": { "raw": "{{baseUrl}}/super-admin/credit-packages/{{creditPackageId}}", "host": ["{{baseUrl}}"], "path": ["super-admin", "credit-packages", "{{creditPackageId}}"] },
+            "description": "Partial update. Use `isActive: false` to hide a package from vendors without deleting it."
+          }
+        },
+        {
+          "name": "Delete credit package (Super Admin)",
+          "request": { "method": "DELETE", "header": [], "url": { "raw": "{{baseUrl}}/super-admin/credit-packages/{{creditPackageId}}", "host": ["{{baseUrl}}"], "path": ["super-admin", "credit-packages", "{{creditPackageId}}"] } },
+          "description": "Soft-deletes the package and hides it from vendors. Existing payment snapshots remain valid."
+        },
+        {
+          "name": "List active credit packages (Vendor)",
+          "event": [{ "listen": "test", "script": { "exec": ["const res = pm.response.json();", "if (res?.data?.items?.[0]?.id) pm.environment.set('creditPackageId', res.data.items[0].id);"], "type": "text/javascript" } }],
+          "request": {
+            "method": "GET", "header": [],
+            "url": { "raw": "{{baseUrl}}/vendor/credit-packages", "host": ["{{baseUrl}}"], "path": ["vendor", "credit-packages"] },
+            "description": "Returns active, non-deleted packages ordered for the vendor purchase screen. Auto-saves the first `creditPackageId`."
+          }
+        }
+      ]
+    },
+    {
       "name": "Vendor â€” Wallet",
       "description": "Vendor wallet balance, transaction ledger, and Razorpay-backed credit top-ups. Top-up pricing is calculated by the backend.",
       "item": [
@@ -1866,9 +1917,9 @@
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"credits\": 100\n}" },
+            "body": { "mode": "raw", "raw": "{\n  \"creditPackageId\": \"{{creditPackageId}}\"\n}" },
             "url": { "raw": "{{baseUrl}}/vendor/wallet/top-ups", "host": ["{{baseUrl}}"], "path": ["vendor", "wallet", "top-ups"] },
-            "description": "Creates a Razorpay order for wallet credits. The server calculates the amount from `WALLET_CREDIT_PRICE_IN_PAISE`; the client cannot choose its own price. Complete checkout, then call `POST /payments/verify`. Credits and the `CREDIT_TOP_UP` ledger row are created exactly once after capture. Auto-saves `paymentId` and `razorpayOrderId`."
+            "description": "Creates a Razorpay order from the selected active credit package. The server loads both price and credits; the vendor cannot submit either value. Complete checkout, then call `POST /payments/verify`. Credits and the `CREDIT_TOP_UP` ledger row are created exactly once after capture. Auto-saves `paymentId` and `razorpayOrderId`."
           }
         }
       ]

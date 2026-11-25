@@ -4,6 +4,7 @@ import superAdminRoutes from './superAdmin.routes.js';
 import vendorsRoutes from './vendors.routes.js';
 import subscriptionPlansRoutes from './subscriptionPlans.routes.js';
 import subscriptionsRoutes from './subscriptions.routes.js';
+import creditPackagesRoutes from './creditPackages.routes.js';
 
 const router = Router();
 
@@ -14,6 +15,7 @@ router.use('/', superAdminRoutes);
 router.use('/vendors', vendorsRoutes);
 router.use('/subscription-plans', subscriptionPlansRoutes);
 router.use('/subscriptions', subscriptionsRoutes);
+router.use('/credit-packages', creditPackagesRoutes);
 // Future: router.use('/lead-distribution', leadDistributionRoutes);
 
 export default router;

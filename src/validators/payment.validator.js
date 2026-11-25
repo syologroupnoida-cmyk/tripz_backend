@@ -7,5 +7,5 @@ export const verifyPaymentSchema = z.object({
 }).strict();
 
 export const walletTopUpSchema = z.object({
-  credits: z.number().int().min(1).max(1000000),
+  creditPackageId: z.string().uuid('creditPackageId must be a valid UUID'),
 }).strict();

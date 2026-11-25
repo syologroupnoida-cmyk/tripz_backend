@@ -1,0 +1,19 @@
+model CreditPackage {
+  id String @id @default(uuid())
+
+  name              String
+  description       String?
+  credits           Int
+  salePriceInPaise  Int
+  offerPriceInPaise Int
+  isFeatured        Boolean   @default(false)
+  displayOrder      Int       @default(0)
+  isActive          Boolean   @default(true)
+  deletedAt         DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([isActive, displayOrder])
+  @@index([deletedAt])
+  @@map("credit_packages")
+}
