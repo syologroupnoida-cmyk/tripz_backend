@@ -5,6 +5,10 @@ import { connectDatabase, disconnectDatabase } from './config/db.js';
 import { printRequestLogHeader } from './middlewares/requestLogger.middleware.js';
 import { verifyMailTransport } from './services/mail/index.js';
 import { logKycVerificationMode } from './services/vendorKyc/documentVerification.service.js';
+import {
+  startSubscriptionExpiryJob,
+  stopSubscriptionExpiryJob,
+} from './jobs/subscriptionExpiry.job.js';
 
 const server = http.createServer(app);
 
@@ -12,6 +16,7 @@ const start = async () => {
   await connectDatabase();
   await verifyMailTransport();
   logKycVerificationMode();
+  startSubscriptionExpiryJob();
   // Bind to 0.0.0.0 so requests from Nginx (or any external source) reach us.
   // Binding to the default (localhost/127.0.0.1) would block all non-local
   // connections — fine for dev, broken behind a reverse proxy.
@@ -25,6 +30,7 @@ const start = async () => {
 
 const shutdown = async (signal) => {
   console.log(`[server] ${signal} received. Shutting down gracefully...`);
+  stopSubscriptionExpiryJob();
   server.close(async (err) => {
     if (err) {
       console.error('[server] Error during HTTP server shutdown:', err);

@@ -11,6 +11,7 @@ import propertyBookingsRoutes from './propertyBookings.routes.js';
 import dashboardRoutes from './dashboard.routes.js';
 import offersRoutes from './offers.routes.js';
 import blogsRoutes from './blogs.routes.js';
+import businessProfilesRoutes from './businessProfiles.routes.js';
 
 const router = Router();
 
@@ -21,6 +22,7 @@ router.use('/', adminRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/offers', offersRoutes);
 router.use('/blogs', blogsRoutes);
+router.use('/business-profiles', businessProfilesRoutes);
 router.use('/vendors', vendorsRoutes);
 router.use('/leads', leadsRoutes);
 router.use('/subscription-plans', subscriptionPlansRoutes);

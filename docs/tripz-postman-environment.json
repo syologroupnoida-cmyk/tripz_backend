@@ -147,6 +147,12 @@
       "enabled": true
     },
     {
+      "key": "businessProfileId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
       "key": "blogId",
       "value": "",
       "type": "default",

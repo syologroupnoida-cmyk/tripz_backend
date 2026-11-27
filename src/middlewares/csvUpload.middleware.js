@@ -12,7 +12,7 @@ const csvUpload = multer({
   },
 });
 
-export const uploadOfferCsv = (req, res, next) => {
+export const uploadCsv = (req, res, next) => {
   csvUpload.single('file')(req, res, (error) => {
     if (!error) return next();
     if (error instanceof multer.MulterError) {
@@ -21,3 +21,6 @@ export const uploadOfferCsv = (req, res, next) => {
     return next(error);
   });
 };
+
+// Backwards-compatible name used by the offer import route.
+export const uploadOfferCsv = uploadCsv;

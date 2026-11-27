@@ -329,10 +329,26 @@ export const upgradeSubscription = async ({
  */
 export const findActiveSubscriptionForVendor = async (vendorUserId) => {
   return prisma.vendorSubscription.findFirst({
-    where: { vendorUserId, status: 'ACTIVE' },
+    // Never rely on the scheduled expiry sweep for access control. A job can
+    // be delayed or the process can restart between runs; expiresAt is the
+    // authoritative boundary for whether a subscription is currently live.
+    where: { vendorUserId, status: 'ACTIVE', expiresAt: { gt: new Date() } },
     orderBy: { createdAt: 'desc' },
     select: SUBSCRIPTION_SELECT,
   });
+};
+
+/**
+ * Persist the time-based status transition for all stale subscriptions.
+ * updateMany makes the operation atomic and safe to run from multiple API
+ * instances: only rows that are still ACTIVE can be changed.
+ */
+export const expireStaleSubscriptions = async ({ now = new Date() } = {}) => {
+  const result = await prisma.vendorSubscription.updateMany({
+    where: { status: 'ACTIVE', expiresAt: { lte: now } },
+    data: { status: 'EXPIRED' },
+  });
+  return result.count;
 };
 
 export const getSubscriptionById = async (id) => {

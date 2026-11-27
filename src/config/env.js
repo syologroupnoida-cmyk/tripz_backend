@@ -134,6 +134,16 @@ const envSchema = z
     RAZORPAY_WEBHOOK_SECRET: z.string().min(8).optional(),
     RAZORPAY_BASE_URL: z.string().url().default("https://api.razorpay.com/v1"),
     PAYMENT_HOLD_MINUTES: z.coerce.number().int().min(5).max(60).default(15),
+
+    // ---- Background jobs ----
+    // How often stale ACTIVE vendor subscriptions are persisted as EXPIRED.
+    // Access checks still compare expiresAt at request time, so this controls
+    // database cleanup latency rather than authorization correctness.
+    SUBSCRIPTION_EXPIRY_INTERVAL_MS: z.coerce
+      .number()
+      .int()
+      .min(10_000)
+      .default(5 * 60 * 1000),
   })
   .refine((data) => data.JWT_ACCESS_SECRET !== data.JWT_REFRESH_SECRET, {
     message:

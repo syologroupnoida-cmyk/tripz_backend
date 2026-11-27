@@ -90,7 +90,12 @@ const fulfillCapturedPayment = async ({ paymentId, providerPaymentId }) => {
 
       if (meta.action === 'UPGRADE') {
         const changed = await tx.vendorSubscription.updateMany({
-          where: { id: meta.oldSubscriptionId, vendorUserId: payment.userId, status: 'ACTIVE' },
+          where: {
+            id: meta.oldSubscriptionId,
+            vendorUserId: payment.userId,
+            status: 'ACTIVE',
+            expiresAt: { gt: now },
+          },
           data: { status: 'UPGRADED' },
         });
         if (changed.count !== 1) throw new ApiError(409, 'Subscription state changed. Please start checkout again.');

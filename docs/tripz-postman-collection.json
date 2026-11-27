@@ -2776,6 +2776,165 @@
       ]
     },
     {
+      "name": "Public â€” Business Profiles",
+      "description": "Public Google Maps business directory. No authentication required. Only active, non-deleted profiles are exposed; internal import metadata is omitted.",
+      "item": [
+        {
+          "name": "List active business profiles",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.items?.[0]?.id) {",
+                  "  pm.environment.set('businessProfileId', res.data.items[0].id);",
+                  "  console.log('Auto-saved businessProfileId:', res.data.items[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/business-profiles?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["business-profiles"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "search", "value": "travel", "disabled": true },
+                { "key": "location", "value": "kolkata", "disabled": true },
+                { "key": "city", "value": "Kolkata", "disabled": true },
+                { "key": "state", "value": "West Bengal", "disabled": true },
+                { "key": "category", "value": "Travel agency", "disabled": true },
+                { "key": "minRating", "value": "4", "disabled": true },
+                { "key": "sortBy", "value": "companyName", "disabled": true, "description": "companyName | rating | reviewCount | createdAt" },
+                { "key": "order", "value": "asc", "disabled": true, "description": "asc | desc" }
+              ]
+            },
+            "description": "Returns only active, non-deleted profiles. The public caller cannot override the active-only filter. Saves the first result ID as `businessProfileId`."
+          }
+        },
+        {
+          "name": "Get active business profile",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/business-profiles/{{businessProfileId}}", "host": ["{{baseUrl}}"], "path": ["business-profiles", "{{businessProfileId}}"] },
+            "description": "Returns one active, non-deleted profile. Inactive or deleted records return 404."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin â€” Business Profiles",
+      "description": "ADMIN/SUPER_ADMIN CSV import and profile management. Use Validate first, then Import with the same file.",
+      "item": [
+        {
+          "name": "Validate business profile CSV",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": [], "description": "Select the Google Maps CSV file." },
+                { "key": "mode", "value": "validate", "type": "text" },
+                { "key": "isActive", "value": "true", "type": "text" }
+              ]
+            },
+            "url": { "raw": "{{baseUrl}}/admin/business-profiles/import", "host": ["{{baseUrl}}"], "path": ["admin", "business-profiles", "import"] },
+            "description": "Parses and validates without writing. Reports total, valid, invalid, and duplicate rows. Select the CSV file in Postman before sending."
+          }
+        },
+        {
+          "name": "Import business profile CSV",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": [], "description": "Select the validated Google Maps CSV file." },
+                { "key": "mode", "value": "import", "type": "text" },
+                { "key": "isActive", "value": "true", "type": "text", "description": "true publishes imported profiles; false keeps them admin-only." }
+              ]
+            },
+            "url": { "raw": "{{baseUrl}}/admin/business-profiles/import", "host": ["{{baseUrl}}"], "path": ["admin", "business-profiles", "import"] },
+            "description": "Imports valid unique rows. Re-importing the same data is safe: existing source keys and duplicates are skipped."
+          }
+        },
+        {
+          "name": "List all business profiles (admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.items?.[0]?.id) pm.environment.set('businessProfileId', res.data.items[0].id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/business-profiles?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "business-profiles"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "20" },
+                { "key": "isActive", "value": "true", "disabled": true },
+                { "key": "search", "value": "travel", "disabled": true },
+                { "key": "location", "value": "kolkata", "disabled": true },
+                { "key": "minRating", "value": "4", "disabled": true },
+                { "key": "sortBy", "value": "companyName", "disabled": true },
+                { "key": "order", "value": "asc", "disabled": true }
+              ]
+            },
+            "description": "Admin listing includes active and inactive profiles plus import metadata."
+          }
+        },
+        {
+          "name": "Get business profile (admin)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/admin/business-profiles/{{businessProfileId}}", "host": ["{{baseUrl}}"], "path": ["admin", "business-profiles", "{{businessProfileId}}"] }
+          }
+        },
+        {
+          "name": "Update profile / visibility",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"companyName\": \"Updated Travel Agency\",\n  \"isActive\": false\n}" },
+            "url": { "raw": "{{baseUrl}}/admin/business-profiles/{{businessProfileId}}", "host": ["{{baseUrl}}"], "path": ["admin", "business-profiles", "{{businessProfileId}}"] },
+            "description": "Partial update. Set isActive=false to hide the profile from both public endpoints."
+          }
+        },
+        {
+          "name": "Delete business profile",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/admin/business-profiles/{{businessProfileId}}", "host": ["{{baseUrl}}"], "path": ["admin", "business-profiles", "{{businessProfileId}}"] },
+            "description": "Soft-deletes and deactivates the profile."
+          }
+        }
+      ]
+    },
+    {
       "name": "Public â€” Blogs",
       "description": "Public blog catalog. No authentication required. Only records with `isActive = true` and `deletedAt IS NULL` are returned.",
       "item": [
