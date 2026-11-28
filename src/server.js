@@ -9,8 +9,10 @@ import {
   startSubscriptionExpiryJob,
   stopSubscriptionExpiryJob,
 } from './jobs/subscriptionExpiry.job.js';
+import { initializeSocketServer, closeSocketServer } from './realtime/socket.js';
 
 const server = http.createServer(app);
+initializeSocketServer(server);
 
 const start = async () => {
   await connectDatabase();
@@ -31,6 +33,7 @@ const start = async () => {
 const shutdown = async (signal) => {
   console.log(`[server] ${signal} received. Shutting down gracefully...`);
   stopSubscriptionExpiryJob();
+  await closeSocketServer();
   server.close(async (err) => {
     if (err) {
       console.error('[server] Error during HTTP server shutdown:', err);

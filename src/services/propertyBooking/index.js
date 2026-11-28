@@ -4,6 +4,7 @@ import * as bookingRepo from '../../repositories/propertyBooking.repository.js';
 import * as mail from '../mail/index.js';
 import { claimPropertyOfferTx } from '../offer/index.js';
 import { createOrder as createPaymentOrder, refundForReference } from '../payment/index.js';
+import { createNotificationQuietly } from '../notification/index.js';
 
 // Fire-and-forget email helper — swallow errors so a mail failure never
 // breaks the booking flow. Errors are logged for observability.
@@ -135,6 +136,30 @@ export const sendBookingCreatedNotifications = async (booking) => {
     const roomsSummary = summarizeItems(booking.items);
     const totalUnits = booking.items.reduce((s, i) => s + i.unitsBooked, 0);
 
+    createNotificationQuietly({
+      userId: booking.guestUserId,
+      category: 'BOOKING',
+      type: 'BOOKING_CONFIRMED',
+      title: 'Booking confirmed',
+      message: `Your booking at ${booking.property.title} is confirmed.`,
+      actionUrl: `/client/property-bookings/${booking.id}`,
+      entityType: 'PROPERTY_BOOKING',
+      entityId: booking.id,
+      eventKey: `booking-confirmed:${booking.id}:guest`,
+    });
+
+    createNotificationQuietly({
+      userId: booking.property.ownerUserId,
+      category: 'BOOKING',
+      type: 'NEW_BOOKING_RECEIVED',
+      title: 'New booking received',
+      message: `${booking.guestName} booked ${booking.property.title}.`,
+      actionUrl: `/vendor/property-bookings/${booking.id}`,
+      entityType: 'PROPERTY_BOOKING',
+      entityId: booking.id,
+      eventKey: `booking-confirmed:${booking.id}:owner`,
+    });
+
     sendEmailQuietly('guest confirmation', mail.sendBookingConfirmationToGuest({
       to: booking.guestEmail,
       guestName: booking.guestName,
@@ -253,6 +278,29 @@ const sendBookingCancelledNotifications = async (booking) => {
     const owner = await prisma.user.findUnique({
       where: { id: booking.property.ownerUserId },
       select: { firstName: true, email: true },
+    });
+
+    createNotificationQuietly({
+      userId: booking.guestUserId,
+      category: 'BOOKING',
+      type: 'BOOKING_CANCELLED',
+      title: 'Booking cancelled',
+      message: `Your booking at ${booking.property.title} has been cancelled.`,
+      actionUrl: `/client/property-bookings/${booking.id}`,
+      entityType: 'PROPERTY_BOOKING',
+      entityId: booking.id,
+      eventKey: `booking-cancelled:${booking.id}:guest`,
+    });
+    createNotificationQuietly({
+      userId: booking.property.ownerUserId,
+      category: 'BOOKING',
+      type: 'BOOKING_CANCELLED',
+      title: 'Booking cancelled',
+      message: `${booking.guestName}'s booking at ${booking.property.title} was cancelled.`,
+      actionUrl: `/vendor/property-bookings/${booking.id}`,
+      entityType: 'PROPERTY_BOOKING',
+      entityId: booking.id,
+      eventKey: `booking-cancelled:${booking.id}:owner`,
     });
 
     sendEmailQuietly('guest cancellation', mail.sendBookingCancelledToGuest({

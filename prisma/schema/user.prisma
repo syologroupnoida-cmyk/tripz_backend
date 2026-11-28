@@ -23,6 +23,7 @@ model User {
   leadsSubmitted  Lead[]           @relation("CustomerLeads")
   directLeads     Lead[]           @relation("VendorDirectLeads")
   payments        Payment[]
+  notifications   Notification[]
 
   @@index([role])
   @@map("users")

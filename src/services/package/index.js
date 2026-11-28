@@ -19,6 +19,7 @@
 // =============================================================================
 
 import { ApiError } from '../../utils/ApiError.js';
+import { createNotificationQuietly } from '../notification/index.js';
 import * as packageRepo from '../../repositories/package.repository.js';
 import * as subscriptionRepo from '../../repositories/subscription.repository.js';
 import { getMissingRequiredFields } from '../../validators/package.validator.js';
@@ -346,6 +347,18 @@ export const approvePackageAsAdmin = async ({ packageId, adminId }) => {
 
   console.log(`[admin-audit] APPROVE_PACKAGE pkg=${packageId} by admin=${adminId}`);
 
+  createNotificationQuietly({
+    userId: result.package.vendorUserId,
+    category: 'LISTING',
+    type: 'PACKAGE_APPROVED',
+    title: 'Package approved',
+    message: `${result.package.title ?? 'Your package'} is now live on the marketplace.`,
+    actionUrl: `/vendor/packages/${packageId}`,
+    entityType: 'PACKAGE',
+    entityId: packageId,
+    eventKey: `package-approved:${packageId}:${result.package.reviewedAt?.toISOString?.() ?? 'latest'}`,
+  });
+
   return { package: result.package, message: 'Package approved.' };
 };
 
@@ -375,6 +388,18 @@ export const rejectPackageAsAdmin = async ({ packageId, adminId, reason }) => {
   console.log(
     `[admin-audit] REJECT_PACKAGE pkg=${packageId} by admin=${adminId} reason="${reason}"`,
   );
+
+  createNotificationQuietly({
+    userId: result.package.vendorUserId,
+    category: 'LISTING',
+    type: 'PACKAGE_REJECTED',
+    title: 'Package needs changes',
+    message: `${result.package.title ?? 'Your package'} was rejected: ${reason}`,
+    actionUrl: `/vendor/packages/${packageId}`,
+    entityType: 'PACKAGE',
+    entityId: packageId,
+    eventKey: `package-rejected:${packageId}:${result.package.reviewedAt?.toISOString?.() ?? 'latest'}`,
+  });
 
   return {
     package: result.package,

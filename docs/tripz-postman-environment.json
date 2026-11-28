@@ -163,6 +163,12 @@
       "value": "best-places-for-summer-holidays",
       "type": "default",
       "enabled": true
+    },
+    {
+      "key": "notificationId",
+      "value": "",
+      "type": "default",
+      "enabled": true
     }
   ],
   "_postman_variable_scope": "environment",

@@ -4,6 +4,7 @@ import * as userRepo from '../../repositories/user.repository.js';
 import * as kycRepo from '../../repositories/vendorKyc.repository.js';
 import * as packageRepo from '../../repositories/package.repository.js';
 import * as subscriptionRepo from '../../repositories/subscription.repository.js';
+import { createNotificationQuietly } from '../notification/index.js';
 
 // Fallback when the package's owning vendor has no active subscription at
 // inquiry time. Should be rare (Phase 2B cron will pause packages whose
@@ -148,6 +149,18 @@ export const submitLead = async ({ payload, customerUserId = null }) => {
       status: 'ACTIVE', // auto-approve; no admin review for package inquiries
       priceInCredits,
       maxUnlocks: 1, // direct lead = only the target vendor can unlock
+    });
+
+    createNotificationQuietly({
+      userId: pkg.vendorUserId,
+      category: 'LEAD',
+      type: 'DIRECT_LEAD_RECEIVED',
+      title: 'New package inquiry',
+      message: `You received a new inquiry for ${pkg.title}.`,
+      actionUrl: `/vendor/leads/${lead.id}`,
+      entityType: 'LEAD',
+      entityId: lead.id,
+      eventKey: `direct-lead:${lead.id}:vendor`,
     });
 
     return {

@@ -2988,6 +2988,72 @@
       ]
     },
     {
+      "name": "Notifications â€” Authenticated",
+      "description": "Shared notification inbox for CLIENT, VENDOR, ADMIN, and SUPER_ADMIN users. Login as the user whose inbox you want to inspect; all requests use the collection-level Bearer token. Socket.IO real-time events cannot be tested as normal HTTP requests hereâ€”see docs/NOTIFICATIONS_FRONTEND_INTEGRATION.md.",
+      "item": [
+        {
+          "name": "List my notifications",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res?.data?.items?.[0]?.id) {",
+                  "  pm.environment.set('notificationId', res.data.items[0].id);",
+                  "  console.log('Auto-saved notificationId:', res.data.items[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notifications?take=20&unreadOnly=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["notifications"],
+              "query": [
+                { "key": "take", "value": "20", "description": "1-50; defaults to 20" },
+                { "key": "unreadOnly", "value": "false", "description": "Set true to return unread notifications only" },
+                { "key": "cursor", "value": "", "disabled": true, "description": "Use data.nextCursor from the previous response" }
+              ]
+            },
+            "description": "Returns the authenticated user's notification inbox using cursor pagination. The first notification ID is saved as notificationId."
+          }
+        },
+        {
+          "name": "Get unread count",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/notifications/unread-count", "host": ["{{baseUrl}}"], "path": ["notifications", "unread-count"] },
+            "description": "Returns { count } for the authenticated user's unread notification badge."
+          }
+        },
+        {
+          "name": "Mark one notification as read",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/notifications/{{notificationId}}/read", "host": ["{{baseUrl}}"], "path": ["notifications", "{{notificationId}}", "read"] },
+            "description": "Marks notificationId as read. Run List my notifications first to auto-save an ID. Returns 404 when the notification does not belong to the authenticated user."
+          }
+        },
+        {
+          "name": "Mark all notifications as read",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/notifications/read-all", "host": ["{{baseUrl}}"], "path": ["notifications", "read-all"] },
+            "description": "Marks all unread notifications belonging to the authenticated user as read and returns updatedCount."
+          }
+        }
+      ]
+    },
+    {
       "name": "Admin â€” Blogs",
       "description": "Blog CRUD for ADMIN and SUPER_ADMIN. Authentication and an admin bearer token are required.",
       "item": [

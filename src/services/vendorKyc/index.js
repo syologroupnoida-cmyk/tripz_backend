@@ -5,6 +5,7 @@ import {
   sendVendorApprovedNotice,
   sendVendorRejectedNotice,
 } from '../mail/index.js';
+import { createNotificationQuietly } from '../notification/index.js';
 
 // Vendor-facing login page. Centralized here so all KYC outcome emails point
 // to the same URL — change once when the frontend route changes.
@@ -220,6 +221,18 @@ export const approveVendorKyc = async ({ vendorUserId, adminId }) => {
     console.error('[kyc] Failed to send vendor-approved notice:', err?.message),
   );
 
+  createNotificationQuietly({
+    userId: vendorUserId,
+    category: 'KYC',
+    type: 'KYC_APPROVED',
+    title: 'KYC approved',
+    message: 'Your vendor verification is approved. You can now use vendor features.',
+    actionUrl: '/vendor/dashboard',
+    entityType: 'VENDOR_KYC',
+    entityId: kyc.id,
+    eventKey: `kyc-approved:${kyc.id}:${kyc.updatedAt?.toISOString?.() ?? updatedProfile.kycStatus}`,
+  });
+
   return {
     kycStatus: updatedProfile.kycStatus,
     kyc,
@@ -269,6 +282,18 @@ export const rejectVendorKyc = async ({ vendorUserId, adminId, reason }) => {
   }).catch((err) =>
     console.error('[kyc] Failed to send vendor-rejected notice:', err?.message),
   );
+
+  createNotificationQuietly({
+    userId: vendorUserId,
+    category: 'KYC',
+    type: 'KYC_REJECTED',
+    title: 'KYC needs changes',
+    message: `Your vendor verification was rejected: ${reason}`,
+    actionUrl: '/vendor/kyc',
+    entityType: 'VENDOR_KYC',
+    entityId: kyc.id,
+    eventKey: `kyc-rejected:${kyc.id}:${kyc.updatedAt?.toISOString?.() ?? updatedProfile.kycStatus}`,
+  });
 
   return {
     kycStatus: updatedProfile.kycStatus,

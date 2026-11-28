@@ -1,5 +1,6 @@
 import { ApiError } from '../../utils/ApiError.js';
 import * as propertyRepo from '../../repositories/property.repository.js';
+import { createNotificationQuietly } from '../notification/index.js';
 
 // ---- Slug generation (same pattern as Package/TravelGuide) ----
 const slugify = (raw) =>
@@ -306,6 +307,17 @@ export const approveProperty = async ({ propertyId, adminId }) => {
     reviewedByAdminId: adminId,
     hasPendingReview: false,
   });
+  createNotificationQuietly({
+    userId: updated.ownerUserId,
+    category: 'LISTING',
+    type: 'PROPERTY_APPROVED',
+    title: 'Property approved',
+    message: `${updated.title} is now live on the marketplace.`,
+    actionUrl: `/vendor/properties/${propertyId}`,
+    entityType: 'PROPERTY',
+    entityId: propertyId,
+    eventKey: `property-approved:${propertyId}:${updated.updatedAt.toISOString()}`,
+  });
   return { property: updated, message: 'Property approved. Now live on marketplace.' };
 };
 
@@ -330,6 +342,17 @@ export const rejectProperty = async ({ propertyId, adminId, reason }) => {
     rejectionReason: reason,
     reviewedByAdminId: adminId,
     hasPendingReview: false,
+  });
+  createNotificationQuietly({
+    userId: updated.ownerUserId,
+    category: 'LISTING',
+    type: 'PROPERTY_REJECTED',
+    title: 'Property needs changes',
+    message: `${updated.title} was rejected: ${reason}`,
+    actionUrl: `/vendor/properties/${propertyId}`,
+    entityType: 'PROPERTY',
+    entityId: propertyId,
+    eventKey: `property-rejected:${propertyId}:${updated.updatedAt.toISOString()}`,
   });
   return {
     property: updated,

@@ -156,6 +156,18 @@ const fulfillCapturedPayment = async ({ paymentId, providerPaymentId }) => {
     const booking = await getBookingById(confirmedBookingId);
     sendBookingCreatedNotifications(booking);
   }
+  const { createNotificationQuietly } = await import('../notification/index.js');
+  createNotificationQuietly({
+    userId: result.userId,
+    category: 'PAYMENT',
+    type: 'PAYMENT_CAPTURED',
+    title: 'Payment successful',
+    message: `Your payment of ₹${(result.amountInPaise / 100).toFixed(2)} was successful.`,
+    actionUrl: `/payments/${result.id}`,
+    entityType: 'PAYMENT',
+    entityId: result.id,
+    eventKey: `payment-captured:${result.id}`,
+  });
   return result;
 };
 

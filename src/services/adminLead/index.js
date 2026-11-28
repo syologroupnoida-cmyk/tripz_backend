@@ -17,6 +17,7 @@
 
 import { ApiError } from '../../utils/ApiError.js';
 import * as adminLeadRepo from '../../repositories/adminLead.repository.js';
+import { createNotificationQuietly } from '../notification/index.js';
 
 export const listLeadsForAdmin = async (query) => {
   const { items, total } = await adminLeadRepo.listLeadsForAdmin(query);
@@ -58,6 +59,24 @@ export const approveLead = async ({ leadId, adminId, priceInCredits, maxUnlocks 
       (priceInCredits !== undefined ? ` price=${priceInCredits}` : '') +
       (maxUnlocks !== undefined ? ` maxUnlocks=${maxUnlocks}` : ''),
   );
+  if (lead.customerUserId) {
+    createNotificationQuietly({
+      userId: lead.customerUserId,
+      category: 'LEAD', type: 'LEAD_APPROVED', title: 'Inquiry approved',
+      message: `Your inquiry for ${lead.destination} is now available to verified vendors.`,
+      actionUrl: `/client/leads/${lead.id}`, entityType: 'LEAD', entityId: lead.id,
+      eventKey: `lead-approved:${lead.id}`,
+    });
+  }
+  if (lead.targetVendorId) {
+    createNotificationQuietly({
+      userId: lead.targetVendorId,
+      category: 'LEAD', type: 'DIRECT_LEAD_RECEIVED', title: 'New direct lead',
+      message: `A new ${lead.destination} inquiry was assigned to you.`,
+      actionUrl: `/vendor/leads/${lead.id}`, entityType: 'LEAD', entityId: lead.id,
+      eventKey: `direct-lead:${lead.id}:vendor`,
+    });
+  }
   return { lead };
 };
 
@@ -67,6 +86,15 @@ export const rejectLead = async ({ leadId, adminId, reason }) => {
   console.log(
     `[admin-audit] LEAD_REJECTED leadId=${leadId} by admin=${adminId} reason="${reason}"`,
   );
+  if (lead.customerUserId) {
+    createNotificationQuietly({
+      userId: lead.customerUserId,
+      category: 'LEAD', type: 'LEAD_REJECTED', title: 'Inquiry needs attention',
+      message: `Your inquiry for ${lead.destination} was rejected: ${reason}`,
+      actionUrl: `/client/leads/${lead.id}`, entityType: 'LEAD', entityId: lead.id,
+      eventKey: `lead-rejected:${lead.id}`,
+    });
+  }
   return { lead };
 };
 

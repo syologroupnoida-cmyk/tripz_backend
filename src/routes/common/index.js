@@ -11,6 +11,7 @@ import offersRoutes from './offers.routes.js';
 import blogsRoutes from './blogs.routes.js';
 import paymentsRoutes from './payments.routes.js';
 import businessProfilesRoutes from './businessProfiles.routes.js';
+import notificationsRoutes from './notifications.routes.js';
 
 const router = Router();
 
@@ -26,5 +27,6 @@ router.use('/offers', offersRoutes);
 router.use('/blogs', blogsRoutes);
 router.use('/payments', paymentsRoutes);
 router.use('/business-profiles', businessProfilesRoutes);
+router.use('/notifications', notificationsRoutes);
 
 export default router;

@@ -237,3 +237,15 @@ enum OfferRedemptionStatus {
   REDEEMED
   CANCELLED
 }
+
+enum NotificationCategory {
+  SECURITY
+  KYC
+  LEAD
+  LISTING
+  BOOKING
+  PAYMENT
+  WALLET
+  SUBSCRIPTION
+  SYSTEM
+}
